@@ -1,0 +1,162 @@
+# Edge Dashboard configuration
+# =============================
+# This file is the single source of truth for which modules run, how often
+# they poll, and what the frontend renders. Copy to `config.local.yaml`
+# and point EDGE_CONFIG at it to keep machine-specific values out of git.
+
+server:
+  host: "127.0.0.1"        # bind address; localhost for kiosk-on-same-machine
+  port: 8765               # browser opens http://<host>:<port>
+
+logging:
+  level: "INFO"            # TRACE | DEBUG | INFO | WARNING | ERROR | CRITICAL
+  json: false              # true => one JSON object per log line (for journald)
+
+# Theme applied on first load. Persisted to localStorage thereafter.
+default_theme: "cyberpunk" # cyberpunk | clean | steampunk | light
+
+# Module configuration. Each key must match a Module subclass's `name`.
+# `enabled: false` to disable; `interval` overrides the module default (seconds).
+# Module-specific keys (e.g. weather lat/lon) are forwarded to the module.
+modules:
+  heartbeat:
+    enabled: true
+    interval: 1.0          # always-on connection indicator
+  system:
+    enabled: true
+    interval: 1.0
+  nvidia:
+    enabled: true
+    interval: 1.0
+  sensors:
+    enabled: true
+    interval: 2.0
+  media:
+    enabled: true
+    interval: 0.5
+  weather:
+    enabled: true
+    interval: 600          # 10 min — Open-Meteo is rate-friendly but not free
+    name: "Ingelheim am Rhein"
+    lat: 49.9667
+    lon: 8.0500
+    timezone: "auto"
+    units: "metric"        # metric | imperial
+  youtube:
+    enabled: true
+    interval: 3600         # 1 h — oEmbed metadata rarely changes
+    # URL or 11-char video ID per entry; playlists via ?list=…
+    entries: []
+  disk_usage:
+    enabled: true
+    interval: 30           # disk fill rarely changes minute-to-minute
+    min_size_gb: 1.0       # hide tiny mounts (EFI boot etc.)
+    # mounts: ["/", "/home"]   # optional allowlist
+  top_processes:
+    enabled: true
+    interval: 3
+    limit: 5               # how many rows to show
+  quick_actions:
+    enabled: true
+    interval: 60           # the action list is static; long interval is fine
+    timeout_seconds: 30
+    actions:
+      # Shell actions run via argv list — no shell interpreter, no globs.
+      - id: lock
+        label: "Sperren"
+        icon: "🔒"
+        kind: shell
+        command: ["loginctl", "lock-session"]
+      - id: ping
+        label: "Ping"
+        icon: "🔔"
+        kind: shell
+        command: ["notify-send", "Edge Dashboard", "Hallo!"]
+      # `confirm: true` triggers the themed confirm dialog before running.
+      - id: reboot
+        label: "Reboot"
+        icon: "🔄"
+        kind: shell
+        command: ["systemctl", "reboot"]
+        confirm: true
+      # HTTP example (commented — uncomment + fill in a real URL/token):
+      # - id: hue_off
+      #   label: "Lichter aus"
+      #   icon: "💡"
+      #   kind: http
+      #   method: POST
+      #   url: "http://homeassistant.local:8123/api/services/light/turn_off"
+      #   headers:
+      #     Authorization: "Bearer YOUR_LONG_LIVED_TOKEN"
+      #   json:
+      #     entity_id: "all"
+  smart_lights:
+    enabled: true
+    interval: 30           # cloud APIs don't need to be hammered
+    # Govee: API key from the Govee-Home app (Profile → "Apply for API Key").
+    # Free tier ~10 000 req/day — well above our 30 s poll for a dozen devices.
+    govee:
+      api_key: ""
+    # Tuya: covers Smart Life / Tuya Smart / Antela / many OEMs.
+    # Setup at https://iot.tuya.com:
+    #   1. Sign up + Cloud project (free)
+    #   2. Devices tab → "Link Tuya App Account" → scan QR with Smart Life
+    #   3. Copy Access ID / Access Secret from Authorization Key
+    #   4. The linked App Account's UID is shown after the QR-link step
+    #   5. region: eu | us | cn | in (closest to where the app account was created)
+    tuya:
+      client_id: ""
+      secret: ""
+      uid: ""
+      region: "eu"
+
+# Page layouts. Frontend turns each into a CSS-Grid container.
+# `grid.columns` / `grid.rows` are CSS-Grid track lists.
+# Each widget gets `col`, `row` (1-indexed) plus optional `colspan`/`rowspan`.
+# `variant` is an opaque string passed to the widget for layout switches.
+#
+# The legacy `grid.areas` + widget.area format is still accepted; it gets
+# auto-translated into col/row at load time. The Layout-Editor in the
+# Settings sheet always saves the col/row format.
+pages:
+  - id: main
+    title: "Main"
+    grid:
+      # 1.66 / 1 / 1 / 1.66 ≈ 800/480/480/800 on the 2560-wide Edge display
+      # but scales down proportionally on narrower viewports during dev.
+      columns: "minmax(0, 1.66fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.66fr)"
+      rows: "32px 1fr 1fr"
+    widgets:
+      - { id: heartbeat, col: 1, row: 1, colspan: 4, rowspan: 1 }
+      - { id: clock,     col: 1, row: 2, colspan: 1, rowspan: 1 }
+      - { id: cpu,       col: 2, row: 2, colspan: 1, rowspan: 1 }
+      - { id: gpu,       col: 3, row: 2, colspan: 1, rowspan: 1 }
+      - { id: media,     col: 4, row: 2, colspan: 1, rowspan: 2 }
+      - { id: weather,   col: 1, row: 3, colspan: 1, rowspan: 1 }
+      - { id: ram,       col: 2, row: 3, colspan: 1, rowspan: 1 }
+      - { id: network,   col: 3, row: 3, colspan: 1, rowspan: 1 }
+
+  - id: detail
+    title: "Detail"
+    grid:
+      columns: "1fr 1fr"
+      rows: "1fr 1fr"
+    widgets:
+      - { id: cpu,     col: 1, row: 1, variant: detail }
+      - { id: gpu,     col: 2, row: 1, variant: detail }
+      - { id: network, col: 1, row: 2 }
+      - { id: sensors, col: 2, row: 2 }
+
+  - id: blank
+    title: "Reserved"
+    grid:
+      columns: "1fr"
+      rows: "1fr"
+    widgets: []
+
+  - id: test
+    title: "3 Cols"
+    grid:
+      columns: 1fr 1fr 1fr
+      rows: 32px 1fr 1fr
+    widgets: []

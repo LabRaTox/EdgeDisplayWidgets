@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Edge Dashboard</title>
+  <link rel="stylesheet" href="/css/fonts.css">
+  <link rel="stylesheet" href="/css/base.css">
+  <link rel="stylesheet" href="/css/widgets.css">
+  <script>
+    // Apply the persisted (or default) theme + language synchronously before
+    // first paint to avoid an unstyled flash and a wrong-language flicker on
+    // the <html lang> attribute. The full theme manager / i18n module pick
+    // up the same values after bootstrap.
+    (function () {
+      var stored = null;
+      try { stored = localStorage.getItem("edge-dashboard.theme"); } catch (_) {}
+      var theme = stored || "cyberpunk";
+      document.documentElement.dataset.theme = theme;
+      var link = document.createElement("link");
+      link.id = "theme-link";
+      link.rel = "stylesheet";
+      link.href = "/css/themes/" + encodeURIComponent(theme) + ".css";
+      document.head.appendChild(link);
+
+      var SUPPORTED = ["en", "de"];
+      var storedLang = null;
+      try { storedLang = localStorage.getItem("edge-dashboard.lang"); } catch (_) {}
+      var lang = storedLang;
+      if (!lang || SUPPORTED.indexOf(lang) < 0) {
+        var langs = navigator.languages && navigator.languages.length
+          ? navigator.languages : [navigator.language || ""];
+        lang = "en";
+        for (var i = 0; i < langs.length; i++) {
+          var s = String(langs[i]).slice(0, 2).toLowerCase();
+          if (SUPPORTED.indexOf(s) >= 0) { lang = s; break; }
+        }
+      }
+      document.documentElement.lang = lang;
+    })();
+  </script>
+</head>
+<body data-ws-status="connecting">
+  <div id="app">
+    <div id="pages"></div>
+    <nav id="dots"></nav>
+  </div>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

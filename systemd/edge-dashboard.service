@@ -1,0 +1,19 @@
+[Unit]
+Description=Edge Dashboard backend (FastAPI + WebSocket)
+Documentation=file://__PROJECT_DIR__/README.md
+After=graphical-session.target network-online.target
+Wants=network-online.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_DIR__
+Environment=PYTHONUNBUFFERED=1
+ExecStart=__UV__ run python -m backend.main
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=graphical-session.target

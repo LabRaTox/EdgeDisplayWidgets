@@ -1,0 +1,124 @@
+/* Nightclub — Cyber-Goth, UV Violet + Hot Pink, volle Dröhnung.
+ *
+ * UV-Schwarzlicht-Club mit pulsierenden Akzenten und animierten Scanlines.
+ * Glitch-Flicker beim Mount, atmender Glow auf den großen Werten. */
+:root {
+  --bg: #07050d;
+  --fg: #f0d8ff;
+  --fg-muted: #7a5a8a;
+  --accent: #b026ff;
+  --accent-2: #ff0080;
+  --ok: #00ff80;
+  --warn: #ffaa00;
+  --bad: #ff0080;
+  --card-bg: rgba(176, 38, 255, 0.04);
+  --card-border: rgba(176, 38, 255, 0.32);
+  --font-ui: "Share Tech Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-mono: "Share Tech Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-display: "Share Tech Mono", ui-monospace, monospace;
+}
+
+@keyframes nc-scan {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 6px; }
+}
+@keyframes nc-pulse {
+  0%, 100% {
+    text-shadow:
+      0 0 8px rgba(176, 38, 255, 0.55),
+      0 0 18px rgba(176, 38, 255, 0.25);
+  }
+  50% {
+    text-shadow:
+      0 0 14px rgba(255, 0, 128, 0.7),
+      0 0 28px rgba(176, 38, 255, 0.5);
+  }
+}
+@keyframes nc-glitch {
+  0%   { opacity: 0.4; transform: translateX(-2px) skewX(-1deg); }
+  15%  { opacity: 1;   transform: translateX(2px)  skewX(1deg); }
+  30%  { opacity: 0.7; transform: translateX(-1px); }
+  45%  { opacity: 1;   transform: translateX(0); }
+  100% { opacity: 1;   transform: translateX(0); }
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 2px,
+    rgba(176, 38, 255, 0.045) 2px,
+    rgba(176, 38, 255, 0.045) 3px
+  );
+  pointer-events: none;
+  z-index: 200;
+  mix-blend-mode: screen;
+  animation: nc-scan 1.6s linear infinite;
+}
+
+.widget {
+  border-color: var(--card-border);
+  box-shadow: 0 0 18px rgba(176, 38, 255, 0.08);
+  animation: nc-glitch 360ms ease-out;
+  position: relative;
+}
+.widget::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(135deg,
+    transparent 0, transparent 40%,
+    rgba(255, 0, 128, 0.18) 50%,
+    transparent 60%, transparent 100%);
+  opacity: 0.4;
+  mix-blend-mode: screen;
+  z-index: 0;
+}
+.widget > * { position: relative; z-index: 1; }
+
+.widget h3 {
+  color: var(--accent);
+  text-shadow: 0 0 6px rgba(176, 38, 255, 0.55);
+  font-family: var(--font-display);
+  letter-spacing: 0.2em;
+}
+
+.metric-big {
+  color: var(--accent);
+  font-family: var(--font-display);
+  animation: nc-pulse 2.4s ease-in-out infinite;
+}
+
+.metric-sub { color: var(--fg-muted); letter-spacing: 0.04em; }
+
+.core-fill {
+  background: linear-gradient(to top, var(--accent), var(--accent-2));
+  box-shadow: 0 0 6px rgba(176, 38, 255, 0.5);
+}
+.core-bar { background: rgba(176, 38, 255, 0.07); }
+
+.widget-network .net-rx { text-shadow: 0 0 8px rgba(176, 38, 255, 0.4); }
+.widget-network .net-tx {
+  color: var(--accent-2);
+  text-shadow: 0 0 8px rgba(255, 0, 128, 0.45);
+}
+
+.weather-temp {
+  color: var(--accent);
+  text-shadow: 0 0 10px rgba(176, 38, 255, 0.5);
+}
+
+body[data-ws-status="connected"] .hb-dot {
+  box-shadow: 0 0 10px var(--ok), 0 0 18px var(--ok);
+}
+
+.sheet-panel {
+  background: rgba(7, 5, 13, 0.96);
+  border-color: rgba(176, 38, 255, 0.4);
+  box-shadow: 0 0 32px rgba(176, 38, 255, 0.2);
+}

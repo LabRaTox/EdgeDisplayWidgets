@@ -1,0 +1,70 @@
+/* Cyberpunk — neon cyan/magenta on near-black, mono everywhere. */
+:root {
+  --bg: #07020d;
+  --fg: #d6f1ff;
+  --fg-muted: #6b7a99;
+  --accent: #00f5ff;
+  --accent-2: #ff00aa;
+  --ok: #00ff88;
+  --warn: #ffd700;
+  --bad: #ff3366;
+  --card-bg: rgba(0, 245, 255, 0.04);
+  --card-border: rgba(0, 245, 255, 0.18);
+  --font-ui: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-display: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* Subtle scanline overlay */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 2px,
+    rgba(0, 245, 255, 0.025) 2px,
+    rgba(0, 245, 255, 0.025) 3px
+  );
+  pointer-events: none;
+  z-index: 200;
+  mix-blend-mode: screen;
+}
+
+.widget {
+  border-color: var(--card-border);
+  box-shadow: 0 0 12px rgba(0, 245, 255, 0.05);
+}
+
+.widget h3 {
+  color: var(--accent);
+  text-shadow: 0 0 6px rgba(0, 245, 255, 0.4);
+}
+
+.metric-big {
+  text-shadow: 0 0 10px rgba(0, 245, 255, 0.45);
+}
+
+/* Mount-time glitch flicker */
+@keyframes hb-glitch {
+  0%   { opacity: 0.5; transform: translateX(-1px); }
+  20%  { opacity: 1;   transform: translateX(1px); }
+  40%  { opacity: 0.7; transform: translateX(0); }
+  100% { opacity: 1;   transform: translateX(0); }
+}
+.widget {
+  animation: hb-glitch 320ms ease-out;
+}
+
+/* Heartbeat dot pulses on a cyan glow */
+body[data-ws-status="connected"] .hb-dot {
+  box-shadow: 0 0 10px var(--ok), 0 0 16px var(--ok);
+}
+
+/* Theme sheet on cyberpunk */
+.sheet-panel {
+  background: rgba(7, 2, 13, 0.95);
+  border-color: rgba(0, 245, 255, 0.3);
+  box-shadow: 0 0 24px rgba(0, 245, 255, 0.15);
+}
