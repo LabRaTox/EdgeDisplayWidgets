@@ -1,0 +1,74 @@
+/* Light — Neutral Pewter. Mid-tone, kein Weißanteil; augenfreundlich am Tag. */
+:root {
+  --bg: #5a5f68;
+  --fg: #e8eaf0;
+  --fg-muted: #b2b6bd;
+  --accent: #4a90e2;
+  --accent-2: #e0709d;
+  --ok: #6dc88a;
+  --warn: #e0b66a;
+  --bad: #e07a7a;
+  --card-bg: #4d525a;
+  --card-border: rgba(255, 255, 255, 0.08);
+  --font-ui: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", monospace;
+  --font-display: "Inter", system-ui, sans-serif;
+  --gap: 12px;
+}
+
+.widget {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.widget h3 {
+  color: var(--fg-muted);
+}
+
+.metric-big {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.clock-time {
+  color: var(--fg);
+  font-weight: 200;
+}
+
+.core-bar {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+#dots {
+  background: rgba(0, 0, 0, 0.25);
+}
+.dot {
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.widget-heartbeat {
+  background: var(--card-bg);
+  border-radius: 0;
+  border-bottom: 1px solid var(--card-border);
+}
+
+body[data-ws-status="connected"] .hb-dot {
+  box-shadow: 0 0 8px var(--ok);
+}
+
+.sheet-panel {
+  background: #444951;
+  color: var(--fg);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+.theme-option {
+  background: rgba(255, 255, 255, 0.05);
+}
+.theme-option.active {
+  background: rgba(74, 144, 226, 0.18);
+  border-color: var(--accent);
+}
+
+/* Sensors thresholds bleiben unverändert über Custom-Props */

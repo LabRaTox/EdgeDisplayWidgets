@@ -1,0 +1,52 @@
+/* Clean — soft dark grey, Inter font, generous whitespace, no chrome. */
+:root {
+  --bg: #14171c;
+  --fg: #e5e7eb;
+  --fg-muted: #9ca3af;
+  --accent: #5eead4;
+  --accent-2: #fb923c;
+  --ok: #4ade80;
+  --warn: #facc15;
+  --bad: #f87171;
+  --card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01));
+  --card-border: rgba(255, 255, 255, 0.05);
+  --font-ui: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", monospace;
+  --font-display: "Inter", system-ui, sans-serif;
+  --gap: 12px;
+}
+
+.widget {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.widget h3 {
+  color: var(--fg-muted);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+}
+
+.metric-big {
+  color: var(--fg);
+  font-weight: 200;
+  font-size: 2.4rem;
+}
+
+.clock-time {
+  font-weight: 200;
+}
+
+/* Cleaner heartbeat */
+.widget-heartbeat {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--card-border);
+  border-radius: 0;
+}
+
+.dot.active {
+  background: var(--accent);
+}

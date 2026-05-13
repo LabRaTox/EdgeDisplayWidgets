@@ -1,0 +1,1157 @@
+/*
+ * Theme-neutral defaults. Each theme stylesheet (loaded via #theme-link)
+ * overrides any subset of these custom properties. The transitions here
+ * make theme swaps animate smoothly.
+ */
+:root {
+  --bg: #0a0a0a;
+  --fg: #e0e0e0;
+  --fg-muted: #888;
+  --accent: #00e0ff;
+  --accent-2: #ff4488;
+  --ok: #4ade80;
+  --warn: #facc15;
+  --bad: #f87171;
+  --card-bg: rgba(255, 255, 255, 0.04);
+  --card-border: rgba(255, 255, 255, 0.06);
+  --gap: 8px;
+  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", monospace;
+  --font-display: var(--font-ui);
+  --transition: 220ms ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Globale Schriftgröße — alle Widgets skalieren mit über `rem`-Einheiten.
+ * Clock wird unten explizit auf seine alten px-Werte gepinnt damit er
+ * nicht mitwächst. */
+html { font-size: 20px; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-ui);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--transition), color var(--transition);
+}
+
+/* Show focus outlines only when the user is keyboard-navigating; on touch
+ * or mouse-click, the button keeps its own visual feedback (transform,
+ * is-active state) and shouldn't keep a sticky focus ring. */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: inherit;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  position: relative;
+}
+
+/* --- Page swiper container ----------------------------------------- */
+#pages {
+  flex: 1;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-behavior: auto;          /* JS animates with scrollTo({behavior:smooth}) */
+  min-height: 0;
+}
+#pages::-webkit-scrollbar { display: none; }
+
+#pages.is-dragging {
+  cursor: grabbing;
+}
+
+.page {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  display: grid;
+  gap: var(--gap);
+  padding: var(--gap);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* --- Page indicator dots ------------------------------------------- */
+#dots {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 999px;
+  z-index: 50;
+  transition: background-color var(--transition);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fg-muted);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  opacity: 0.4;
+  transition: opacity var(--transition), background-color var(--transition), transform var(--transition);
+}
+
+.dot.active {
+  opacity: 1;
+  background: var(--accent);
+  transform: scale(1.15);
+}
+
+/* --- Swipe-up hotspot ----------------------------------------------- */
+/* Invisible strip at the bottom edge that captures swipe-up gestures to
+ * open the settings sheet. `touch-action: none` is critical — without it
+ * the browser claims vertical pans before our pointermove handler fires.
+ * Sits below the #dots indicator (z:50) so dot taps/long-press still win. */
+#swipe-hotspot {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 32px;
+  z-index: 40;
+  touch-action: none;
+  background: transparent;
+}
+
+/* --- Theme sheet ---------------------------------------------------- */
+#theme-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+.sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity var(--transition);
+}
+.sheet-panel {
+  position: absolute;
+  left: 50%;
+  bottom: 32px;
+  transform: translate(-50%, 24px);
+  min-width: 480px;
+  max-width: min(720px, 90vw);
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transition: opacity var(--transition), transform var(--transition);
+}
+#theme-sheet.is-open .sheet-backdrop { opacity: 1; }
+#theme-sheet.is-open .sheet-panel    { opacity: 1; transform: translate(-50%, 0); }
+
+.sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+.sheet-tabs {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sheet-tabs::-webkit-scrollbar { display: none; }
+.sheet-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  padding: 8px 14px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+}
+.sheet-tab:hover { color: var(--fg); }
+.sheet-tab.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.sheet-close {
+  background: transparent;
+  color: var(--fg-muted);
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.sheet-close:hover { color: var(--fg); }
+
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  min-height: 0;
+}
+.sheet-pane {
+  display: none;
+  padding: 4px 0;
+}
+.sheet-pane.is-active { display: block; }
+
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+/* Settings sub-section (e.g. language picker on the Design tab). */
+.settings-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--card-border);
+}
+.settings-section-title {
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 8px;
+}
+.settings-hint {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  margin-top: 6px;
+}
+.lang-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.lang-option {
+  padding: 8px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--fg);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  transition: border-color var(--transition), background-color var(--transition);
+}
+.lang-option.active {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+/* About pane: project info, version, links to GitHub + Ko-Fi. */
+.about-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 2px;
+}
+.about-title {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 1.15rem;
+  color: var(--fg);
+}
+.about-version {
+  display: inline-block;
+  align-self: flex-start;
+  padding: 2px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+}
+.about-desc {
+  margin: 0;
+  color: var(--fg);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.about-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--fg);
+  text-decoration: none;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  transition: border-color var(--transition), background-color var(--transition);
+}
+.about-link:hover,
+.about-link:focus-visible {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.07);
+}
+.about-link-icon {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.about-footer {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+}
+
+/* --- Settings forms (Module + Wetter) ------------------------------- */
+.settings-empty {
+  padding: 16px;
+  color: var(--fg-muted);
+  text-align: center;
+  font-size: 0.85rem;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border);
+}
+
+.btn {
+  background: transparent;
+  border: 1px solid var(--card-border);
+  color: var(--fg);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.85rem;
+  transition: background-color var(--transition), border-color var(--transition);
+}
+.btn:hover { background: rgba(255, 255, 255, 0.05); border-color: var(--accent); }
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+  font-weight: 500;
+}
+.btn-primary:hover { filter: brightness(1.1); background: var(--accent); }
+
+.modules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.module-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.module-row:hover { background: rgba(255, 255, 255, 0.04); }
+.module-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+.module-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+.module-name {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  color: var(--fg);
+}
+.module-interval {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  flex-shrink: 0;
+}
+.module-interval input[type="number"] {
+  width: 70px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  text-align: right;
+}
+.module-interval input[type="number"]:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+.module-interval .hint { font-size: 0.7rem; }
+.module-interval .unit { font-family: var(--font-mono); }
+
+.weather-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+.settings-field input,
+.settings-field select,
+.settings-field textarea {
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+.settings-field textarea {
+  resize: vertical;
+  min-height: 120px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.settings-field input:focus-visible,
+.settings-field select:focus-visible,
+.settings-field textarea:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.sheet-toast {
+  margin-top: 10px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--ok);
+  font-size: 0.8rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+.sheet-toast.is-error {
+  background: rgba(248, 113, 113, 0.15);
+  color: var(--bad);
+}
+
+.settings-help {
+  margin: 0 0 16px;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.settings-help strong {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+/* ================================================================ */
+/*  Quick Actions editor (Settings → Aktionen)                       */
+/* ================================================================ */
+
+.qa-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.qa-editor-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--card-border);
+}
+.qa-editor-meta {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+}
+.qa-editor-spacer { flex: 1; }
+
+.qa-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qa-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  transition: border-color var(--transition), background-color var(--transition),
+              transform 120ms ease, box-shadow 120ms ease;
+}
+.qa-card.is-dragging {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  cursor: grabbing;
+  z-index: 5;
+  position: relative;
+}
+
+.qa-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.qa-drag {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 1.1rem;
+  padding: 6px 4px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  line-height: 1;
+}
+.qa-drag:hover { color: var(--accent); }
+.qa-card.is-dragging .qa-drag { cursor: grabbing; }
+
+.qa-icon-btn {
+  width: 44px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+.qa-icon-btn:hover { border-color: var(--accent); }
+.qa-icon-empty {
+  color: var(--fg-muted);
+  font-size: 1.2rem;
+  font-weight: 300;
+}
+
+/* Emoji picker popover — floats above everything, themed via CSS vars
+ * exposed by emoji-picker-element. */
+.qa-emoji-popover {
+  position: fixed;
+  z-index: 1200;
+  background: var(--bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.qa-emoji-toolbar {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.qa-emoji-toolbar .btn { padding: 4px 10px; font-size: 0.8rem; }
+.qa-emoji-popover emoji-picker {
+  --background: var(--bg);
+  --border-color: var(--card-border);
+  --border-radius: 6px;
+  --button-active-background: rgba(255, 255, 255, 0.08);
+  --button-hover-background: rgba(255, 255, 255, 0.05);
+  --indicator-color: var(--accent);
+  --input-border-color: var(--card-border);
+  --input-font-color: var(--fg);
+  --input-placeholder-color: var(--fg-muted);
+  --search-background: rgba(0, 0, 0, 0.3);
+  --category-emoji-padding: 0;
+  --num-columns: 10;
+  width: 520px;
+  height: 460px;
+}
+.qa-label-input,
+.qa-id-input {
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.qa-label-input { flex: 1; min-width: 0; }
+.qa-id-input {
+  width: 140px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+}
+.qa-kind-select {
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.qa-delete {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--bad);
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.qa-delete:hover {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: var(--bad);
+}
+
+.qa-card-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.qa-card-spacer { flex: 1; }
+.qa-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+.qa-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+.qa-test-btn { font-size: 0.8rem; padding: 4px 10px; }
+
+.qa-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qa-card-body .settings-row {
+  display: grid;
+  gap: 8px;
+}
+.qa-card-body textarea,
+.qa-card-body input,
+.qa-card-body select {
+  width: 100%;
+}
+.qa-card-body .qa-mono {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 2.4em;
+}
+.qa-card-body .hint {
+  font-weight: normal;
+  opacity: 0.7;
+  font-size: 0.7rem;
+}
+.qa-card-body .is-invalid {
+  border-color: var(--bad);
+  background: rgba(248, 113, 113, 0.05);
+}
+
+/* ================================================================ */
+/*  Layout editor                                                    */
+/* ================================================================ */
+
+/* Edit-mode visual treatment for widgets and pages */
+body[data-edit="true"] #pages {
+  scroll-snap-type: none;
+}
+body[data-edit="true"] .page {
+  background-image:
+    linear-gradient(to right,  rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 5% 5%;     /* purely cosmetic; visualises the grid spirit */
+  position: relative;          /* containing block for the page edit bar */
+  /* Reserve vertical space at the top so the page-edit-bar doesn't sit on
+   * row-1 widgets (it would hide their delete buttons otherwise). The grid
+   * math in cellFromPoint reads paddingTop from computed style, so drag
+   * targeting still lines up correctly. */
+  padding-top: 44px;
+}
+/* Hide the swipe-up hotspot in edit mode — it overlaps the bottom-row
+ * resize handles. Settings opens via the Cancel/Save toolbar anyway. */
+body[data-edit="true"] #swipe-hotspot { display: none; }
+body[data-edit="true"] .widget {
+  outline: 2px dashed rgba(255, 255, 255, 0.2);
+  outline-offset: -2px;
+  cursor: grab;
+  user-select: none;
+  position: relative;
+  /* Without this, touch devices route vertical/diagonal pans to native
+   * scroll handling and fire pointercancel before drag can take effect. */
+  touch-action: none;
+}
+body[data-edit="true"] .widget:hover {
+  outline-color: var(--accent);
+}
+body[data-edit="true"] .widget.is-dragging,
+body[data-edit="true"] .widget.is-resizing {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  z-index: 50;
+  cursor: grabbing;
+}
+
+/* Edit handles */
+.edit-handle {
+  position: absolute;
+  z-index: 5;
+}
+.edit-resize {
+  bottom: 0;
+  right: 0;
+  width: 22px;
+  height: 22px;
+  cursor: nwse-resize;
+  background:
+    linear-gradient(135deg,
+      transparent 0,
+      transparent 38%,
+      var(--accent) 38%,
+      var(--accent) 50%,
+      transparent 50%,
+      transparent 62%,
+      var(--accent) 62%,
+      var(--accent) 75%,
+      transparent 75%);
+  display: none;
+}
+.edit-delete {
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: var(--bad);
+  color: var(--bg);
+  font-size: 18px;
+  font-weight: bold;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+.edit-delete:hover { filter: brightness(1.2); }
+
+body[data-edit="true"] .edit-resize { display: block; }
+body[data-edit="true"] .edit-delete { display: inline-flex; }
+
+/* Position/size label on each widget — shows live col,row · WxH */
+.edit-info {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+  z-index: 4;
+  display: none;
+}
+body[data-edit="true"] .edit-info { display: block; }
+
+/* Save / error toast pinned bottom-center during edit mode */
+#edit-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: var(--ok);
+  color: var(--bg);
+  font-weight: 500;
+  font-size: 0.9rem;
+  z-index: 250;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  animation: toast-in 200ms ease-out;
+}
+#edit-toast.is-error {
+  background: var(--bad);
+  color: var(--fg);
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Disable widget interactivity during edit so drag works on the body */
+body[data-edit="true"] .widget * {
+  pointer-events: none;
+}
+body[data-edit="true"] .widget .edit-handle,
+body[data-edit="true"] .widget .edit-handle * {
+  pointer-events: auto;
+}
+
+/* Per-page edit bar (inline at top of each page in edit mode).
+ * Absolute-positioned so it doesn't break the page's CSS-Grid layout —
+ * widgets in row 1 are partially obscured but still movable. */
+.edit-page-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  border-bottom: 1px solid var(--card-border);
+  z-index: 30;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+}
+.edit-page-title {
+  flex: 1;
+  min-width: 80px;
+  max-width: 200px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+.edit-grid-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.edit-grid-lbl {
+  color: var(--fg-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.edit-grid-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  color: var(--fg);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+.edit-grid-btn:hover { border-color: var(--accent); }
+.edit-grid-count {
+  width: 36px;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+.edit-grid-count::-webkit-outer-spin-button,
+.edit-grid-count::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.edit-grid-raw {
+  width: 160px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+.edit-grid-advanced {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--fg-muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+  transition: transform 150ms ease, color 150ms ease;
+}
+.edit-grid-advanced:hover { color: var(--accent); }
+.edit-page-bar.is-advanced .edit-grid-advanced {
+  color: var(--accent);
+  transform: rotate(180deg);
+}
+.edit-page-spacer { flex: 1; min-width: 0; }
+.edit-page-move {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.edit-page-move:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.edit-page-move:disabled { opacity: 0.3; cursor: default; }
+.edit-page-delete {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--bad);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.edit-page-delete:hover {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: var(--bad);
+}
+
+/* Edit toolbar — pinned top-center */
+#edit-toolbar {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 8px 14px;
+  z-index: 200;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+}
+.edit-title {
+  color: var(--accent);
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  padding-right: 8px;
+}
+.edit-spacer { flex: 1; min-width: 24px; }
+
+/* Add-widget picker (modal) */
+#edit-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+}
+.picker-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+}
+.picker-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 20px 22px;
+  min-width: 420px;
+  max-width: min(640px, 80vw);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+.picker-panel h3 {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--fg-muted);
+  font-weight: 500;
+}
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.picker-item {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 16px 12px;
+  color: var(--fg);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  text-align: center;
+  text-transform: capitalize;
+  transition: border-color 150ms, background-color 150ms;
+}
+.picker-item:hover {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.05);
+}
+.picker-empty {
+  grid-column: 1 / -1;
+  padding: 24px;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+}
+.picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--fg);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  text-transform: capitalize;
+  transition: border-color var(--transition), background-color var(--transition);
+  min-height: 60px;
+}
+.theme-option.active {
+  border-color: var(--accent);
+  background: rgba(255, 255, 255, 0.07);
+}
+.theme-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  flex: 0 0 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.theme-swatch-cyberpunk  { background: linear-gradient(135deg, #07020d 0% 50%, #00f5ff 50% 100%); }
+.theme-swatch-clean      { background: linear-gradient(135deg, #14171c 0% 50%, #5eead4 50% 100%); }
+.theme-swatch-steampunk  { background: linear-gradient(135deg, #1a1310 0% 50%, #d4a574 50% 100%); }
+.theme-swatch-light      { background: linear-gradient(135deg, #5a5f68 0% 50%, #4a90e2 50% 100%); }
+.theme-swatch-toxic      { background: linear-gradient(135deg, #050608 0% 50%, #39ff14 50% 100%); }
+.theme-swatch-nightclub  { background: linear-gradient(135deg, #07050d 0% 50%, #b026ff 50% 100%); }
+.theme-swatch-industrial { background: linear-gradient(135deg, #060505 0% 50%, #ff1a1a 50% 100%); }
+
+/* --- Clock widget --------------------------------------------------- */
+.widget-clock {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 16px 24px;
+}
+.clock-time {
+  font-family: var(--font-display);
+  /* Absolute px statt rem damit der Root-Bump (18px) den Clock nicht mitvergrößert. */
+  font-size: clamp(48px, 8vw, 96px);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--fg);
+}
+.clock-date {
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  color: var(--fg-muted);
+  margin-top: 8px;
+  text-transform: capitalize;
+}

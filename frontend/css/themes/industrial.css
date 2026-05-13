@@ -1,0 +1,78 @@
+/* Industrial — Cyber-Goth, Blood Red + Toxic Green, dezent.
+ *
+ * Härter und sachlicher als die anderen beiden: rote Borders signalisieren
+ * Industrial-Look, Werte bleiben toxic-grün. Nur leichter Glow und feine
+ * Scanlines, keine Eckschnitte oder Animationen — fürs Dauer-Display. */
+:root {
+  --bg: #060505;
+  --fg: #d8d4d0;
+  --fg-muted: #6a6663;
+  --accent: #39ff14;
+  --accent-2: #ff1a1a;
+  --ok: #39ff14;
+  --warn: #ffaa00;
+  --bad: #ff1a1a;
+  --card-bg: rgba(255, 26, 26, 0.025);
+  --card-border: rgba(255, 26, 26, 0.28);
+  --font-ui: "Share Tech Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-mono: "Share Tech Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-display: "Share Tech Mono", ui-monospace, monospace;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 2px,
+    rgba(255, 26, 26, 0.025) 2px,
+    rgba(255, 26, 26, 0.025) 3px
+  );
+  pointer-events: none;
+  z-index: 200;
+  mix-blend-mode: screen;
+}
+
+.widget {
+  border-color: var(--card-border);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 26, 26, 0.05) inset;
+}
+
+.widget h3 {
+  color: var(--accent-2);
+  font-family: var(--font-display);
+  letter-spacing: 0.22em;
+}
+
+.metric-big {
+  color: var(--accent);
+  text-shadow: 0 0 6px rgba(57, 255, 20, 0.4);
+  font-family: var(--font-display);
+}
+
+.metric-sub { color: var(--fg-muted); letter-spacing: 0.04em; }
+
+.core-fill { background: var(--accent); }
+.core-bar  { background: rgba(255, 255, 255, 0.04); }
+
+.widget-network .net-rx { color: var(--accent); }
+.widget-network .net-tx { color: var(--accent-2); }
+
+.weather-temp { color: var(--accent); }
+.weather-hilo .hi { color: var(--accent); }
+
+.sensors-row.is-hot  .sensors-value { color: var(--accent-2); }
+.sensors-row.is-cold .sensors-value { color: var(--accent); }
+
+body[data-ws-status="connected"] .hb-dot {
+  box-shadow: 0 0 6px var(--ok);
+}
+
+.sheet-panel {
+  background: rgba(6, 5, 5, 0.96);
+  border-color: rgba(255, 26, 26, 0.3);
+  box-shadow: 0 0 18px rgba(255, 26, 26, 0.12);
+}

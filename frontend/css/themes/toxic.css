@@ -1,0 +1,90 @@
+/* Toxic — Cyber-Goth, Acid Green + UV Magenta, mittlere Deko.
+ *
+ * Klassisches Club-Terminal: Toxic-Green dominant, Magenta für Warnungen
+ * und Hover-States. Eckschnitte (clip-path) machen Widgets zu Tech-Frames,
+ * dezenter Scanline-Überzug plus Neon-Glow auf den großen Werten. */
+:root {
+  --bg: #050608;
+  --fg: #d8ffdc;
+  --fg-muted: #5a7a5e;
+  --accent: #39ff14;
+  --accent-2: #ff2bd6;
+  --ok: #39ff14;
+  --warn: #ffea00;
+  --bad: #ff0040;
+  --card-bg: rgba(57, 255, 20, 0.03);
+  --card-border: rgba(57, 255, 20, 0.28);
+  --font-ui: "Share Tech Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-mono: "Share Tech Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-display: "Share Tech Mono", ui-monospace, monospace;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 2px,
+    rgba(57, 255, 20, 0.035) 2px,
+    rgba(57, 255, 20, 0.035) 3px
+  );
+  pointer-events: none;
+  z-index: 200;
+  mix-blend-mode: screen;
+}
+
+.widget {
+  border-color: var(--card-border);
+  box-shadow:
+    0 0 0 1px rgba(57, 255, 20, 0.08) inset,
+    0 0 14px rgba(57, 255, 20, 0.07);
+  clip-path: polygon(
+    10px 0, 100% 0,
+    100% calc(100% - 10px), calc(100% - 10px) 100%,
+    0 100%, 0 10px
+  );
+  border-radius: 0;
+}
+
+.widget h3 {
+  color: var(--accent);
+  text-shadow: 0 0 6px rgba(57, 255, 20, 0.5);
+  font-family: var(--font-display);
+  letter-spacing: 0.18em;
+}
+
+.metric-big {
+  color: var(--accent);
+  text-shadow:
+    0 0 8px rgba(57, 255, 20, 0.55),
+    0 0 18px rgba(57, 255, 20, 0.25);
+  font-family: var(--font-display);
+}
+
+.metric-sub {
+  color: var(--fg-muted);
+  letter-spacing: 0.04em;
+}
+
+.core-fill {
+  background: linear-gradient(to top, var(--accent), rgba(57, 255, 20, 0.7));
+  box-shadow: 0 0 4px rgba(57, 255, 20, 0.4);
+}
+.core-bar { background: rgba(57, 255, 20, 0.06); }
+
+.widget-network .net-tx,
+.weather-temp,
+.disk-fill.is-bad,
+.sensors-row.is-hot .sensors-value { color: var(--accent-2); }
+
+body[data-ws-status="connected"] .hb-dot {
+  box-shadow: 0 0 8px var(--accent), 0 0 14px var(--accent);
+}
+
+.sheet-panel {
+  background: rgba(5, 6, 8, 0.96);
+  border-color: rgba(57, 255, 20, 0.35);
+  box-shadow: 0 0 24px rgba(57, 255, 20, 0.15);
+}
