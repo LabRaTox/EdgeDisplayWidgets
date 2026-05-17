@@ -1,6 +1,6 @@
 # Edge Dashboard
 
-![Edge Dashboard](docs/screenshots/Shot_1.png)
+![Edge Dashboard](docs/demo.gif)
 
 Modular kiosk dashboard for the **Corsair Xeneon Edge 14.5"** (2560×720)
 secondary touch display. Runs as a local FastAPI server, rendered fullscreen
