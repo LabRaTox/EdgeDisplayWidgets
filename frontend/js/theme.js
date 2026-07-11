@@ -89,14 +89,34 @@ const TAB_KEYS = [
   { id: "about", labelKey: "settings.tab.about" },
 ];
 
-const APP_VERSION = "1.0.0";
 const GITHUB_URL = "https://github.com/LabRaTox";
 const KOFI_URL = "https://ko-fi.com/labratox";
 
-export function buildSettingsSheet(theme, { onEditLayout } = {}) {
+// Third-party assets bundled into the dashboard, surfaced in the About → Credits
+// list so attribution travels with the app.
+const CREDITS = [
+  { name: "Tabler Icons", url: "https://tabler.io/icons", license: "MIT", descKey: "settings.about.credits_icons" },
+  { name: "emoji-picker-element", url: "https://github.com/nolanlawson/emoji-picker-element", license: "Apache-2.0", descKey: "settings.about.credits_emoji" },
+];
+
+// Cached app version from /api/config (shared across About-pane re-renders).
+let _appVersion = null;
+async function fetchAppVersion() {
+  if (_appVersion != null) return _appVersion;
+  try {
+    const r = await fetch("/api/config");
+    if (r.ok) _appVersion = (await r.json()).version || "";
+  } catch (_err) {
+    /* leave null; About pane falls back to a dash */
+  }
+  return _appVersion ?? "";
+}
+
+export function buildSettingsSheet(theme, { onEditLayout, standalone = false } = {}) {
   const sheet = document.createElement("div");
   sheet.id = "theme-sheet";
   sheet.hidden = true;
+  if (standalone) sheet.classList.add("is-standalone");
 
   const tabsHtml = TAB_KEYS.map(
     (tab, i) =>
@@ -108,11 +128,31 @@ export function buildSettingsSheet(theme, { onEditLayout } = {}) {
       `<div class="sheet-pane ${i === 0 ? "is-active" : ""}" data-pane="${tab.id}"></div>`,
   ).join("");
 
+  // In the standalone window the panel already *is* the popout, so the
+  // detach / open-in-window controls are pointless there.
+  const popoutControls = standalone
+    ? ""
+    : `
+        <button class="sheet-icon-btn sheet-detach" type="button"
+                aria-label="${t("settings.popout.detach")}" title="${t("settings.popout.detach")}">⤢</button>
+        <button class="sheet-icon-btn sheet-popout" type="button"
+                aria-label="${t("settings.popout.window")}" title="${t("settings.popout.window")}">⧉</button>`;
+
+  // Drag bar — only visible once the panel is detached (see CSS .is-floating).
+  const dragbarHtml = standalone
+    ? ""
+    : `<div class="sheet-dragbar" data-bind="dragbar">
+         <span class="sheet-dragbar-title">${t("settings.dialog_label")}</span>
+         <span class="sheet-dragbar-grip" aria-hidden="true">⠿</span>
+       </div>`;
+
   sheet.innerHTML = `
     <div class="sheet-backdrop"></div>
     <div class="sheet-panel" role="dialog" aria-label="${t("settings.dialog_label")}">
+      ${dragbarHtml}
       <div class="sheet-header">
         <div class="sheet-tabs">${tabsHtml}</div>
+        ${popoutControls}
         <button class="sheet-close" type="button" aria-label="${t("common.close")}">×</button>
       </div>
       <div class="sheet-body">${panesHtml}</div>
@@ -122,7 +162,13 @@ export function buildSettingsSheet(theme, { onEditLayout } = {}) {
   document.body.appendChild(sheet);
 
   const $ = (sel) => sheet.querySelector(sel);
+  const panel = $(".sheet-panel");
+
   const close = () => {
+    if (standalone) {
+      window.close();
+      return;
+    }
     sheet.classList.remove("is-open");
     setTimeout(() => {
       sheet.hidden = true;
@@ -133,6 +179,86 @@ export function buildSettingsSheet(theme, { onEditLayout } = {}) {
     sheet.hidden = false;
     requestAnimationFrame(() => sheet.classList.add("is-open"));
   };
+
+  // ---- Popout: detach into a floating, draggable panel -----------------
+  if (!standalone) {
+    const detachBtn = $(".sheet-detach");
+    const dragbar = $('[data-bind="dragbar"]');
+
+    // Keep a floating panel fully on-screen given its current size.
+    const clampInto = (x, y) => {
+      const maxX = Math.max(0, window.innerWidth - panel.offsetWidth);
+      const maxY = Math.max(0, window.innerHeight - panel.offsetHeight);
+      return [
+        Math.min(Math.max(0, x), maxX),
+        Math.min(Math.max(0, y), maxY),
+      ];
+    };
+
+    const setFloating = (on) => {
+      if (on) {
+        // Measure the *docked* rect first, then switch to floating and pin the
+        // panel to that spot (clamped) so it doesn't jump or land off-screen.
+        const r = panel.getBoundingClientRect();
+        sheet.classList.add("is-floating");
+        detachBtn.classList.add("is-active");
+        const [x, y] = clampInto(Math.round(r.left), Math.round(r.top));
+        panel.style.left = `${x}px`;
+        panel.style.top = `${y}px`;
+      } else {
+        sheet.classList.remove("is-floating");
+        detachBtn.classList.remove("is-active");
+        // Drop inline left/top/size so the bottom-anchored rules take over.
+        panel.style.left = panel.style.top = panel.style.width = panel.style.height = "";
+      }
+    };
+    detachBtn.addEventListener("click", () => setFloating(!sheet.classList.contains("is-floating")));
+
+    // Drag the floating panel by its dedicated drag bar.
+    dragbar.addEventListener("pointerdown", (e) => {
+      if (!sheet.classList.contains("is-floating")) return;
+      e.preventDefault();
+      const r = panel.getBoundingClientRect();
+      const offX = e.clientX - r.left;
+      const offY = e.clientY - r.top;
+      dragbar.setPointerCapture(e.pointerId);
+      dragbar.classList.add("is-grabbing");
+      const onMove = (ev) => {
+        const [x, y] = clampInto(ev.clientX - offX, ev.clientY - offY);
+        panel.style.left = `${x}px`;
+        panel.style.top = `${y}px`;
+      };
+      const onUp = () => {
+        dragbar.classList.remove("is-grabbing");
+        dragbar.removeEventListener("pointermove", onMove);
+        dragbar.removeEventListener("pointerup", onUp);
+        dragbar.removeEventListener("pointercancel", onUp);
+      };
+      dragbar.addEventListener("pointermove", onMove);
+      dragbar.addEventListener("pointerup", onUp);
+      dragbar.addEventListener("pointercancel", onUp);
+    });
+
+    // If the viewport shrinks, pull a floating panel back into view.
+    window.addEventListener("resize", () => {
+      if (!sheet.classList.contains("is-floating") || !panel.style.left) return;
+      const [x, y] = clampInto(parseInt(panel.style.left, 10) || 0, parseInt(panel.style.top, 10) || 0);
+      panel.style.left = `${x}px`;
+      panel.style.top = `${y}px`;
+    });
+
+    // ---- Popout: open settings in a separate browser window ----------
+    $(".sheet-popout").addEventListener("click", () => {
+      const w = Math.min(820, window.screen.availWidth);
+      const h = Math.min(720, window.screen.availHeight);
+      window.open(
+        "/settings.html",
+        "edge-settings",
+        `width=${w},height=${h},menubar=no,toolbar=no,location=no,status=no`,
+      );
+      close();
+    });
+  }
 
   const setActiveTab = (id) => {
     for (const btn of sheet.querySelectorAll(".sheet-tab")) {
@@ -419,23 +545,35 @@ export function buildSettingsSheet(theme, { onEditLayout } = {}) {
     }
   }
 
-  let _qaMounted = false;
+  let _qaEditor = null;
   const renderActionsPane = () => {
     const root = $('[data-pane="actions"]');
     // The editor manages its own load/save lifecycle and reads its data
     // from a dedicated endpoint (full action data, unscrubbed). Mount it
-    // exactly once; the sheet keeps it in the DOM between opens.
-    if (_qaMounted) return;
-    _qaMounted = true;
-    mountQuickActionsEditor(root, { flashToast });
+    // exactly once; on later opens, ask it to re-sync with the on-disk config
+    // (so positions changed via the widget's edit mode aren't overwritten by a
+    // stale buffer) — it keeps any unsaved edits.
+    if (_qaEditor) {
+      _qaEditor.reload?.();
+      return;
+    }
+    _qaEditor = mountQuickActionsEditor(root, { flashToast });
   };
 
   const renderAboutPane = () => {
     const root = $('[data-pane="about"]');
+    const creditsHtml = CREDITS.map(
+      (c) => `
+        <li class="about-credit">
+          <a href="${c.url}" target="_blank" rel="noopener noreferrer">${c.name}</a>
+          <span class="about-credit-desc">${t(c.descKey)}</span>
+          <span class="about-credit-license">${c.license}</span>
+        </li>`,
+    ).join("");
     root.innerHTML = `
       <div class="about-pane">
         <h3 class="about-title">Edge Dashboard</h3>
-        <div class="about-version">${t("settings.about.version", { version: APP_VERSION })}</div>
+        <div class="about-version" data-bind="version">${t("settings.about.version", { version: _appVersion ?? "…" })}</div>
         <p class="about-desc">${t("settings.about.description")}</p>
         <div class="about-links">
           <a class="about-link about-github" href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer">
@@ -447,12 +585,31 @@ export function buildSettingsSheet(theme, { onEditLayout } = {}) {
             <span>${t("settings.about.kofi")}</span>
           </a>
         </div>
+        <div class="about-credits">
+          <div class="about-credits-title">${t("settings.about.credits")}</div>
+          <ul class="about-credits-list">${creditsHtml}</ul>
+        </div>
       </div>
     `;
+    // Fill in the version once /api/config resolves (works for both the
+    // embedded sheet and the standalone settings window).
+    fetchAppVersion().then((v) => {
+      const el = root.querySelector('[data-bind="version"]');
+      if (el) el.textContent = t("settings.about.version", { version: v || "—" });
+    });
   };
 
   const renderLayoutPane = () => {
     const root = $('[data-pane="layout"]');
+    if (standalone || !onEditLayout) {
+      // Layout editing manipulates the live dashboard DOM, which the
+      // standalone settings window doesn't host.
+      root.innerHTML = `
+        <p class="settings-help">${t("settings.layout.help")}</p>
+        <div class="settings-empty">${t("settings.layout.display_only")}</div>
+      `;
+      return;
+    }
     root.innerHTML = `
       <p class="settings-help">${t("settings.layout.help")}</p>
       <div class="settings-actions">

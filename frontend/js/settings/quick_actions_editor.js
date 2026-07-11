@@ -6,6 +6,8 @@
 
 import { confirmDialog } from "../confirm.js";
 import { t } from "../i18n.js";
+import { iconMarkup } from "../lib/icon.js";
+import { openIconPicker } from "../lib/icon_picker.js";
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
@@ -22,13 +24,42 @@ function emptyAction() {
     icon: "",
     kind: "shell",
     confirm: false,
+    color: "",
+    text_color: "",
+    w: 1,
+    h: 1,
     command: [],
     url: "",
     method: "POST",
     headers: {},
     params: {},
     json: null,
+    page: 0,
+    x: null,
+    y: null,
+    tiles: [],
+    status: null,
   };
+}
+
+function emptyStatus() {
+  return { kind: "shell", command: [], url: "", method: "GET", headers: {}, match: "" };
+}
+
+const DEFAULT_TILE_BG = "#1b2733";
+const DEFAULT_TILE_FG = "#e6edf3";
+
+function clampSpan(v) {
+  const n = Math.round(Number(v) || 1);
+  return Math.min(Math.max(1, n), 4);
+}
+
+function normalizeStatus(raw) {
+  const s = { ...emptyStatus(), ...(raw || {}) };
+  s.command = Array.isArray(s.command) ? [...s.command] : [];
+  s.headers = s.headers && typeof s.headers === "object" ? { ...s.headers } : {};
+  s.match = s.match || "";
+  return s;
 }
 
 function normalizeAction(raw) {
@@ -37,8 +68,20 @@ function normalizeAction(raw) {
   // server omits via exclude_defaults).
   const a = { ...emptyAction(), ...(raw || {}) };
   a.command = Array.isArray(a.command) ? [...a.command] : [];
+  a.detach = !!a.detach;
   a.headers = a.headers && typeof a.headers === "object" ? { ...a.headers } : {};
   a.params = a.params && typeof a.params === "object" ? { ...a.params } : {};
+  a.color = a.color || "";
+  a.text_color = a.text_color || "";
+  a.w = clampSpan(a.w);
+  a.h = clampSpan(a.h);
+  a.page = Number.isInteger(a.page) ? a.page : 0;
+  a.x = Number.isInteger(a.x) ? a.x : null;
+  a.y = Number.isInteger(a.y) ? a.y : null;
+  a.back_x = Number.isInteger(a.back_x) ? a.back_x : 0;
+  a.back_y = Number.isInteger(a.back_y) ? a.back_y : 0;
+  a.tiles = Array.isArray(a.tiles) ? a.tiles.map(normalizeAction) : [];
+  a.status = a.status ? normalizeStatus(a.status) : null;
   return a;
 }
 
@@ -48,16 +91,44 @@ function serializeAction(a) {
   const out = { id: a.id, kind: a.kind };
   if (a.label) out.label = a.label;
   if (a.icon) out.icon = a.icon;
-  if (a.confirm) out.confirm = true;
+  if (a.confirm && a.kind !== "folder") out.confirm = true;
+  if (a.color) out.color = a.color;
+  if (a.text_color) out.text_color = a.text_color;
+  if (a.w && a.w !== 1) out.w = clampSpan(a.w);
+  if (a.h && a.h !== 1) out.h = clampSpan(a.h);
+  if (a.page) out.page = a.page;
+  if (Number.isInteger(a.x)) out.x = a.x;
+  if (Number.isInteger(a.y)) out.y = a.y;
   if (a.kind === "shell") {
     out.command = a.command.filter((arg) => arg.length > 0);
+    if (a.detach) out.detach = true;
   } else if (a.kind === "http") {
     out.url = a.url || "";
     if (a.method && a.method.toUpperCase() !== "POST") out.method = a.method.toUpperCase();
     if (a.headers && Object.keys(a.headers).length) out.headers = a.headers;
     if (a.params && Object.keys(a.params).length) out.params = a.params;
     if (a.json !== null && a.json !== undefined && a.json !== "") out.json = a.json;
+  } else if (a.kind === "folder") {
+    out.tiles = (a.tiles || []).map(serializeAction);
+    if (a.back_x) out.back_x = a.back_x;
+    if (a.back_y) out.back_y = a.back_y;
   }
+  if (a.kind !== "folder" && a.status) {
+    out.status = serializeStatus(a.status);
+  }
+  return out;
+}
+
+function serializeStatus(s) {
+  const out = { kind: s.kind };
+  if (s.kind === "shell") {
+    out.command = (s.command || []).filter((arg) => arg.length > 0);
+  } else {
+    out.url = s.url || "";
+    if (s.method && s.method.toUpperCase() !== "GET") out.method = s.method.toUpperCase();
+    if (s.headers && Object.keys(s.headers).length) out.headers = s.headers;
+  }
+  if (s.match) out.match = s.match;
   return out;
 }
 
@@ -81,99 +152,6 @@ function jsonToText(v) {
   }
 }
 
-// --- Icon picker --------------------------------------------------------
-//
-// emoji-picker-element is a Web Component with built-in search + categories.
-// Self-hosted under /vendor/ so the dashboard has no external supply-chain
-// dependency — picker code AND emoji data are served from our own origin.
-
-const EMOJI_PICKER_URL = "/vendor/emoji-picker-element/picker.js";
-const EMOJI_DATA_URL = "/vendor/emoji-picker-element/data.json";
-
-let _emojiLoadPromise = null;
-function loadEmojiPickerElement() {
-  if (window.customElements?.get("emoji-picker")) return Promise.resolve(true);
-  if (!_emojiLoadPromise) {
-    _emojiLoadPromise = import(EMOJI_PICKER_URL)
-      .then(() => true)
-      .catch((err) => {
-        console.warn("[qa-editor] emoji-picker failed to load:", err);
-        _emojiLoadPromise = null; // allow retry on next open
-        return false;
-      });
-  }
-  return _emojiLoadPromise;
-}
-
-// Returns a Promise<string|null>:
-//   string  -> the chosen emoji (or "" to clear the icon)
-//   null    -> picker was cancelled, leave the icon untouched
-async function openIconPicker(target) {
-  const ok = await loadEmojiPickerElement();
-  if (!ok) {
-    const cur = target.textContent.trim().replace(/^\+$/, "");
-    const v = window.prompt(t("qa_editor.icon_prompt"), cur);
-    return v == null ? null : v;
-  }
-  return new Promise((resolve) => {
-    const popover = document.createElement("div");
-    popover.className = "qa-emoji-popover";
-    popover.innerHTML = `
-      <div class="qa-emoji-toolbar">
-        <button type="button" class="btn" data-act="clear">${t("qa_editor.icon_none")}</button>
-        <button type="button" class="btn" data-act="cancel">${t("common.cancel")}</button>
-      </div>
-      <emoji-picker class="dark" data-source="${EMOJI_DATA_URL}"></emoji-picker>
-    `;
-    document.body.appendChild(popover);
-
-    const place = () => {
-      const r = target.getBoundingClientRect();
-      const pr = popover.getBoundingClientRect();
-      let top = r.bottom + 6;
-      let left = r.left;
-      if (top + pr.height > window.innerHeight - 8) {
-        top = Math.max(8, r.top - pr.height - 6);
-      }
-      if (left + pr.width > window.innerWidth - 8) {
-        left = Math.max(8, window.innerWidth - pr.width - 8);
-      }
-      popover.style.top = `${top}px`;
-      popover.style.left = `${left}px`;
-    };
-    requestAnimationFrame(place);
-    window.addEventListener("resize", place);
-
-    let resolved = false;
-    const close = (value) => {
-      if (resolved) return;
-      resolved = true;
-      popover.remove();
-      document.removeEventListener("pointerdown", onDocPointer, true);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("resize", place);
-      resolve(value);
-    };
-    const onDocPointer = (e) => {
-      if (popover.contains(e.target) || target.contains(e.target)) return;
-      close(null);
-    };
-    const onKey = (e) => {
-      if (e.key === "Escape") close(null);
-    };
-    // Defer so the click that opened us doesn't immediately close us.
-    setTimeout(() => {
-      document.addEventListener("pointerdown", onDocPointer, true);
-      document.addEventListener("keydown", onKey);
-    }, 0);
-
-    popover.querySelector("emoji-picker").addEventListener("emoji-click", (e) => {
-      close(e.detail.unicode || "");
-    });
-    popover.querySelector('[data-act="clear"]').addEventListener("click", () => close(""));
-    popover.querySelector('[data-act="cancel"]').addEventListener("click", () => close(null));
-  });
-}
 
 /**
  * Mount the Quick Actions editor into `rootEl`.
@@ -182,10 +160,14 @@ async function openIconPicker(target) {
  * @param {{flashToast: (msg: string, isError?: boolean) => void}} opts
  */
 export function mountQuickActionsEditor(rootEl, { flashToast }) {
-  // Editor state — a buffer of actions. Saved only when the user clicks
-  // "Speichern" so changes can be discarded by closing the sheet.
-  let actions = [];
+  // Editor state — a buffer of actions (a tree). Saved only when the user
+  // clicks "Speichern" so changes can be discarded by closing the sheet.
+  let rootActions = [];
+  let path = []; // folder objects from the root to the level being edited
+  let actions = []; // tiles at the current level — a reference into the tree
   let timeoutSeconds = 30.0;
+  let columns = 4;
+  let rows = 3;
   let dirty = false;
 
   rootEl.innerHTML = `
@@ -194,9 +176,16 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
         <button class="btn" type="button" data-act="add">${t("qa_editor.add")}</button>
         <span class="qa-editor-meta" data-bind="meta"></span>
         <span class="qa-editor-spacer"></span>
+        <label class="qa-grid-setting">
+          <span>${t("qa_editor.grid")}</span>
+          <input type="number" min="1" max="8" class="qa-grid-num" data-bind="cols">
+          <span class="qa-grid-x">×</span>
+          <input type="number" min="1" max="8" class="qa-grid-num" data-bind="rows">
+        </label>
         <button class="btn" type="button" data-act="reset" hidden>${t("common.discard")}</button>
         <button class="btn btn-primary" type="button" data-act="save">${t("common.save")}</button>
       </div>
+      <nav class="qa-breadcrumb" data-bind="crumbs" hidden></nav>
       <div class="qa-editor-list" data-bind="list">
         <div class="settings-empty">${t("common.loading")}</div>
       </div>
@@ -205,10 +194,77 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
 
   const listEl = rootEl.querySelector('[data-bind="list"]');
   const metaEl = rootEl.querySelector('[data-bind="meta"]');
+  const crumbsEl = rootEl.querySelector('[data-bind="crumbs"]');
   const resetBtn = rootEl.querySelector('[data-act="reset"]');
   const addBtn = rootEl.querySelector('[data-act="add"]');
   const saveBtn = rootEl.querySelector('[data-act="save"]');
+  const colsInput = rootEl.querySelector('[data-bind="cols"]');
+  const rowsInput = rootEl.querySelector('[data-bind="rows"]');
 
+  const clampGrid = (v) => Math.min(Math.max(1, Math.round(Number(v) || 1)), 8);
+  colsInput.addEventListener("change", () => {
+    columns = clampGrid(colsInput.value);
+    colsInput.value = columns;
+    markDirty();
+  });
+  rowsInput.addEventListener("change", () => {
+    rows = clampGrid(rowsInput.value);
+    rowsInput.value = rows;
+    markDirty();
+  });
+
+  // ---- Folder navigation -------------------------------------------------
+  // `path` holds folder *objects* (not ids), so renaming a folder's id while
+  // inside it can't break navigation. `actions` is re-pointed at the current
+  // level's `tiles` array; all mutations happen in place so the tree stays
+  // linked.
+  function setLevel() {
+    actions = path.length ? path[path.length - 1].tiles : rootActions;
+    renderBreadcrumb();
+  }
+  function renderBreadcrumb() {
+    if (!path.length) {
+      crumbsEl.hidden = true;
+      crumbsEl.innerHTML = "";
+      return;
+    }
+    crumbsEl.hidden = false;
+    const parts = [`<button type="button" class="qa-crumb" data-crumb="-1">${t("qa_editor.root")}</button>`];
+    path.forEach((f, i) => {
+      parts.push(`<span class="qa-crumb-sep">›</span>`);
+      parts.push(`<button type="button" class="qa-crumb" data-crumb="${i}">${escapeAttr(f.label || f.id || "…")}</button>`);
+    });
+    crumbsEl.innerHTML = parts.join("");
+  }
+  function openFolder(a) {
+    if (!a.id) {
+      flashToast(t("qa_editor.folder_needs_id"), true);
+      return;
+    }
+    path = [...path, a];
+    setLevel();
+    renderList();
+    metaCount(); // navigation preserves the dirty flag, just refreshes the count
+  }
+  crumbsEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".qa-crumb");
+    if (!btn) return;
+    const i = Number(btn.dataset.crumb);
+    path = i < 0 ? [] : path.slice(0, i + 1);
+    setLevel();
+    renderList();
+    metaCount();
+  });
+
+  function metaCount() {
+    if (dirty) {
+      metaEl.textContent = t("common.unsaved");
+      return;
+    }
+    metaEl.textContent = actions.length === 1
+      ? t("qa_editor.action_count_one", { count: actions.length })
+      : t("qa_editor.action_count_other", { count: actions.length });
+  }
   function markDirty() {
     dirty = true;
     resetBtn.hidden = false;
@@ -217,9 +273,7 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
   function markClean() {
     dirty = false;
     resetBtn.hidden = true;
-    metaEl.textContent = actions.length === 1
-      ? t("qa_editor.action_count_one", { count: actions.length })
-      : t("qa_editor.action_count_other", { count: actions.length });
+    metaCount();
   }
 
   async function load() {
@@ -228,8 +282,14 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
       const r = await fetch("/api/quick_actions/config");
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const body = await r.json();
-      actions = (body.actions || []).map(normalizeAction);
+      rootActions = (body.actions || []).map(normalizeAction);
+      path = [];
+      setLevel();
       timeoutSeconds = body.timeout_seconds ?? 30.0;
+      columns = clampGrid(body.columns ?? 4);
+      rows = clampGrid(body.rows ?? 3);
+      colsInput.value = columns;
+      rowsInput.value = rows;
       renderList();
       markClean();
     } catch (err) {
@@ -259,7 +319,7 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
       <div class="qa-card-head">
         <button type="button" class="qa-drag" aria-label="${t("qa_editor.drag")}">⋮⋮</button>
         <button type="button" class="qa-icon-btn" data-field="icon"
-                aria-label="${t("qa_editor.icon_pick")}">${a.icon ? escapeAttr(a.icon) : '<span class="qa-icon-empty">+</span>'}</button>
+                aria-label="${t("qa_editor.icon_pick")}">${iconMarkup(a.icon, { fallback: '<span class="qa-icon-empty">+</span>' })}</button>
         <input type="text" class="qa-label-input" data-field="label"
                value="${escapeAttr(a.label)}" placeholder="${t("qa_editor.label_placeholder")}">
         <input type="text" class="qa-id-input" data-field="id"
@@ -267,27 +327,74 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
         <select class="qa-kind-select" data-field="kind">
           <option value="shell"${a.kind === "shell" ? " selected" : ""}>${t("qa_editor.kind.shell")}</option>
           <option value="http"${a.kind === "http" ? " selected" : ""}>${t("qa_editor.kind.http")}</option>
+          <option value="folder"${a.kind === "folder" ? " selected" : ""}>${t("qa_editor.kind.folder")}</option>
         </select>
         <button type="button" class="qa-delete" aria-label="${t("common.delete")}" data-act="delete">×</button>
       </div>
-      <div class="qa-card-row">
+      <div class="qa-card-row" data-bind="actionrow"></div>
+      <div class="qa-appearance">
+        <label class="qa-appear-field">
+          <span>${t("qa_editor.tile_bg")}</span>
+          <span class="qa-color-wrap">
+            <input type="color" data-field="color" value="${escapeAttr(a.color || DEFAULT_TILE_BG)}"${a.color ? "" : " data-unset=\"1\""}>
+            <button type="button" class="qa-color-reset" data-act="reset-color" title="${t("qa_editor.tile_color_default")}">↺</button>
+          </span>
+        </label>
+        <label class="qa-appear-field">
+          <span>${t("qa_editor.tile_fg")}</span>
+          <span class="qa-color-wrap">
+            <input type="color" data-field="text_color" value="${escapeAttr(a.text_color || DEFAULT_TILE_FG)}"${a.text_color ? "" : " data-unset=\"1\""}>
+            <button type="button" class="qa-color-reset" data-act="reset-text_color" title="${t("qa_editor.tile_color_default")}">↺</button>
+          </span>
+        </label>
+        <label class="qa-appear-field">
+          <span>${t("qa_editor.tile_size")}</span>
+          <select data-field="size">
+            <option value="1x1"${a.w === 1 && a.h === 1 ? " selected" : ""}>1×1</option>
+            <option value="2x1"${a.w === 2 && a.h === 1 ? " selected" : ""}>2×1</option>
+            <option value="1x2"${a.w === 1 && a.h === 2 ? " selected" : ""}>1×2</option>
+            <option value="2x2"${a.w === 2 && a.h === 2 ? " selected" : ""}>2×2</option>
+          </select>
+        </label>
+      </div>
+      <div class="qa-card-body" data-bind="body"></div>
+    `;
+
+    renderActionRow(card, a);
+    renderKindFields(card, a);
+    wireCard(card, a);
+    return card;
+  }
+
+  // The row between the head and the body: confirm + test for runnable tiles,
+  // or an "open folder" affordance for folders.
+  function renderActionRow(card, a) {
+    const row = card.querySelector('[data-bind="actionrow"]');
+    if (a.kind === "folder") {
+      const count = (a.tiles || []).length;
+      row.innerHTML = `
+        <button type="button" class="btn qa-open-folder" data-act="open-folder">${t("qa_editor.open_folder")}</button>
+        <span class="qa-folder-count">${count === 1 ? t("qa_editor.folder_count_one", { count }) : t("qa_editor.folder_count_other", { count })}</span>
+        <span class="qa-card-spacer"></span>
+      `;
+    } else {
+      row.innerHTML = `
         <label class="qa-checkbox">
           <input type="checkbox" data-field="confirm"${a.confirm ? " checked" : ""}>
           <span>${t("qa_editor.confirm_before_run")}</span>
         </label>
         <span class="qa-card-spacer"></span>
         <button type="button" class="btn qa-test-btn" data-act="test">${t("qa_editor.test_button")}</button>
-      </div>
-      <div class="qa-card-body" data-bind="body"></div>
-    `;
-
-    renderKindFields(card, a);
-    wireCard(card, a);
-    return card;
+      `;
+    }
   }
 
   function renderKindFields(card, a) {
     const body = card.querySelector('[data-bind="body"]');
+    if (a.kind === "folder") {
+      body.innerHTML = `<div class="qa-folder-hint">${t("qa_editor.folder_hint")}</div>`;
+      return;
+    }
     if (a.kind === "shell") {
       body.innerHTML = `
         <label class="settings-field">
@@ -333,6 +440,74 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
       `;
       body.querySelector('.settings-row').style.gridTemplateColumns = "1fr 1fr 1fr auto";
     }
+    // Append the optional live-status probe section (shell + http only).
+    const statusWrap = document.createElement("div");
+    statusWrap.dataset.bind = "status";
+    body.appendChild(statusWrap);
+    renderStatusSection(card, a);
+  }
+
+  // Live-status probe config: a toggle that reveals a small shell/http probe
+  // form. The probe result drives the tile's on/off indicator.
+  function renderStatusSection(card, a) {
+    const wrap = card.querySelector('[data-bind="status"]');
+    if (!wrap) return;
+    const on = !!a.status;
+    let fields = "";
+    if (on) {
+      const s = a.status;
+      const kindOpts = `
+        <option value="shell"${s.kind === "shell" ? " selected" : ""}>${t("qa_editor.kind.shell")}</option>
+        <option value="http"${s.kind === "http" ? " selected" : ""}>${t("qa_editor.kind.http")}</option>`;
+      let probe;
+      if (s.kind === "shell") {
+        probe = `
+          <label class="settings-field">
+            <span>${t("qa_editor.status_command")} <span class="hint">${t("qa_editor.status_command_hint")}</span></span>
+            <textarea data-field="status_command" rows="2" class="qa-mono"
+              placeholder="cat&#10;/sys/class/leds/.../brightness">${escapeAttr((s.command || []).join("\n"))}</textarea>
+          </label>`;
+      } else {
+        const methodOpts = METHODS.map(
+          (m) => `<option value="${m}"${(s.method || "GET").toUpperCase() === m ? " selected" : ""}>${m}</option>`,
+        ).join("");
+        probe = `
+          <div class="settings-row" style="grid-template-columns: 1fr auto">
+            <label class="settings-field">
+              <span>URL</span>
+              <input type="text" data-field="status_url" value="${escapeAttr(s.url || "")}"
+                     placeholder="https://homeassistant.local:8123/api/states/...">
+            </label>
+            <label class="settings-field">
+              <span>${t("qa_editor.method")}</span>
+              <select data-field="status_method">${methodOpts}</select>
+            </label>
+          </div>
+          <label class="settings-field">
+            <span>${t("qa_editor.headers")} <span class="hint">${t("qa_editor.headers_hint")}</span></span>
+            <textarea data-field="status_headers" rows="2" class="qa-mono"
+              placeholder='{"Authorization":"Bearer …"}'>${escapeAttr(jsonToText(s.headers))}</textarea>
+          </label>`;
+      }
+      fields = `
+        <label class="settings-field">
+          <span>${t("qa_editor.status_source")}</span>
+          <select data-field="status_kind">${kindOpts}</select>
+        </label>
+        ${probe}
+        <label class="settings-field">
+          <span>${t("qa_editor.status_match")} <span class="hint">${t("qa_editor.status_match_hint")}</span></span>
+          <input type="text" data-field="status_match" value="${escapeAttr(s.match || "")}" placeholder="on|true|1">
+        </label>`;
+    }
+    wrap.className = "qa-status-section";
+    wrap.innerHTML = `
+      <label class="qa-checkbox qa-status-toggle">
+        <input type="checkbox" data-field="status_on"${on ? " checked" : ""}>
+        <span>${t("qa_editor.status_enable")}</span>
+      </label>
+      <div class="qa-status-fields">${fields}</div>
+    `;
   }
 
   function wireCard(card, a) {
@@ -366,6 +541,27 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
         }
       } else if (field === "confirm") {
         a.confirm = t.checked;
+      } else if (field === "color" || field === "text_color") {
+        a[field] = t.value;
+        t.removeAttribute("data-unset"); // picking a colour activates it
+      } else if (field === "size") {
+        return; // handled on `change`
+      } else if (field === "status_command") {
+        a.status.command = t.value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      } else if (field === "status_headers") {
+        const parsed = parseJsonOrNull(t.value);
+        if (parsed === undefined) {
+          t.classList.add("is-invalid");
+        } else {
+          t.classList.remove("is-invalid");
+          a.status.headers = parsed || {};
+        }
+      } else if (field === "status_url") {
+        a.status.url = t.value;
+      } else if (field === "status_match") {
+        a.status.match = t.value;
+      } else if (field === "status_on" || field === "status_kind" || field === "status_method") {
+        return; // handled on `change`
       } else if (field === "id") {
         a.id = t.value.trim();
         card.dataset.id = a.id;
@@ -377,9 +573,27 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
 
     card.addEventListener("change", (e) => {
       const t = e.target;
-      if (t.dataset?.field === "kind") {
+      const field = t.dataset?.field;
+      if (field === "kind") {
         a.kind = t.value;
+        renderActionRow(card, a);
         renderKindFields(card, a);
+        markDirty();
+      } else if (field === "size") {
+        const [w, h] = t.value.split("x").map((n) => clampSpan(n));
+        a.w = w;
+        a.h = h;
+        markDirty();
+      } else if (field === "status_on") {
+        a.status = t.checked ? (a.status || normalizeStatus({})) : null;
+        renderStatusSection(card, a);
+        markDirty();
+      } else if (field === "status_kind") {
+        a.status.kind = t.value;
+        renderStatusSection(card, a);
+        markDirty();
+      } else if (field === "status_method") {
+        a.status.method = t.value;
         markDirty();
       }
     });
@@ -388,14 +602,29 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
       const iconBtn = e.target.closest('.qa-icon-btn');
       if (iconBtn) {
         e.preventDefault();
-        const next = await openIconPicker(iconBtn);
+        const next = await openIconPicker(iconBtn, a.icon || "");
         if (next === null) return; // cancelled
         a.icon = next;
-        iconBtn.innerHTML = next ? escapeAttr(next) : '<span class="qa-icon-empty">+</span>';
+        iconBtn.innerHTML = iconMarkup(next, { fallback: '<span class="qa-icon-empty">+</span>' });
         markDirty();
         return;
       }
       const act = e.target.closest("[data-act]")?.dataset.act;
+      if (act === "open-folder") {
+        openFolder(a);
+        return;
+      }
+      if (act === "reset-color" || act === "reset-text_color") {
+        const field = act === "reset-color" ? "color" : "text_color";
+        a[field] = "";
+        const input = card.querySelector(`input[data-field="${field}"]`);
+        if (input) {
+          input.value = field === "color" ? DEFAULT_TILE_BG : DEFAULT_TILE_FG;
+          input.setAttribute("data-unset", "1");
+        }
+        markDirty();
+        return;
+      }
       if (act === "delete") {
         const label = a.label || a.id || t("qa_editor.delete_this_action");
         const ok = await confirmDialog(
@@ -511,12 +740,13 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
         handle.removeEventListener("pointercancel", onUp);
         dragCard.classList.remove("is-dragging");
         dragCard.style.transform = "";
-        // Rebuild the actions array from the new DOM order.
+        // Rebuild the current level from the new DOM order, mutating the array
+        // in place so the parent folder keeps referencing the same array.
         const newOrder = Array.from(listEl.children)
           .map((el) => el.dataset.id)
-          .map((id) => actions.find((x) => x.id === id) || dragAction);
-        // Filter out any stale references in case of empty ids.
-        actions = newOrder.filter(Boolean);
+          .map((id) => actions.find((x) => x.id === id) || dragAction)
+          .filter(Boolean);
+        actions.splice(0, actions.length, ...newOrder);
         dragCard = null;
         dragAction = null;
         pointerId = null;
@@ -546,31 +776,46 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
     load();
   });
 
-  saveBtn.addEventListener("click", async () => {
-    // Pre-check IDs client-side for a friendlier error than 400 from server.
-    const ids = new Set();
-    for (const a of actions) {
-      if (!a.id) {
-        flashToast(t("qa_editor.needs_id"), true);
-        return;
-      }
-      if (ids.has(a.id)) {
-        flashToast(t("qa_editor.duplicate_id", { id: a.id }), true);
-        return;
-      }
+  // Validate the whole tree client-side for a friendlier message than a 400.
+  // Returns an error string, or null when everything checks out.
+  function validateTree(list, ids) {
+    for (const a of list) {
+      if (!a.id) return t("qa_editor.needs_id");
+      if (ids.has(a.id)) return t("qa_editor.duplicate_id", { id: a.id });
       ids.add(a.id);
       if (a.kind === "shell" && a.command.filter(Boolean).length === 0) {
-        flashToast(t("qa_editor.shell_empty", { id: a.id }), true);
-        return;
+        return t("qa_editor.shell_empty", { id: a.id });
       }
       if (a.kind === "http" && !a.url) {
-        flashToast(t("qa_editor.http_url_missing", { id: a.id }), true);
-        return;
+        return t("qa_editor.http_url_missing", { id: a.id });
+      }
+      if (a.status) {
+        if (a.status.kind === "shell" && a.status.command.filter(Boolean).length === 0) {
+          return t("qa_editor.status_shell_empty", { id: a.id });
+        }
+        if (a.status.kind === "http" && !a.status.url) {
+          return t("qa_editor.status_url_missing", { id: a.id });
+        }
+      }
+      if (a.kind === "folder") {
+        const nested = validateTree(a.tiles || [], ids);
+        if (nested) return nested;
       }
     }
+    return null;
+  }
+
+  saveBtn.addEventListener("click", async () => {
+    const err = validateTree(rootActions, new Set());
+    if (err) {
+      flashToast(err, true);
+      return;
+    }
     const payload = {
-      actions: actions.map(serializeAction),
+      actions: rootActions.map(serializeAction),
       timeout_seconds: timeoutSeconds,
+      columns,
+      rows,
     };
     saveBtn.disabled = true;
     try {
@@ -594,4 +839,12 @@ export function mountQuickActionsEditor(rootEl, { flashToast }) {
   });
 
   load();
+
+  // Let the host re-sync the editor with the on-disk config when the sheet is
+  // reopened — but never discard the user's unsaved edits.
+  return {
+    reload() {
+      if (!dirty) load();
+    },
+  };
 }
