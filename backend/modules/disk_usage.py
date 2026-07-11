@@ -8,11 +8,11 @@ container / package-manager directories to keep the list short.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, ClassVar
 
 import psutil
 
-from .base import Module, register_module
+from .base import Module, SettingField, register_module
 
 # Pseudo filesystems that never carry user-visible storage.
 SKIP_FSTYPES = {
@@ -34,6 +34,22 @@ SKIP_MOUNT_PREFIXES = (
 class DiskUsageModule(Module):
     name = "disk_usage"
     default_interval = 30.0  # disk fill rarely shifts second-to-second
+    settings_schema: ClassVar[list[SettingField]] = [
+        SettingField(
+            key="min_size_gb",
+            type="float",
+            label_key="settings.mod.disk_usage.min_size_gb",
+            default=1.0,
+            min=0,
+            step=0.5,
+        ),
+        SettingField(
+            key="mounts",
+            type="list",
+            label_key="settings.mod.disk_usage.mounts",
+            help_key="settings.mod.disk_usage.mounts_help",
+        ),
+    ]
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)

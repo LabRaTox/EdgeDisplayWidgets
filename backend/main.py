@@ -21,6 +21,7 @@ from loguru import logger
 
 from .config import AppConfig, load_config
 from .hub import Hub
+from .modules.base import get_registry
 from .notes import MAX_BODY_LEN, MAX_TITLE_LEN, NotesStore, public_view
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -225,8 +226,75 @@ def _deep_merge(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]
 
 
 _QA_PUBLIC_FIELDS = {"id", "label", "icon", "kind", "confirm"}
-# Smart-light providers carry API keys / OAuth secrets we must never expose.
-_SMART_LIGHT_SECRET_KEYS = {"api_key", "secret", "client_id", "uid"}
+# Placeholder sent to the browser in place of a stored secret's real value, and
+# recognised on the way back in so an unchanged field keeps its stored value.
+_SECRET_MASK = "***"
+
+
+def _module_schemas() -> dict[str, list[dict[str, Any]]]:
+    """Editable-field schema per registered module, for the Settings UI.
+
+    Empty schemas are omitted; the module still shows its enabled/interval row.
+    """
+    registry = get_registry()
+    if not registry:  # tests may hit this before the Hub ran discovery
+        Hub.discover()
+        registry = get_registry()
+    out: dict[str, list[dict[str, Any]]] = {}
+    for name, cls in registry.items():
+        schema = getattr(cls, "settings_schema", None) or []
+        if schema:
+            out[name] = [f.model_dump() for f in schema]
+    return out
+
+
+def _secret_paths(module_name: str) -> list[tuple[str, ...]]:
+    """Dotted key paths of a module's secret fields, from its schema."""
+    cls = get_registry().get(module_name)
+    if cls is None:
+        return []
+    return [
+        tuple(f.key.split("."))
+        for f in (getattr(cls, "settings_schema", None) or [])
+        if f.secret
+    ]
+
+
+def _walk_to_parent(d: dict[str, Any], path: tuple[str, ...]) -> tuple[dict[str, Any] | None, str]:
+    """Descend `path[:-1]` into `d`; return (parent_dict, last_key) or (None, _)."""
+    cur: Any = d
+    for p in path[:-1]:
+        cur = cur.get(p) if isinstance(cur, dict) else None
+        if not isinstance(cur, dict):
+            return None, ""
+    return (cur, path[-1]) if isinstance(cur, dict) else (None, "")
+
+
+def _mask_secrets(dumped: dict[str, Any], module_name: str) -> None:
+    """Replace non-empty secret values with the mask sentinel, in place."""
+    for path in _secret_paths(module_name):
+        parent, last = _walk_to_parent(dumped, path)
+        if parent is not None and parent.get(last):
+            parent[last] = _SECRET_MASK
+
+
+def _strip_unchanged_secrets(body: dict[str, Any]) -> None:
+    """Drop incoming secret fields still at the mask sentinel, in place.
+
+    A masked value means "the user didn't touch this" — removing it from the
+    patch lets the deep-merge keep the currently-stored secret instead of
+    overwriting it with literal ``***``.
+    """
+    modules = body.get("modules")
+    if not isinstance(modules, dict):
+        return
+    for name, mc in modules.items():
+        if not isinstance(mc, dict):
+            continue
+        for path in _secret_paths(name):
+            parent, last = _walk_to_parent(mc, path)
+            if parent is not None and parent.get(last) == _SECRET_MASK:
+                del parent[last]
 
 
 def _summarize_validation_error(exc: Exception) -> str:
@@ -266,14 +334,10 @@ def _settings_view(cfg: AppConfig) -> dict[str, Any]:
                 {k: v for k, v in a.items() if k in _QA_PUBLIC_FIELDS}
                 for a in dumped["actions"] if isinstance(a, dict)
             ]
-        if name == "smart_lights":
-            for provider_key in ("govee", "tuya"):
-                pcfg = dumped.get(provider_key)
-                if isinstance(pcfg, dict):
-                    dumped[provider_key] = {
-                        k: ("***" if k in _SMART_LIGHT_SECRET_KEYS and v else v)
-                        for k, v in pcfg.items()
-                    }
+        # Mask secret fields (API keys, OAuth secrets) declared in each module's
+        # settings schema — even on localhost, treating /api/settings as a
+        # boundary keeps a future host: 0.0.0.0 flip from leaking tokens.
+        _mask_secrets(dumped, name)
         modules[name] = dumped
     return {
         "default_theme": cfg.default_theme,
@@ -490,6 +554,15 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         """Editable subset of the config (modules + default_theme + pages)."""
         return JSONResponse(_settings_view(current_cfg()), headers=_NO_STORE)
 
+    @app.get("/api/modules/schema")
+    async def get_modules_schema() -> JSONResponse:
+        """Per-module editable-field schema that drives the Settings UI.
+
+        Static for a given build, so the frontend fetches it once. Values live
+        in ``/api/settings``; this only describes how to render the inputs.
+        """
+        return JSONResponse({"modules": _module_schemas()})
+
     @app.post("/api/settings")
     async def post_settings(request: Request) -> JSONResponse:
         """Apply settings changes, persist to config.local.yaml, hot-reload the hub.
@@ -505,6 +578,10 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=f"invalid JSON: {exc}")
         if not isinstance(body, dict):
             raise HTTPException(status_code=400, detail="expected an object")
+
+        # Secret fields left at the mask sentinel mean "unchanged" — drop them
+        # so the deep-merge keeps the stored secret instead of writing "***".
+        _strip_unchanged_secrets(body)
 
         # Build the fully-merged config dict.
         current_dict = current_cfg().model_dump()

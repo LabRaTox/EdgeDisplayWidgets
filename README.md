@@ -188,6 +188,16 @@ Each key under `modules:` matches a `Module` subclass's `name`. Common
 fields: `enabled` (bool) and `interval` (seconds between polls). Module-
 specific keys are forwarded to the module.
 
+> **Edit in the UI, not the file.** The `Settings → Module` tab renders an
+> input for every editable field a module declares — enable/interval plus
+> module-specific options (Smart-Lights API keys, disk `min_size_gb` /
+> mountpoints, `top_processes` limit, Quick-Actions timeouts, …). Secrets
+> are masked (`••••`) and only overwritten when you type a new value. The
+> YAML below is the reference for what those fields mean; you rarely need to
+> touch it by hand. Modules expose these fields via `settings_schema` (see
+> `SettingField` in `backend/modules/base.py`) — declaring one there makes it
+> appear in the UI automatically, no bespoke UI code.
+
 ```yaml
 modules:
   heartbeat:
@@ -261,6 +271,8 @@ custom / blank). A single tile editor covers icon, label, kind,
 command/URL, confirm dialog, colours, size and live status. `Save` writes
 the whole tree back. The same actions are also editable under
 `Settings → Aktionen`.
+
+![Edge Dashboard](docs/screenshots/Shot_3.png)
 
 #### YAML schema
 

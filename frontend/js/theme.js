@@ -355,6 +355,79 @@ export function buildSettingsSheet(theme, { onEditLayout, standalone = false } =
   };
 
   let _settings = null; // last fetched
+  let _moduleSchemas = null; // per-module editable-field schema (fetched once)
+
+  // --- schema-driven module fields (see backend SettingField) -------------
+  // Attribute-safe escaping for interpolated values.
+  const esc = (s) =>
+    String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;");
+
+  const getDotted = (obj, key) =>
+    key.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
+
+  const setDotted = (obj, key, value) => {
+    const parts = key.split(".");
+    let cur = obj;
+    for (let i = 0; i < parts.length - 1; i++) {
+      cur[parts[i]] = cur[parts[i]] || {};
+      cur = cur[parts[i]];
+    }
+    cur[parts.at(-1)] = value;
+  };
+
+  function schemaFieldHtml(name, f, mc) {
+    const val = getDotted(mc, f.key);
+    const attrs =
+      `data-module="${name}" data-key="${esc(f.key)}" data-type="${f.type}"` +
+      (f.secret ? ' data-secret="1"' : "");
+    const help = f.help_key
+      ? `<span class="hint field-help">${esc(t(f.help_key))}</span>`
+      : "";
+    let control;
+    if (f.secret) {
+      // Backend sends "***" when a secret is stored, "" when not. We never
+      // echo the real value; an empty submit means "keep the stored one".
+      const ph = val === "***" ? t("settings.secret.set") : t("settings.secret.empty");
+      control = `<input type="password" autocomplete="off" ${attrs} value="" placeholder="${esc(ph)}">`;
+    } else if (f.type === "bool") {
+      control = `<input type="checkbox" ${attrs} ${val ? "checked" : ""}>`;
+    } else if (f.type === "int" || f.type === "float") {
+      const step = f.step ?? (f.type === "int" ? 1 : "any");
+      const min = f.min != null ? `min="${f.min}"` : "";
+      const max = f.max != null ? `max="${f.max}"` : "";
+      control = `<input type="number" ${min} ${max} step="${step}" ${attrs} value="${val ?? ""}" placeholder="${f.default ?? ""}">`;
+    } else if (f.type === "select") {
+      const opts = (f.options || [])
+        .map((o) => `<option value="${esc(o)}" ${String(val) === o ? "selected" : ""}>${esc(o)}</option>`)
+        .join("");
+      control = `<select ${attrs}>${opts}</select>`;
+    } else if (f.type === "list") {
+      const lines = Array.isArray(val) ? val.join("\n") : "";
+      control = `<textarea rows="2" ${attrs} placeholder="${esc(t("settings.list.placeholder"))}">${esc(lines)}</textarea>`;
+    } else {
+      control = `<input type="text" ${attrs} value="${esc(val ?? "")}">`;
+    }
+    const cls = f.type === "bool" ? "settings-field field-inline" : "settings-field";
+    return `<label class="${cls}"><span>${esc(t(f.label_key))}</span>${control}${help}</label>`;
+  }
+
+  function schemaFieldsHtml(name, mc) {
+    const fields = (_moduleSchemas || {})[name] || [];
+    if (!fields.length) return "";
+    let lastGroup = null;
+    const parts = [];
+    for (const f of fields) {
+      if (f.group_key && f.group_key !== lastGroup) {
+        parts.push(`<div class="field-group-title">${esc(t(f.group_key))}</div>`);
+        lastGroup = f.group_key;
+      }
+      parts.push(schemaFieldHtml(name, f, mc));
+    }
+    return `<div class="module-settings">${parts.join("")}</div>`;
+  }
 
   const renderModulesPane = () => {
     const root = $('[data-pane="modules"]');
@@ -371,17 +444,20 @@ export function buildSettingsSheet(theme, { onEditLayout, standalone = false } =
         const checked = mc.enabled ? "checked" : "";
         return `
           <div class="module-row">
-            <label class="module-toggle">
-              <input type="checkbox" data-module="${name}" data-field="enabled" ${checked}>
-              <span class="module-name">${name}</span>
-            </label>
-            <label class="module-interval">
-              <span class="hint">${intervalLbl}</span>
-              <input type="number" min="0.05" step="0.05"
-                     data-module="${name}" data-field="interval"
-                     value="${interval}" placeholder="default">
-              <span class="unit">${intervalUnit}</span>
-            </label>
+            <div class="module-head">
+              <label class="module-toggle">
+                <input type="checkbox" data-module="${name}" data-field="enabled" ${checked}>
+                <span class="module-name">${name}</span>
+              </label>
+              <label class="module-interval">
+                <span class="hint">${intervalLbl}</span>
+                <input type="number" min="0.05" step="0.05"
+                       data-module="${name}" data-field="interval"
+                       value="${interval}" placeholder="default">
+                <span class="unit">${intervalUnit}</span>
+              </label>
+            </div>
+            ${schemaFieldsHtml(name, mc)}
           </div>
         `;
       })
@@ -454,16 +530,40 @@ export function buildSettingsSheet(theme, { onEditLayout, standalone = false } =
   async function saveModules() {
     const root = $('[data-pane="modules"]');
     const updates = {};
-    for (const inp of root.querySelectorAll("[data-module]")) {
+    const ensure = (name) => (updates[name] = updates[name] || {});
+    // Common enabled / interval controls.
+    for (const inp of root.querySelectorAll("[data-field]")) {
       const name = inp.dataset.module;
-      const field = inp.dataset.field;
-      updates[name] = updates[name] || {};
-      if (field === "enabled") {
+      ensure(name);
+      if (inp.dataset.field === "enabled") {
         updates[name].enabled = inp.checked;
-      } else if (field === "interval") {
+      } else if (inp.dataset.field === "interval") {
         const v = inp.value.trim();
         updates[name].interval = v === "" ? null : Number(v);
       }
+    }
+    // Schema-driven, module-specific fields.
+    for (const inp of root.querySelectorAll("[data-key]")) {
+      const name = inp.dataset.module;
+      const key = inp.dataset.key;
+      const type = inp.dataset.type;
+      let value;
+      if (inp.dataset.secret === "1") {
+        const typed = inp.value.trim();
+        value = typed === "" ? "***" : typed; // "***" ⇒ keep stored secret
+      } else if (type === "bool") {
+        value = inp.checked;
+      } else if (type === "int" || type === "float") {
+        const v = inp.value.trim();
+        if (v === "") continue; // empty number ⇒ leave as-is (avoid writing null)
+        value = type === "int" ? parseInt(v, 10) : parseFloat(v);
+        if (Number.isNaN(value)) continue;
+      } else if (type === "list") {
+        value = inp.value.split("\n").map((s) => s.trim()).filter(Boolean);
+      } else {
+        value = inp.value.trim();
+      }
+      setDotted(ensure(name), key, value);
     }
     try {
       await postSettings({ modules: updates });
@@ -628,6 +728,16 @@ export function buildSettingsSheet(theme, { onEditLayout, standalone = false } =
       if (r.ok) _settings = await r.json();
     } catch (err) {
       console.warn("[settings] /api/settings failed:", err);
+    }
+    if (_moduleSchemas === null) {
+      // Static for a build, so fetch once and cache across sheet reopens.
+      try {
+        const r = await fetch("/api/modules/schema");
+        if (r.ok) _moduleSchemas = (await r.json()).modules || {};
+      } catch (err) {
+        console.warn("[settings] /api/modules/schema failed:", err);
+        _moduleSchemas = {};
+      }
     }
     renderThemePane();
     renderModulesPane();
