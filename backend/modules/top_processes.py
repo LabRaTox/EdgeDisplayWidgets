@@ -13,17 +13,28 @@ core-saturating process therefore reads as `100 / cpu_count`%.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, ClassVar
 
 import psutil
 
-from .base import Module, register_module
+from .base import Module, SettingField, register_module
 
 
 @register_module
 class TopProcessesModule(Module):
     name = "top_processes"
     default_interval = 3.0
+    settings_schema: ClassVar[list[SettingField]] = [
+        SettingField(
+            key="limit",
+            type="int",
+            label_key="settings.mod.top_processes.limit",
+            default=5,
+            min=1,
+            max=50,
+            step=1,
+        ),
+    ]
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)

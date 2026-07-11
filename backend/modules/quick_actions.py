@@ -33,13 +33,13 @@ import asyncio
 import re
 import shlex
 from collections.abc import Iterator
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 import httpx
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from .base import Module, register_module
+from .base import Module, SettingField, register_module
 
 # Tiles inject `color` / `text_color` into a `style` attribute on the frontend,
 # so restrict them to plain hex to keep arbitrary CSS (url(), expressions) out.
@@ -208,6 +208,26 @@ class QuickActionsModule(Module):
     # but we keep a small one so a config edit + hub-reload shows up quickly.
     # Lower the configured interval to make live-status tiles more responsive.
     default_interval = 60.0
+    # The tile grid itself (`columns`/`rows`) and individual tiles are edited in
+    # the widget's own edit mode; only the global timeouts are surfaced here.
+    settings_schema: ClassVar[list[SettingField]] = [
+        SettingField(
+            key="timeout_seconds",
+            type="float",
+            label_key="settings.mod.quick_actions.timeout_seconds",
+            default=30.0,
+            min=1,
+            step=1,
+        ),
+        SettingField(
+            key="status_timeout_seconds",
+            type="float",
+            label_key="settings.mod.quick_actions.status_timeout_seconds",
+            default=8.0,
+            min=1,
+            step=1,
+        ),
+    ]
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)

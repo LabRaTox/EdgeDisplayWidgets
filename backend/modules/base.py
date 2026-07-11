@@ -3,9 +3,38 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
 from loguru import logger
+from pydantic import BaseModel
+
+
+class SettingField(BaseModel):
+    """Declarative descriptor for one editable module setting.
+
+    A module lists these in ``settings_schema`` and the Settings UI renders a
+    matching input for each — so a new module option becomes editable by
+    declaring it here, with no bespoke UI code. This mirrors the registry
+    pattern: adding config surface requires zero core changes.
+
+    ``key`` is the config key relative to the module block; use dotted notation
+    for nested blocks (e.g. ``"govee.api_key"``). ``label_key`` / ``help_key`` /
+    ``group_key`` are i18n keys resolved by the frontend (they fall back to the
+    key string itself when a locale is missing the entry).
+    """
+
+    key: str
+    type: Literal["bool", "int", "float", "text", "select", "list"]
+    label_key: str
+    default: Any = None
+    secret: bool = False
+    min: float | None = None
+    max: float | None = None
+    step: float | None = None
+    options: list[str] | None = None
+    placeholder_key: str | None = None
+    help_key: str | None = None
+    group_key: str | None = None
 
 
 class Module(ABC):
@@ -17,11 +46,15 @@ class Module(ABC):
 
     Subclasses may:
       - set ``default_interval`` (seconds between polls when config omits it)
+      - set ``settings_schema`` (editable config fields exposed in the UI)
       - override ``setup()`` / ``teardown()`` for resource lifecycle
     """
 
     name: ClassVar[str] = ""
     default_interval: ClassVar[float] = 1.0
+    # Module-specific config fields (beyond the common enabled/interval) that
+    # the Settings UI should render an input for. Empty ⇒ nothing extra.
+    settings_schema: ClassVar[list[SettingField]] = []
 
     def __init__(self, config: dict[str, Any]) -> None:
         self.config = config

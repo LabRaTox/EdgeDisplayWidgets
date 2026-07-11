@@ -19,12 +19,12 @@ import json
 import time
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 from loguru import logger
 
-from .base import Module, register_module
+from .base import Module, SettingField, register_module
 
 
 # --------------------------------------------------------------------- color helpers
@@ -380,6 +380,44 @@ class TuyaProvider(LightProvider):
 class SmartLightsModule(Module):
     name = "smart_lights"
     default_interval = 30.0  # cloud APIs don't need to be hammered
+    settings_schema: ClassVar[list[SettingField]] = [
+        SettingField(
+            key="govee.api_key",
+            type="text",
+            label_key="settings.mod.smart_lights.govee_api_key",
+            secret=True,
+            group_key="settings.mod.smart_lights.group_govee",
+        ),
+        SettingField(
+            key="tuya.client_id",
+            type="text",
+            label_key="settings.mod.smart_lights.tuya_client_id",
+            secret=True,
+            group_key="settings.mod.smart_lights.group_tuya",
+        ),
+        SettingField(
+            key="tuya.secret",
+            type="text",
+            label_key="settings.mod.smart_lights.tuya_secret",
+            secret=True,
+            group_key="settings.mod.smart_lights.group_tuya",
+        ),
+        SettingField(
+            key="tuya.uid",
+            type="text",
+            label_key="settings.mod.smart_lights.tuya_uid",
+            secret=True,
+            group_key="settings.mod.smart_lights.group_tuya",
+        ),
+        SettingField(
+            key="tuya.region",
+            type="select",
+            label_key="settings.mod.smart_lights.tuya_region",
+            default="eu",
+            options=["eu", "us", "cn", "in"],
+            group_key="settings.mod.smart_lights.group_tuya",
+        ),
+    ]
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)

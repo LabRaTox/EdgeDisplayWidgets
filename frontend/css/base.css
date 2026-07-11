@@ -504,14 +504,47 @@ html, body {
 }
 .module-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  flex-direction: column;
+  gap: 10px;
   padding: 8px 12px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.02);
 }
 .module-row:hover { background: rgba(255, 255, 255, 0.04); }
+.module-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+/* Module-specific fields rendered from the backend settings schema. */
+.module-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 0 2px 28px;
+  border-top: 1px solid var(--card-border);
+}
+.module-settings .field-group-title {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+.module-settings .field-help { font-size: 0.68rem; opacity: 0.8; }
+.module-settings textarea { min-height: 52px; }
+.settings-field.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.settings-field.field-inline input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
 .module-toggle {
   display: inline-flex;
   align-items: center;
@@ -1031,8 +1064,13 @@ html, body {
 .tile-editor-head { display: flex; align-items: center; gap: 8px; }
 .tile-editor-head .qa-icon-btn { width: 48px; height: 40px; font-size: 1.5rem; flex-shrink: 0; }
 .tile-editor-head .qa-icon-btn .ti-svg { width: 26px; height: 26px; }
+/* The generic `.tile-editor select { width:100% }` rule below would give the
+   kind-select a full-width flex-basis and collapse the label input next to it,
+   so pin the select to its content width and let the label take the rest. */
+.tile-editor-head .qa-kind-select { flex: 0 0 auto; width: auto; min-width: 120px; }
 .te-label {
-  flex: 1;
+  flex: 1 1 auto;
+  width: auto;
   min-width: 0;
   padding: 8px 10px;
   background: rgba(0, 0, 0, 0.2);
