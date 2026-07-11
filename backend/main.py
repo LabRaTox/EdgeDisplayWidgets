@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import os
+import re
+import shlex
 import sys
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 from pathlib import Path
 from typing import Any
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
@@ -23,6 +27,156 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = ROOT / "config.yaml"
 LOCAL_CONFIG = ROOT / "config.local.yaml"
 FRONTEND_DIR = ROOT / "frontend"
+
+
+# .desktop Exec field codes (https://specifications.freedesktop.org/...) —
+# stripped before turning Exec into an argv list.
+_DESKTOP_FIELD_CODES = re.compile(r"%[fFuUdDnNickvm]")
+
+
+def _parse_desktop(path: Path) -> dict[str, Any] | None:
+    """Parse a .desktop file into {name, exec(argv), icon}, or None to skip."""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    in_entry = False
+    data: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("[") and line.endswith("]"):
+            in_entry = line == "[Desktop Entry]"
+            continue
+        if not in_entry or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        data[key.strip()] = value.strip()
+    if data.get("Type") != "Application":
+        return None
+    if data.get("NoDisplay", "").lower() == "true" or data.get("Hidden", "").lower() == "true":
+        return None
+    if data.get("Terminal", "").lower() == "true":
+        return None  # needs a terminal we can't provide on the kiosk
+    name = data.get("Name")
+    exec_str = data.get("Exec")
+    if not name or not exec_str:
+        return None
+    cleaned = _DESKTOP_FIELD_CODES.sub("", exec_str).strip()
+    try:
+        argv = shlex.split(cleaned)
+    except ValueError:
+        return None
+    if not argv:
+        return None
+    return {"name": name, "exec": argv, "icon": data.get("Icon", "")}
+
+
+_ICON_NAME_RE = re.compile(r"^[A-Za-z0-9._+-]+$")
+_icon_index_cache: dict[str, str] | None = None
+
+
+def build_icon_index() -> dict[str, str]:
+    """Map icon *name* (file stem) → best file path across XDG icon themes.
+
+    Cached after the first build (scanning the theme dirs is the slow part).
+    Used to resolve a .desktop ``Icon=`` name to an actual image we can serve.
+    """
+    global _icon_index_cache
+    if _icon_index_cache is not None:
+        return _icon_index_cache
+
+    home = Path.home()
+    xdg_data_home = os.environ.get("XDG_DATA_HOME") or str(home / ".local/share")
+    roots = [
+        Path(xdg_data_home) / "icons",
+        Path("/usr/local/share/icons"),
+        Path("/usr/share/icons"),
+    ]
+    best: dict[str, tuple[int, str]] = {}
+
+    def consider(p: Path) -> None:
+        size_dir = p.parent.parent.name  # <theme>/<size>/apps/<name>.<ext>
+        if size_dir == "scalable":
+            size = 256 if p.suffix == ".svg" else 0
+        else:
+            m = re.match(r"(\d+)", size_dir)
+            size = int(m.group(1)) if m else 0
+        ext_pref = {".png": 2, ".svg": 2, ".xpm": 0}.get(p.suffix.lower(), 1)
+        score = ext_pref * 1000 - abs(size - 64)  # prefer ~64px raster/svg over xpm
+        cur = best.get(p.stem)
+        if cur is None or score > cur[0]:
+            best[p.stem] = (score, str(p))
+
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for ext in ("png", "svg", "xpm"):
+            for p in root.glob(f"*/*/apps/*.{ext}"):
+                consider(p)
+    index = {k: v[1] for k, v in best.items()}
+    # Flat pixmaps as a fallback for names not found in any theme.
+    pixmaps = Path("/usr/share/pixmaps")
+    if pixmaps.is_dir():
+        for ext in ("png", "svg", "xpm"):
+            for p in pixmaps.glob(f"*.{ext}"):
+                index.setdefault(p.stem, str(p))
+
+    _icon_index_cache = index
+    return index
+
+
+def _resolve_icon_name(icon_field: str, index: dict[str, str]) -> str:
+    """Return a servable icon name for a .desktop Icon value, or ""."""
+    if not icon_field:
+        return ""
+    if icon_field.startswith("/"):
+        p = Path(icon_field)
+        if p.is_file():
+            index[p.stem] = str(p)  # register so the icon endpoint can serve it
+            return p.stem
+        return ""
+    return icon_field if icon_field in index else ""
+
+
+def scan_desktop_apps() -> list[dict[str, Any]]:
+    """Discover launchable desktop applications from the XDG data dirs."""
+    home = Path.home()
+    xdg_data_home = os.environ.get("XDG_DATA_HOME") or str(home / ".local/share")
+    xdg_data_dirs = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+    bases = [xdg_data_home, *xdg_data_dirs.split(":")]
+    dirs = [Path(b) / "applications" for b in bases if b]
+    dirs.append(Path("/var/lib/flatpak/exports/share/applications"))
+    dirs.append(Path(xdg_data_home) / "flatpak/exports/share/applications")
+
+    seen_files: set[str] = set()
+    apps: dict[str, dict[str, Any]] = {}
+    for d in dirs:
+        if not d.is_dir():
+            continue
+        for f in sorted(d.glob("*.desktop")):
+            if f.name in seen_files:  # earlier dirs win (user overrides system)
+                continue
+            seen_files.add(f.name)
+            entry = _parse_desktop(f)
+            if entry:
+                apps.setdefault(entry["name"].lower(), entry)
+
+    index = build_icon_index()
+    for entry in apps.values():
+        entry["icon"] = _resolve_icon_name(entry.get("icon", ""), index)
+    return sorted(apps.values(), key=lambda a: a["name"].lower())
+
+
+def app_version() -> str:
+    """Single source of truth for the app version — the installed package
+    metadata (i.e. pyproject's ``version``), falling back to the module
+    constant when running from a non-installed checkout."""
+    try:
+        return _pkg_version("edge-dashboard")
+    except PackageNotFoundError:
+        from . import __version__
+
+        return __version__
 
 
 def resolve_config_path(explicit: str | Path | None = None) -> Path:
@@ -166,7 +320,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         finally:
             await hub.stop()
 
-    app = FastAPI(title="Edge Dashboard", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Edge Dashboard", version=app_version(), lifespan=lifespan)
     app.state.config_path = cfg_path
     app.state.config = cfg
     app.state.hub = hub
@@ -237,6 +391,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         hub_now = current_hub()
         return JSONResponse(
             {
+                "version": app_version(),
                 "default_theme": cfg_now.default_theme,
                 "pages": [p.model_dump() for p in cfg_now.pages],
                 "modules": sorted(hub_now.modules.keys()),
@@ -247,6 +402,32 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
     @app.get("/api/snapshot")
     async def get_snapshot() -> JSONResponse:
         return JSONResponse(current_hub().snapshot(), headers=_NO_STORE)
+
+    @app.get("/api/apps")
+    async def get_apps() -> JSONResponse:
+        """Installed desktop applications, for the 'launch program' button flow."""
+        import anyio
+
+        apps = await anyio.to_thread.run_sync(scan_desktop_apps)
+        return JSONResponse({"apps": apps}, headers=_NO_STORE)
+
+    @app.get("/api/apps/icon/{name}")
+    async def get_app_icon(name: str) -> Response:
+        """Serve a resolved application icon by name (index-restricted)."""
+        if not _ICON_NAME_RE.match(name):
+            raise HTTPException(status_code=404, detail="bad icon name")
+        path = build_icon_index().get(name)
+        if not path:
+            raise HTTPException(status_code=404, detail="unknown icon")
+        p = Path(path)
+        if not p.is_file():
+            raise HTTPException(status_code=404, detail="icon missing")
+        mime = {
+            ".png": "image/png",
+            ".svg": "image/svg+xml",
+            ".xpm": "image/x-xpixmap",
+        }.get(p.suffix.lower(), "application/octet-stream")
+        return FileResponse(p, media_type=mime, headers={"Cache-Control": "public, max-age=86400"})
 
     @app.post("/api/media/{action}")
     async def media_action(action: str, request: Request) -> JSONResponse:
@@ -429,6 +610,8 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
                 "actions": actions_out,
                 "timeout_seconds": float(dumped.get("timeout_seconds", 30.0)),
                 "enabled": bool(dumped.get("enabled", True)),
+                "columns": int(dumped.get("columns", 4)),
+                "rows": int(dumped.get("rows", 3)),
             },
             headers=_NO_STORE,
         )
@@ -436,7 +619,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
     @app.post("/api/quick_actions/config")
     async def post_quick_actions_config(request: Request) -> JSONResponse:
         """Replace the quick_actions config (actions list + timeout)."""
-        from .modules.quick_actions import QuickAction
+        from .modules.quick_actions import QuickAction, _walk
 
         try:
             body = await request.json()
@@ -457,9 +640,12 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
                 qa = QuickAction.model_validate(a)
             except Exception as exc:
                 raise HTTPException(400, f"action #{i + 1}: {_summarize_validation_error(exc)}")
-            if qa.id in seen_ids:
-                raise HTTPException(400, f"duplicate action id: {qa.id!r}")
-            seen_ids.add(qa.id)
+            # Ids must be unique across the whole tree (folders included), since
+            # run-by-id resolves against a flat index.
+            for node in _walk([qa]):
+                if node.id in seen_ids:
+                    raise HTTPException(400, f"duplicate action id: {node.id!r}")
+                seen_ids.add(node.id)
             validated_actions.append(qa.model_dump(by_alias=True, exclude_defaults=True))
 
         patch: dict[str, Any] = {"actions": validated_actions}
@@ -468,6 +654,12 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
                 patch["timeout_seconds"] = float(body["timeout_seconds"])
             except (TypeError, ValueError):
                 raise HTTPException(400, "timeout_seconds must be a number")
+        for key in ("columns", "rows"):
+            if key in body:
+                try:
+                    patch[key] = min(max(int(body[key]), 1), 8)
+                except (TypeError, ValueError):
+                    raise HTTPException(400, f"{key} must be an integer")
 
         current_dict = current_cfg().model_dump()
         merged = _deep_merge(current_dict, {"modules": {"quick_actions": patch}})

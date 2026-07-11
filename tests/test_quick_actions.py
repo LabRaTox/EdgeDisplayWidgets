@@ -61,6 +61,13 @@ def test_public_view_strips_secrets():
         "icon": "💡",
         "kind": "http",
         "confirm": False,
+        "color": None,
+        "text_color": None,
+        "w": 1,
+        "h": 1,
+        "page": 0,
+        "x": None,
+        "y": None,
     }
 
 
@@ -81,7 +88,10 @@ async def test_poll_returns_only_public_fields():
     data = await mod.poll()
     assert {a["id"] for a in data["actions"]} == {"a", "b"}
     for a in data["actions"]:
-        assert set(a.keys()) == {"id", "label", "icon", "kind", "confirm"}
+        assert set(a.keys()) == {
+            "id", "label", "icon", "kind", "confirm",
+            "color", "text_color", "w", "h", "page", "x", "y",
+        }
 
 
 @pytest.mark.asyncio
@@ -241,3 +251,133 @@ async def test_run_http_failure_status(monkeypatch):
     result = await mod.run("h")
     assert result["ok"] is False
     assert result["status_code"] == 500
+
+
+# ----------------------------------------------------- folders (deck nesting)
+
+
+def test_folder_recursive_public_view():
+    a = QuickAction.model_validate({
+        "id": "root", "kind": "folder", "label": "Root",
+        "tiles": [
+            {"id": "child", "kind": "shell", "command": ["true"], "label": "C"},
+        ],
+    })
+    view = a.public_view()
+    assert view["kind"] == "folder"
+    assert [t["id"] for t in view["tiles"]] == ["child"]
+    # The nested tile is itself a full public view, free of secrets.
+    assert view["tiles"][0]["label"] == "C"
+    assert "command" not in view["tiles"][0]
+
+
+def test_folder_rejects_command():
+    with pytest.raises(Exception):
+        QuickAction.model_validate({"id": "f", "kind": "folder", "command": ["x"]})
+
+
+def test_tiles_only_on_folders():
+    with pytest.raises(Exception):
+        QuickAction.model_validate({
+            "id": "s", "kind": "shell", "command": ["true"],
+            "tiles": [{"id": "n", "kind": "shell", "command": ["true"]}],
+        })
+
+
+@pytest.mark.asyncio
+async def test_run_folder_is_rejected():
+    mod = QuickActionsModule({
+        "actions": [{"id": "grp", "kind": "folder", "tiles": [
+            {"id": "leaf", "kind": "shell", "command": ["true"]},
+        ]}],
+    })
+    # Nested leaves are runnable via the tree-wide index.
+    assert (await mod.run("leaf"))["ok"] is True
+    result = await mod.run("grp")
+    assert result["ok"] is False
+    assert "folder" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_duplicate_ids_pruned_across_tree():
+    mod = QuickActionsModule({
+        "actions": [
+            {"id": "x", "kind": "shell", "command": ["true"]},
+            {"id": "f", "kind": "folder", "tiles": [
+                {"id": "x", "kind": "shell", "command": ["false"]},  # dup → pruned
+                {"id": "y", "kind": "shell", "command": ["true"]},
+            ]},
+        ],
+    })
+    assert set(mod._index) == {"x", "f", "y"}
+    assert [t.id for t in mod.actions[1].tiles] == ["y"]
+
+
+# ----------------------------------------------------- live status probes
+
+
+@pytest.mark.asyncio
+async def test_status_shell_exit_code():
+    mod = QuickActionsModule({
+        "actions": [
+            {"id": "on", "kind": "shell", "command": ["true"],
+             "status": {"kind": "shell", "command": ["true"]}},
+            {"id": "off", "kind": "shell", "command": ["true"],
+             "status": {"kind": "shell", "command": ["false"]}},
+        ],
+    })
+    data = await mod.poll()
+    states = {a["id"]: a.get("state") for a in data["actions"]}
+    assert states == {"on": "on", "off": "off"}
+    # Probe config is never exposed; only has_status + state.
+    for a in data["actions"]:
+        assert a["has_status"] is True
+        assert "command" not in a
+
+
+@pytest.mark.asyncio
+async def test_status_shell_match_regex():
+    mod = QuickActionsModule({
+        "actions": [{
+            "id": "p", "kind": "shell", "command": ["true"],
+            "status": {"kind": "shell", "command": ["sh", "-c", "echo READY"], "match": "READY"},
+        }],
+    })
+    data = await mod.poll()
+    assert data["actions"][0]["state"] == "on"
+
+
+@pytest.mark.asyncio
+async def test_run_reprobes_status():
+    mod = QuickActionsModule({
+        "actions": [{
+            "id": "p", "kind": "shell", "command": ["true"],
+            "status": {"kind": "shell", "command": ["true"]},
+        }],
+    })
+    result = await mod.run("p")
+    assert result["ok"] is True
+    assert result["state"] == "on"
+
+
+def test_invalid_status_regex_rejected():
+    with pytest.raises(Exception):
+        QuickAction.model_validate({
+            "id": "p", "kind": "shell", "command": ["true"],
+            "status": {"kind": "shell", "command": ["true"], "match": "("},
+        })
+
+
+# ----------------------------------------------------- detached launch
+
+
+@pytest.mark.asyncio
+async def test_detach_returns_immediately():
+    # `sleep 5` would block for 5s if awaited; detached, run() returns at once.
+    mod = QuickActionsModule({
+        "timeout_seconds": 30,
+        "actions": [{"id": "app", "kind": "shell", "command": ["sleep", "5"], "detach": True}],
+    })
+    result = await asyncio.wait_for(mod.run("app"), timeout=2.0)
+    assert result["ok"] is True
+    assert result["detached"] is True

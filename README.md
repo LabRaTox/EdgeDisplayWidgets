@@ -34,6 +34,7 @@ buttons. Everything is reachable via a small set of gestures:
 | Tap on a page indicator dot (bottom centre) | Jump to that page |
 | **Swipe up from the bottom edge** | Open the settings sheet |
 | **Long-press a page indicator dot** | Open the settings sheet |
+| **Long-press the Quick Actions deck** | Enter tile edit mode (drag / resize / add tiles) |
 | Tap × / backdrop on the settings sheet | Close it |
 
 Inside the settings sheet, the `Layout` tab → "Enable edit mode" turns
@@ -240,31 +241,47 @@ modules:
 
 ### Quick actions
 
-Configurable touch buttons that run a local shell command or fire an HTTP
-request. The frontend only knows opaque IDs — actual commands stay in the
-config. Edit them through the UI (`Settings → Aktionen`) or directly in
-YAML:
+A **Stream-Deck-style tile grid**. Each tile runs a local shell command,
+fires an HTTP request, launches a desktop app, or opens a folder of nested
+tiles. The frontend only ever knows opaque action IDs — the actual
+commands, URLs and HTTP headers stay in the backend config and never reach
+the browser. Shell actions run via an argv list (no shell interpreter, so
+no globbing / interpolation / pipes).
+
+The deck lays tiles out on a fixed `columns` × `rows` grid (default 4 × 3)
+and paginates the overflow with a pager strip. Tiles can span multiple
+cells, carry their own colours, sit at a fixed cell, and show a live
+on/off status dot.
+
+**Editing.** The easiest path is in the widget itself: **long-press the
+deck** to enter edit mode, then drag tiles between cells, resize them from
+the corner handle, remove with `×`, and tap an empty `+` cell for the
+quick-add menu (lock / reboot / volume / folder / *launch a program…* /
+custom / blank). A single tile editor covers icon, label, kind,
+command/URL, confirm dialog, colours, size and live status. `Save` writes
+the whole tree back. The same actions are also editable under
+`Settings → Aktionen`.
+
+#### YAML schema
 
 ```yaml
 modules:
   quick_actions:
     enabled: true
-    timeout_seconds: 30
+    interval: 60             # action list is static; poll drives live-status refresh
+    timeout_seconds: 30      # max runtime per shell/http action
+    status_timeout_seconds: 8   # max runtime per live-status probe
+    columns: 4               # deck grid width  (1..8)
+    rows: 3                  # deck grid height (1..8); overflow paginates
     actions:
-      # Shell actions — argv list, no shell interpreter, no globs.
+      # --- Shell action — argv list, no shell interpreter, no globs.
       - id: lock
         label: "Lock"
-        icon: "🔒"
+        icon: "🔒"            # emoji/text, or "ti:<name>" for a Tabler icon
         kind: shell
         command: ["loginctl", "lock-session"]
 
-      - id: notify
-        label: "Ping"
-        icon: "🔔"
-        kind: shell
-        command: ["notify-send", "Edge Dashboard", "Hello!"]
-
-      # `confirm: true` triggers the themed confirm dialog before running.
+      # --- confirm:true shows the themed confirm dialog before running.
       - id: reboot
         label: "Reboot"
         icon: "🔄"
@@ -272,7 +289,16 @@ modules:
         command: ["systemctl", "reboot"]
         confirm: true
 
-      # HTTP action (e.g. Home Assistant)
+      # --- Launch a GUI program. detach:true fires it in a new session and
+      #     returns at once, so the timeout can't kill the started app.
+      - id: launch_firefox
+        label: "Firefox"
+        icon: "app:firefox"   # resolved via /api/apps/icon/<name>
+        kind: shell
+        command: ["firefox"]
+        detach: true
+
+      # --- HTTP action (e.g. Home Assistant). Headers stay backend-side.
       - id: lights_off
         label: "Lights off"
         icon: "💡"
@@ -283,7 +309,53 @@ modules:
           Authorization: "Bearer YOUR_LONG_LIVED_TOKEN"
         json:
           entity_id: "all"
+
+      # --- A tile with custom appearance, a fixed grid cell, a 2×1 span,
+      #     and a live-status probe. `state` (on/off/unknown) drives the dot.
+      - id: vpn
+        label: "VPN"
+        icon: "ti:shield-lock"
+        kind: shell
+        command: ["nmcli", "connection", "up", "vpn"]
+        color: "#1e293b"       # tile background (hex)
+        text_color: "#38bdf8"  # icon + label colour (hex)
+        w: 2                   # span 2 cells wide (1..4)
+        h: 1                   # span 1 cell tall  (1..4)
+        page: 0                # which deck page
+        x: 0                   # cell column (omit x/y to auto-flow)
+        y: 1                   # cell row
+        status:                # probe config never leaves the backend
+          kind: shell
+          command: ["nmcli", "-t", "-f", "NAME", "connection", "show", "--active"]
+          match: "^vpn$"       # matches → on, else off; probe error → unknown
+
+      # --- A folder: opens a nested sub-deck of its own tiles.
+      - id: system
+        label: "System"
+        icon: "ti:settings"
+        kind: folder
+        tiles:
+          - id: suspend
+            label: "Suspend"
+            icon: "ti:moon"
+            kind: shell
+            command: ["systemctl", "suspend"]
 ```
+
+Field notes:
+
+- `icon` — emoji/plain text, `ti:<name>` for a vendored [Tabler](https://tabler.io/icons)
+  icon, or `app:<name>` for a resolved desktop-app icon.
+- `color` / `text_color` — hex only (`#rgb` or `#rrggbb`); omit to inherit
+  the theme.
+- `w` / `h` — tile span in grid cells (1..4). `page` / `x` / `y` pin it to
+  a cell; leave `x` / `y` unset to auto-flow into the next free cell.
+- `status` — optional live probe (`shell` or `http`). With a `match` regex
+  the state is `on` if the output matches, else `off`; without `match` it
+  follows success (shell exit 0 / HTTP 2xx). A failing probe yields
+  `unknown`. Only the derived `state` is sent to the frontend.
+- `detach` (shell) — launch fire-and-forget in a new session; use it for
+  GUI programs that outlive the request.
 
 ### Smart lights
 
@@ -372,7 +444,7 @@ or pages.
 | `weather` | `weather` | Current + hourly forecast |
 | `media` | `media` | MPRIS player controls + album art |
 | `youtube` | `youtube` | Tile grid; tap opens fullscreen embed |
-| `quick_actions` | `quick_actions` | Configurable touch buttons |
+| `quick_actions` | `quick_actions` | Stream-Deck tile grid — shell / HTTP / app-launch tiles, folders, live status |
 | `smart_lights` | `smart_lights` | Govee + Tuya unified control |
 | `pomodoro` | none (frontend-only) | Pomodoro timer + stopwatch |
 | `notes` | (REST `/api/notes`) | Tabbed plain-text notepad |

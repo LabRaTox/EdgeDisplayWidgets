@@ -220,6 +220,84 @@ html, body {
 }
 .sheet-close:hover { color: var(--fg); }
 
+.sheet-icon-btn {
+  background: transparent;
+  color: var(--fg-muted);
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.sheet-icon-btn:hover { color: var(--fg); }
+.sheet-icon-btn.is-active { color: var(--accent); }
+
+/* Detached / floating settings panel — draggable, leaves the dashboard
+ * behind it interactive. */
+#theme-sheet.is-floating { pointer-events: none; }
+#theme-sheet.is-floating .sheet-backdrop { display: none; }
+#theme-sheet.is-floating .sheet-panel {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: auto;
+  transform: none;
+  resize: both;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+/* Drag bar — only present on a detached/floating panel. */
+.sheet-dragbar { display: none; }
+#theme-sheet.is-floating .sheet-dragbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  /* Bleed out over the panel's 16px/18px padding to reach its edges. */
+  margin: -16px -18px 10px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--card-border);
+  border-radius: 12px 12px 0 0;
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+.sheet-dragbar.is-grabbing { cursor: grabbing; }
+.sheet-dragbar-title {
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+}
+.sheet-dragbar-grip {
+  color: var(--fg-muted);
+  font-size: 1rem;
+  letter-spacing: -2px;
+}
+
+/* Standalone settings window (/settings.html) — panel fills the viewport. */
+#theme-sheet.is-standalone { position: static; }
+#theme-sheet.is-standalone .sheet-backdrop { display: none; }
+#theme-sheet.is-standalone .sheet-panel {
+  position: static;
+  left: auto;
+  bottom: auto;
+  transform: none;
+  opacity: 1;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .sheet-body {
   flex: 1;
   overflow-y: auto;
@@ -334,6 +412,47 @@ html, body {
 .about-link-icon {
   font-size: 1.05rem;
   line-height: 1;
+}
+.about-credits {
+  margin-top: 16px;
+  border-top: 1px solid var(--card-border);
+  padding-top: 12px;
+}
+.about-credits-title {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  margin-bottom: 8px;
+}
+.about-credits-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.about-credit {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+.about-credit a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.about-credit a:hover,
+.about-credit a:focus-visible { text-decoration: underline; }
+.about-credit-desc { color: var(--fg-muted); }
+.about-credit-license {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  padding: 1px 6px;
 }
 .about-footer {
   margin-top: 4px;
@@ -597,11 +716,23 @@ html, body {
   font-weight: 300;
 }
 
-/* Emoji picker popover — floats above everything, themed via CSS vars
- * exposed by emoji-picker-element. */
-.qa-emoji-popover {
+/* Tabler icon rendered from the vendored sprite via <use>. The symbols carry
+ * stroke="currentColor" / fill="none", so colour follows the surrounding text. */
+.ti-svg {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  stroke: currentColor;
+  fill: none;
+}
+.qa-icon-btn .ti-svg { width: 22px; height: 22px; }
+
+/* Icon picker popover — tabbed (Tabler + Emoji), floats above everything. */
+.qa-icon-popover {
   position: fixed;
   z-index: 1200;
+  width: 440px;
+  max-width: calc(100vw - 16px);
   background: var(--bg);
   border: 1px solid var(--card-border);
   border-radius: 8px;
@@ -609,15 +740,79 @@ html, body {
   padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
-.qa-emoji-toolbar {
+.qa-icon-toolbar {
   display: flex;
+  align-items: center;
   gap: 6px;
-  justify-content: flex-end;
 }
-.qa-emoji-toolbar .btn { padding: 4px 10px; font-size: 0.8rem; }
-.qa-emoji-popover emoji-picker {
+.qa-icon-tabs { display: flex; gap: 2px; }
+.qa-icon-spacer { flex: 1; }
+.qa-icon-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fg-muted);
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.qa-icon-tab:hover { color: var(--fg); }
+.qa-icon-tab.is-active { color: var(--accent); border-bottom-color: var(--accent); }
+.qa-icon-toolbar .btn { padding: 4px 10px; font-size: 0.8rem; }
+.qa-icon-pane[hidden] { display: none; }
+.qa-icon-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.qa-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  margin-top: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.qa-icon-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--fg);
+  cursor: pointer;
+  padding: 0;
+}
+.qa-icon-cell:hover { border-color: var(--accent); background: rgba(255, 255, 255, 0.06); }
+.qa-icon-cell .ti-svg { width: 22px; height: 22px; }
+.qa-icon-status {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  min-height: 1em;
+}
+.qa-icon-fallback { display: flex; flex-direction: column; gap: 8px; padding: 8px; }
+.qa-icon-emoji-manual {
+  padding: 7px 9px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 1rem;
+}
+.qa-icon-pane[data-pane="emoji"] emoji-picker {
   --background: var(--bg);
   --border-color: var(--card-border);
   --border-radius: 6px;
@@ -628,11 +823,15 @@ html, body {
   --input-font-color: var(--fg);
   --input-placeholder-color: var(--fg-muted);
   --search-background: rgba(0, 0, 0, 0.3);
-  --category-emoji-padding: 0;
-  --num-columns: 10;
-  width: 520px;
+  --category-emoji-padding: 4px;
+  --emoji-size: 1.8rem;
+  --num-columns: 8;
+  width: 100%;
   height: 460px;
 }
+/* Bigger Tabler grid too, to match the roomier picker. */
+.qa-icon-grid { grid-template-columns: repeat(9, 1fr); max-height: 360px; }
+.qa-icon-cell .ti-svg { width: 26px; height: 26px; }
 .qa-label-input,
 .qa-id-input {
   padding: 6px 8px;
@@ -695,6 +894,199 @@ html, body {
   accent-color: var(--accent);
 }
 .qa-test-btn { font-size: 0.8rem; padding: 4px 10px; }
+
+/* Per-tile appearance controls (colours + span). */
+.qa-appearance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+}
+.qa-appear-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+}
+.qa-color-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.qa-appear-field input[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 2px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.qa-appear-field input[type="color"][data-unset] { opacity: 0.4; }
+.qa-color-reset {
+  background: transparent;
+  border: none;
+  color: var(--fg-muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.qa-color-reset:hover { color: var(--fg); }
+.qa-appear-field select {
+  padding: 5px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+/* Module-level deck grid size control. */
+.qa-grid-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+}
+.qa-grid-num {
+  width: 42px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* Breadcrumb for nested folders. */
+.qa-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  margin-bottom: 8px;
+}
+.qa-crumb {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.qa-crumb:hover { text-decoration: underline; }
+.qa-crumb-sep { color: var(--fg-muted); }
+
+/* Folder card affordances. */
+.qa-open-folder { font-size: 0.8rem; padding: 4px 10px; }
+.qa-folder-count { font-size: 0.8rem; color: var(--fg-muted); }
+.qa-folder-hint { font-size: 0.85rem; color: var(--fg-muted); padding: 4px 0; }
+
+/* Live-status probe section. */
+.qa-status-section {
+  border-top: 1px dashed var(--card-border);
+  margin-top: 4px;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.qa-status-fields { display: flex; flex-direction: column; gap: 8px; }
+.qa-status-fields:empty { display: none; }
+
+/* Focused single-tile editor (in-widget edit mode). */
+.tile-editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.tile-editor {
+  width: min(560px, 96vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tile-editor-head { display: flex; align-items: center; gap: 8px; }
+.tile-editor-head .qa-icon-btn { width: 48px; height: 40px; font-size: 1.5rem; flex-shrink: 0; }
+.tile-editor-head .qa-icon-btn .ti-svg { width: 26px; height: 26px; }
+.te-label {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 1rem;
+}
+.tile-editor-body { display: flex; flex-direction: column; gap: 10px; }
+.tile-editor .settings-field { display: flex; flex-direction: column; gap: 4px; font-size: 0.8rem; color: var(--fg-muted); }
+.tile-editor .settings-row { display: grid; gap: 10px; }
+.tile-editor select,
+.tile-editor input[type="text"],
+.tile-editor input[type="search"],
+.tile-editor textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 9px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.tile-editor .qa-mono { font-family: ui-monospace, "Share Tech Mono", monospace; }
+.tile-editor .is-invalid { border-color: var(--bad); }
+.te-appearance { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.te-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--card-border);
+  padding-top: 10px;
+}
+.tile-editor-foot { display: flex; align-items: center; gap: 8px; }
+.te-spacer { flex: 1; }
+.te-err { color: var(--bad); font-size: 0.8rem; }
+.te-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.te-btn.is-primary { background: var(--accent); border-color: var(--accent); color: #04121a; font-weight: 600; }
+.te-btn.te-danger { border-color: var(--bad); color: var(--bad); }
+.te-btn.te-danger:hover { background: var(--bad); color: #fff; }
+.qa-add-custom { grid-column: 1 / -1; }
 
 .qa-card-body {
   display: flex;
