@@ -26,7 +26,6 @@ from loguru import logger
 
 from .base import Module, SettingField, register_module
 
-
 # --------------------------------------------------------------------- color helpers
 
 

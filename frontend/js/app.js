@@ -1,13 +1,17 @@
 // Bootstrap: fetch /api/config, dynamic-import widget files referenced by
-// every page, mount instances per page into CSS-Grid layouts, route WS
-// frames to all matching instances, wire swiper + theme switcher.
+// every page, mount instances per page into CSS-Grid layouts, route WS frames
+// to all matching instances, wire the swiper.
+//
+// The dashboard displays; it no longer configures itself. Settings and the
+// layout editor live in their own desktop window (see gui/), and what it
+// changes arrives here as a `settings` frame on the same WebSocket the
+// measurements come over.
 
 import { getWidget } from "./registry.js";
 import { WSClient } from "./ws.js";
-import { PageSwiper, attachLongPress, attachSwipeFromBottom } from "./swiper.js";
-import { ThemeManager, buildSettingsSheet } from "./theme.js";
-import { LayoutEditor } from "./layout_editor.js";
-import { initI18n, t, onLanguageChange } from "./i18n.js";
+import { PageSwiper } from "./swiper.js";
+import { ThemeManager } from "./theme.js";
+import { initI18n, t, setLang, onLanguageChange } from "./i18n.js";
 
 async function fetchConfig() {
   const res = await fetch("/api/config");
@@ -72,7 +76,6 @@ async function bootstrap() {
   // Mutable application state, kept in sync with the host.
   let pages = cfg.pages;
   const allInstances = []; // { id, inst, modules, el, placement }
-  let editor = null;
   const lastByModule = new Map();
 
   const pagesRoot = document.getElementById("pages");
@@ -153,7 +156,6 @@ async function bootstrap() {
         mountSingleWidget(pageEl, placement);
       }
     }
-    if (editor?.active) editor.refreshHandles();
   }
 
   // First render needs widget JS to be loaded so mountSingleWidget can resolve classes.
@@ -161,56 +163,6 @@ async function bootstrap() {
   renderPages();
 
   const swiper = new PageSwiper(pagesRoot);
-
-  const sheet = buildSettingsSheet(theme, {
-    onEditLayout: () => editor?.enter(),
-  });
-
-  editor = new LayoutEditor({
-    pagesRoot,
-    swiper,
-    getPages: () => pages,
-    setPages: (next) => {
-      pages = next;
-      renderPages();
-      dotButtons = buildIndicator();
-    },
-    mountWidget: (pageEl, placement) => mountSingleWidget(pageEl, placement)?.el ?? null,
-    unmountWidget: (wEl) => unmountSingleWidget(wEl),
-    onSave: async (newPages) => {
-      const r = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pages: newPages }),
-      });
-      if (!r.ok) {
-        const text = await r.text();
-        throw new Error(`HTTP ${r.status}: ${text}`);
-      }
-      // Use the POST response directly — avoids a second GET that the browser
-      // might serve from cache. The server-rendered shape includes all the
-      // Pydantic-filled defaults (col/row/colspan/rowspan, options, etc.).
-      const body = await r.json();
-      if (Array.isArray(body?.settings?.pages)) {
-        pages = body.settings.pages;
-        renderPages();
-      } else {
-        console.warn("[app] settings response missing pages:", body);
-      }
-    },
-  });
-
-  // Swipe up from the bottom edge to open settings — touch-friendly
-  // shortcut for kiosk use. We attach the gesture to a dedicated invisible
-  // hotspot strip rather than `document.body` because on touch devices the
-  // browser claims vertical pans on regular elements (via touch-action:
-  // auto) and fires pointercancel before our handler sees enough motion.
-  // touch-action: none on the hotspot opts the strip out of that.
-  const hotspot = document.createElement("div");
-  hotspot.id = "swipe-hotspot";
-  hotspot.setAttribute("aria-hidden", "true");
-  document.body.appendChild(hotspot);
-  attachSwipeFromBottom(hotspot, () => sheet.open());
 
   const dotsRoot = document.getElementById("dots");
   dotsRoot.setAttribute("aria-label", t("app.pages_nav_label"));
@@ -223,12 +175,9 @@ async function bootstrap() {
       btn.type = "button";
       btn.setAttribute("aria-label", p.title || p.id);
       if (i === swiper.activeIndex) btn.classList.add("active");
+      btn.addEventListener("click", () => swiper.goTo(i));
       dotsRoot.appendChild(btn);
       buttons.push(btn);
-      attachLongPress(btn, {
-        onClick: () => swiper.goTo(i),
-        onLongPress: () => sheet.open(),
-      });
     });
     return buttons;
   }
@@ -237,9 +186,42 @@ async function bootstrap() {
     dotButtons.forEach((b, i) => b.classList.toggle("active", i === e.detail));
   });
 
+  async function applySettings(settings) {
+    if (!settings) return;
+    theme.apply(settings.default_theme);
+
+    const language = settings.default_language;
+    if (language && language !== "auto") {
+      // A successful change fires the language listener above, which is what
+      // re-renders the widgets — labels are baked in at mount time.
+      await setLang(language);
+    }
+
+    // Pages are compared as a whole rather than field by field: a layout
+    // change touches several widgets at once, and re-mounting is cheap next
+    // to the bookkeeping needed to do it surgically.
+    if (Array.isArray(settings.pages)) {
+      const next = JSON.stringify(settings.pages);
+      if (next !== JSON.stringify(pages)) {
+        pages = settings.pages;
+        await loadWidgetFiles(pages.flatMap((p) => p.widgets.map((w) => w.id)));
+        renderPages();
+        dotButtons = buildIndicator();
+        swiper.refresh?.();
+      }
+    }
+  }
+
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const ws = new WSClient(`${proto}//${location.host}/ws`);
   ws.addEventListener("message", (event) => {
+    // Control frames carry `event` instead of `module`. Today that means the
+    // settings were saved in the settings window — the display has to follow
+    // along without anyone reloading it.
+    if (event.detail?.event === "settings") {
+      void applySettings(event.detail.settings);
+      return;
+    }
     const { module, data, ts } = event.detail;
     lastByModule.set(module, { data, ts });
     for (const { inst, modules } of allInstances) {

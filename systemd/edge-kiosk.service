@@ -1,0 +1,27 @@
+[Unit]
+Description=Edge Dashboard kiosk window (Qt WebEngine on the Xeneon Edge)
+Documentation=file://__PROJECT_DIR__/README.md
+# The backend is a separate service on purpose: the settings window still has
+# something to talk to when the kiosk is closed, and a dying renderer never
+# takes the data collection with it. `Wants` rather than `Requires` because
+# the shell shows a waiting screen and retries on its own if the backend is
+# not up yet.
+After=graphical-session.target edge-dashboard.service
+Wants=edge-dashboard.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=__PROJECT_DIR__
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=__PROJECT_DIR__/shell
+# The system Python, not the project virtualenv: the shell needs the
+# distribution's PySide6, which links the system Qt WebEngine — the build that
+# carries the codecs the YouTube widget plays.
+ExecStart=/usr/bin/python3 -m edge_kiosk
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+
+[Install]
+WantedBy=graphical-session.target

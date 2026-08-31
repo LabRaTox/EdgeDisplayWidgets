@@ -1,5 +1,6 @@
 import { registerWidget } from "../registry.js";
 import { Sparkline } from "../lib/sparkline.js";
+import { Smoothed } from "../lib/smooth.js";
 import { t } from "../i18n.js";
 
 const KB = 1024;
@@ -19,9 +20,12 @@ function fmtAxisRate(bps) {
 
 class NetworkWidget {
   static modules = ["system"];
+  static variants = ["compact"];
 
-  mount(el) {
+  mount(el, _, ctx) {
     this.el = el;
+    // Two canvases here, so compact saves twice what it does elsewhere.
+    this.compact = ctx?.variant === "compact";
     el.innerHTML = `
       <div class="metric-head">
         <h3>${t("widget.network.title")}</h3>
@@ -30,6 +34,7 @@ class NetworkWidget {
         <span class="net-rate net-rx">↓ <span data-bind="rx">–</span></span>
         <span class="net-rate net-tx">↑ <span data-bind="tx">–</span></span>
       </div>
+      ${this.compact ? "" : `
       <div class="chart">
         <div class="chart-axis"></div>
         <div class="chart-canvases">
@@ -37,23 +42,37 @@ class NetworkWidget {
           <canvas class="spark spark-tx"></canvas>
         </div>
       </div>
+      `}
     `;
     this._max = 1024 * 1024; // 1 MB/s starting ceiling
     // rx owns the shared axis. tx uses --accent-2 via CSS override.
-    this.sparkRx = new Sparkline(el.querySelector(".spark-rx"), {
-      max: this._max,
-      axisEl: el.querySelector(".chart-axis"),
-      axisFormat: fmtAxisRate,
-    });
-    this.sparkTx = new Sparkline(el.querySelector(".spark-tx"), { max: this._max });
+    this.sparkRx = this.compact
+      ? null
+      : new Sparkline(el.querySelector(".spark-rx"), {
+          max: this._max,
+          axisEl: el.querySelector(".chart-axis"),
+          axisFormat: fmtAxisRate,
+          scroll: true,
+        });
+    this.sparkTx = this.compact
+      ? null
+      : new Sparkline(el.querySelector(".spark-tx"), {
+          max: this._max,
+          scroll: true,
+        });
+    const rxEl = el.querySelector('[data-bind="rx"]');
+    const txEl = el.querySelector('[data-bind="tx"]');
+    this._rx = new Smoothed((v) => { rxEl.textContent = fmtRate(v); }, { el });
+    this._tx = new Smoothed((v) => { txEl.textContent = fmtRate(v); }, { el });
   }
 
   update(data) {
     const n = data?.network;
     if (!n) return;
-    this.el.querySelector('[data-bind="rx"]').textContent = fmtRate(n.rx_bytes_per_s);
-    this.el.querySelector('[data-bind="tx"]').textContent = fmtRate(n.tx_bytes_per_s);
+    this._rx.set(n.rx_bytes_per_s);
+    this._tx.set(n.tx_bytes_per_s);
 
+    if (this.compact) return;
     const peak = Math.max(n.rx_bytes_per_s, n.tx_bytes_per_s);
     if (peak > this._max * 0.9) {
       this._max = Math.max(peak * 1.5, this._max);
@@ -64,7 +83,12 @@ class NetworkWidget {
     this.sparkTx.push(n.tx_bytes_per_s);
   }
 
-  destroy() {}
+  destroy() {
+    this.sparkRx?.destroy();
+    this.sparkTx?.destroy();
+    this._rx.destroy();
+    this._tx.destroy();
+  }
 }
 
 registerWidget("network", NetworkWidget);

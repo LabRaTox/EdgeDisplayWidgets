@@ -12,7 +12,6 @@
 export const TABLER_PREFIX = "ti:";
 export const APP_ICON_PREFIX = "app:";
 export const TABLER_SPRITE_URL = "/vendor/tabler/tabler-sprite.svg";
-const TABLER_INDEX_URL = "/vendor/tabler/icons-index.json";
 
 // Desktop-app icon names (file stems) served by /api/apps/icon/<name>.
 const SAFE_APP_NAME = /^[A-Za-z0-9._+-]+$/;
@@ -64,29 +63,4 @@ export function iconMarkup(icon, { fallback = "", svgClass = "" } = {}) {
   }
   const text = String(icon ?? "");
   return text ? escapeHtml(text) : fallback;
-}
-
-// ---- Tabler search index (lazy, cached) --------------------------------
-
-let _indexPromise = null;
-
-/**
- * Load the compact Tabler search index: an array of { n: name, k: keywords }.
- * Cached after first load; rejects are not cached so a transient failure can
- * be retried on the next picker open.
- */
-export function loadTablerIndex() {
-  if (!_indexPromise) {
-    _indexPromise = fetch(TABLER_INDEX_URL)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((body) => (Array.isArray(body?.icons) ? body.icons : []))
-      .catch((err) => {
-        _indexPromise = null; // allow retry
-        throw err;
-      });
-  }
-  return _indexPromise;
 }

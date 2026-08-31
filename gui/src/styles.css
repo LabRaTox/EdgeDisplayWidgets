@@ -1,0 +1,898 @@
+/*
+ * Deliberately the same visual language as DECK//SWITCH and FACE//CAM: dark
+ * surface, one accent, a fixed top bar with the wordmark on the left, the
+ * connection state next to it and the menu after that. Someone who uses two of
+ * these applications should not have to learn a second set of habits.
+ */
+
+:root {
+  --bg: #131316;
+  --bg-raised: #1b1b20;
+  --bg-sunken: #0e0e11;
+  --border: #2a2a31;
+  --border-strong: #3a3a44;
+  --text: #e9e9ee;
+  --text-dim: #9a9aa6;
+  --accent: #3b82f6;
+  --accent-soft: #3b82f622;
+  --danger: #ef4444;
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  color-scheme: dark;
+  font-family: "Inter", "Noto Sans", system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  overflow: hidden;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  width: 100%;
+}
+
+textarea {
+  resize: vertical;
+  min-height: 72px;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 13px;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--accent);
+}
+
+input[type="color"] {
+  padding: 2px;
+  height: 32px;
+  min-width: 44px;
+  cursor: pointer;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------- Buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 7px 12px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: #24242b;
+  border-color: #4a4a56;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.small {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn.primary:hover:not(:disabled) {
+  background: #2f6fd8;
+  border-color: #2f6fd8;
+}
+
+.btn.danger {
+  color: var(--danger);
+  border-color: #57343a;
+}
+
+.btn.danger:hover:not(:disabled) {
+  background: #2a1b1e;
+}
+
+.btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+.btn.ghost:hover:not(:disabled) {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+/* ------------------------------------------------------------ App shell */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  height: 56px;
+  flex: 0 0 auto;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar .spacer {
+  flex: 1;
+}
+
+.wordmark {
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.wordmark .slashes {
+  color: var(--accent);
+}
+
+
+/* Connection state, mirroring FACE//CAM's device badge. */
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-sunken);
+}
+
+.status .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  flex: 0 0 auto;
+}
+
+.status.online .dot {
+  background: var(--ok);
+}
+
+.status.offline .dot {
+  background: var(--danger);
+}
+
+.status .lines {
+  line-height: 1.25;
+}
+
+.status .primary {
+  font-size: 12px;
+}
+
+.status .secondary {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Menu bar — a real one, because this is a window and not a sheet. */
+.menubar {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+
+.menubar > .menu {
+  position: relative;
+}
+
+.menubar .menu-label {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  padding: 5px 10px;
+  color: var(--text-dim);
+}
+
+.menubar .menu-label:hover,
+.menubar .menu.open .menu-label {
+  background: var(--bg-sunken);
+  color: var(--text);
+}
+
+.menubar .menu-items {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px #0009;
+}
+
+.menubar .menu-items button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 10px;
+  text-align: left;
+}
+
+.menubar .menu-items button:hover {
+  background: var(--accent-soft);
+}
+
+.menubar .menu-items .check {
+  color: var(--accent);
+}
+
+.menubar .sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
+/* Navigation between the settings areas — its own row under the top bar, so
+   it keeps its full width at the window's minimum size. */
+.nav {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 8px 16px;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border);
+}
+
+.nav::-webkit-scrollbar {
+  display: none;
+}
+
+.nav button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 14px;
+  color: var(--text-dim);
+}
+
+.nav button:hover {
+  color: var(--text);
+}
+
+.nav button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------- Content */
+
+.content {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 20px;
+}
+
+.view {
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.view-head h2 {
+  font-size: 20px;
+}
+
+.view-head p {
+  margin: 4px 0 0;
+  color: var(--text-dim);
+  max-width: 70ch;
+}
+
+.card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.card > header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.card > header h3 {
+  font-size: 15px;
+}
+
+.card > header .spacer {
+  flex: 1;
+}
+
+.card.collapsed > .card-body {
+  display: none;
+}
+
+.muted {
+  color: var(--text-dim);
+}
+
+.hint {
+  color: var(--text-dim);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+/* A hint that reports something went wrong — a refused autostart switch, a
+   backend that answered with an error. Same size and place as a plain hint,
+   so the layout does not jump when one appears. */
+.hint.warn {
+  color: var(--warn);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: minmax(160px, 260px) 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 8px 0;
+}
+
+.row + .row {
+  border-top: 1px solid var(--border);
+}
+
+.row > label {
+  padding-top: 7px;
+  color: var(--text-dim);
+}
+
+.row .control {
+  min-width: 0;
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+/* Theme picker */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.theme-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-transform: capitalize;
+}
+
+.theme-tile.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.theme-swatch {
+  width: 100%;
+  height: 34px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+/* Repeating rows (lists, YouTube entries, headers) */
+.list-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.list-row + .list-row {
+  margin-top: 6px;
+}
+
+/* Save bar pinned to the bottom of a view */
+.savebar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0 0;
+  background: linear-gradient(transparent, var(--bg) 40%);
+}
+
+.savebar .spacer {
+  flex: 1;
+}
+
+.savebar .state {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.savebar .state.error {
+  color: var(--danger);
+}
+
+.savebar .state.ok {
+  color: var(--ok);
+}
+
+/* Offline banner */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #57343a;
+  background: #241a1c;
+  border-radius: var(--radius);
+}
+
+.banner .spacer {
+  flex: 1;
+}
+
+/* --------------------------------------------------------------- Actions */
+
+.deck {
+  display: grid;
+  gap: 8px;
+}
+
+/* Drag and drop inside the deck: the cell under the pointer is outlined, so
+   it is clear where a tile will land before letting go. Dropping onto an
+   occupied cell swaps the two tiles. */
+/* The add button in an empty cell. Deliberately small: the cell around it
+   stays a plain drop target, only this creates anything. */
+.deck-add {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: none;
+  color: var(--text-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.deck-add:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.deck-tile.drop-target {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.deck-tile[draggable="true"] {
+  cursor: grab;
+}
+.deck-tile[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+/* No aspect-ratio here: it is the container that keeps the cells square (see
+   the inline style on .deck). On a tile it would multiply with the span, and
+   a tile three columns wide would become three rows tall. */
+.deck-tile {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+  overflow: hidden;
+}
+
+.deck-tile.active {
+  border-color: var(--accent);
+}
+
+.deck-tile.empty {
+  border-style: dashed;
+  color: var(--text-dim);
+}
+
+.deck-tile .tile-label {
+  font-size: 12px;
+  line-height: 1.2;
+  word-break: break-word;
+}
+
+.deck-tile .tile-kind {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.editor-split {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(280px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+/* ---------------------------------------------------------------- Layout */
+
+.page-preview {
+  display: grid;
+  gap: 6px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  /* The kiosk is 2560x720 — keep the preview in that proportion so what you
+     see here is what ends up on the display. */
+  aspect-ratio: 32 / 9;
+}
+
+.page-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  font-size: 11px;
+  text-align: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.page-cell.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.page-cell.invalid {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tabs button {
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+  color: var(--text-dim);
+}
+
+.tabs button.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* ----------------------------------------------------------------- About */
+
+.about-list {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 16px;
+  font-size: 13px;
+}
+
+.about-list dt {
+  color: var(--text-dim);
+}
+
+.about-list dd {
+  margin: 0;
+}
+
+/* --- Icons and the icon picker ------------------------------------- */
+
+/* Matches the kiosk (frontend/css/base.css): the sprite's symbols carry
+   stroke="currentColor" fill="none", so an icon takes the colour of the text
+   around it and scales with the font size. */
+.ti-svg {
+  width: 1.2em;
+  height: 1.2em;
+  flex: none;
+  stroke: currentColor;
+  fill: none;
+}
+
+.app-icon {
+  width: 1.2em;
+  height: 1.2em;
+  object-fit: contain;
+}
+
+.icon-field {
+  position: relative;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-trigger {
+  width: 34px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+
+/* Anchored to the field rather than centred on screen: the grid is a
+   continuation of the field it fills in, and a modal would hide the tile it
+   is being picked for. Positioned in script (see IconPicker), because
+   `position: fixed` is what keeps it out of the scrolling column, and fixed
+   coordinates have to be measured. */
+.icon-popover {
+  position: fixed;
+  z-index: 40;
+  width: min(340px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
+}
+
+.icon-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.icon-tabs > button {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-dim);
+  padding: 4px 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.icon-tabs > button.active {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg-sunken);
+}
+
+.icon-search {
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  max-height: min(260px, calc(100vh - 190px));
+  overflow-y: auto;
+}
+
+.icon-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: 17px;
+  cursor: pointer;
+}
+
+.icon-cell:hover {
+  background: var(--bg-sunken);
+}
+
+.icon-cell.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.icon-empty {
+  padding: 24px 8px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* The emoji picker is a web component with its own shadow DOM; only its host
+   element can be sized from here. */
+.emoji-host emoji-picker {
+  width: 100%;
+  /* Shrinks with the window instead of pushing the popover past its edge. */
+  height: min(300px, calc(100vh - 190px));
+  min-height: 180px;
+  --background: var(--bg-raised);
+  --border-color: var(--border);
+}
+
+/* The deck preview shows the tile's icon where it used to show its kind. */
+/* The icon is the tile's face: big, centred, above the label. The kind label
+   in the corner is what a tile falls back to when it has no icon. */
+.deck-tile .tile-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.deck-tile .tile-icon .ti-svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+/* --- About: sibling projects ---------------------------------------- */
+
+/* A button rather than a link: the window opens URLs through Tauri, because
+   a real link would navigate the settings UI away from itself. */
+.sibling {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px;
+  text-align: left;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.sibling:hover {
+  border-color: var(--accent);
+}
+
+.sibling-logo {
+  width: 44px;
+  height: 44px;
+  flex: none;
+}
+
+.sibling-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sibling-url {
+  font-size: 12px;
+}
+
+/* An inline button that should read as a link. */
+.linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--text-dim);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.linkish:hover {
+  color: var(--accent);
+}

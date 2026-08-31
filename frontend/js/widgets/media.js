@@ -1,4 +1,5 @@
 import { registerWidget } from "../registry.js";
+import { subscribe, unsubscribe } from "../lib/ticker.js";
 import { t } from "../i18n.js";
 
 const US_PER_S = 1_000_000;
@@ -78,7 +79,23 @@ class MediaWidget {
       this._scrubbing = false;
     });
 
-    this._timer = setInterval(() => this._tick(), 250);
+    // The playhead is counted forward locally: MPRIS never signals Position,
+    // so the backend only sends an anchor (position + rate + timestamp) when
+    // something actually changes. Running that count on the frame ticker
+    // instead of a 250 ms interval makes the scrubber travel smoothly — and
+    // it costs nothing while nothing is playing, because we only subscribe
+    // for as long as the playhead is actually moving.
+    this._ticking = false;
+    this._tick = this._tick.bind(this);
+    this._lastPosText = "";
+    this._lastLenText = "";
+  }
+
+  _setTicking(on) {
+    if (on === this._ticking) return;
+    this._ticking = on;
+    if (on) subscribe(this._tick, this.el);
+    else unsubscribe(this._tick);
   }
 
   update(data) {
@@ -137,6 +154,7 @@ class MediaWidget {
     // Badge "1" is shown only when repeating a single track; CSS keys off
     // the data-state attribute, so no JS toggling needed.
 
+    this._setTicking(playing);
     this._tick();
   }
 
@@ -147,10 +165,13 @@ class MediaWidget {
 
   _renderIdle(reason) {
     this.el.classList.add("widget-disabled");
+    this._setTicking(false);
     this._lastUpdate = null;
     this.el.querySelector('[data-bind="player"]').textContent = "";
     this.el.querySelector('[data-bind="title"]').textContent = t("widget.media.no_active_player");
     this.el.querySelector('[data-bind="artist"]').textContent = reason || "";
+    this._lastPosText = "";
+    this._lastLenText = "";
     this.el.querySelector('[data-bind="position"]').textContent = "0:00";
     this.el.querySelector('[data-bind="length"]').textContent = "0:00";
     this.el.querySelector('[data-bind="scrubber"]').value = "0";
@@ -170,8 +191,17 @@ class MediaWidget {
     if (d.length_us > 0) {
       pos = Math.min(pos, d.length_us);
     }
-    this.el.querySelector('[data-bind="position"]').textContent = fmtTime(pos);
-    this.el.querySelector('[data-bind="length"]').textContent = fmtTime(d.length_us);
+    // The elapsed label only changes once a second, the bar every frame.
+    const posText = fmtTime(pos);
+    if (posText !== this._lastPosText) {
+      this._lastPosText = posText;
+      this.el.querySelector('[data-bind="position"]').textContent = posText;
+    }
+    const lenText = fmtTime(d.length_us);
+    if (lenText !== this._lastLenText) {
+      this._lastLenText = lenText;
+      this.el.querySelector('[data-bind="length"]').textContent = lenText;
+    }
     if (d.length_us > 0) {
       const fraction = Math.max(0, Math.min(1, pos / d.length_us));
       this.el.querySelector('[data-bind="scrubber"]').value =
@@ -237,7 +267,7 @@ class MediaWidget {
   }
 
   destroy() {
-    clearInterval(this._timer);
+    this._setTicking(false);
   }
 }
 

@@ -12,9 +12,14 @@ function fmtBytes(n) {
 
 class DiskUsageWidget {
   static modules = ["disk_usage"];
+  static variants = ["compact"];
 
-  mount(el) {
+  mount(el, _, ctx) {
     this.el = el;
+    // A list widget: compact keeps the bar and the percentage and drops the
+    // second line (used / total / filesystem), which is what makes each row
+    // tall enough to push disks off a small tile.
+    this.compact = ctx?.variant === "compact";
     el.classList.add("disk-usage-widget");
     el.innerHTML = `
       <h3>${t("widget.disk.title")}</h3>
@@ -49,7 +54,7 @@ class DiskUsageWidget {
             <span class="disk-value" data-bind="value">–</span>
           </div>
           <div class="disk-bar"><div class="disk-fill" data-bind="fill"></div></div>
-          <div class="disk-meta" data-bind="meta"></div>
+          ${this.compact ? "" : `<div class="disk-meta" data-bind="meta"></div>`}
         `;
         list.appendChild(row);
         this._cells.set(d.mountpoint, {
@@ -69,7 +74,9 @@ class DiskUsageWidget {
       cell.fill.style.width = `${Math.min(100, d.percent)}%`;
       cell.fill.classList.toggle("is-warn", d.percent >= 80 && d.percent < 90);
       cell.fill.classList.toggle("is-bad", d.percent >= 90);
-      cell.meta.textContent = `${fmtBytes(d.used)} / ${fmtBytes(d.total)} • ${d.fstype}`;
+      if (cell.meta) {
+        cell.meta.textContent = `${fmtBytes(d.used)} / ${fmtBytes(d.total)} • ${d.fstype}`;
+      }
     }
   }
 

@@ -186,3 +186,46 @@ def test_resolve_config_path_prefers_local_when_present(tmp_path, monkeypatch):
     # Explicit override beats both
     explicit = tmp_path / "explicit.yaml"
     assert main_mod.resolve_config_path(explicit) == explicit
+
+
+def test_post_settings_notifies_connected_clients(app):
+    """The editor lives in its own window now — the kiosk learns via the socket."""
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        r = client.post("/api/settings", json={"default_theme": "toxic"})
+        assert r.status_code == 200
+
+        # Module frames keep flowing alongside; pick out the control frame.
+        for _ in range(40):
+            frame = ws.receive_json()
+            if frame.get("event") == "settings":
+                assert frame["settings"]["default_theme"] == "toxic"
+                assert "module" not in frame
+                break
+        else:
+            raise AssertionError("no settings event on the socket")
+
+
+def test_saving_is_atomic_and_keeps_the_previous_version(app, tmp_path):
+    """The config file is the only place the settings live.
+
+    `write_text` truncates before it writes, so a crash in between would leave
+    an empty config and lose everything. The write goes through a temporary
+    file, and the version it replaces is kept as `.bak`.
+    """
+    local = tmp_path / "config.local.yaml"
+    with TestClient(app) as client:
+        assert client.post(
+            "/api/settings", json={"default_theme": "cyberpunk"}
+        ).status_code == 200
+        assert local.is_file()
+        assert not (tmp_path / "config.local.yaml.tmp").exists(), "temp file left behind"
+        # First write: there was nothing to back up yet.
+        assert not (tmp_path / "config.local.yaml.bak").exists()
+
+        assert client.post(
+            "/api/settings", json={"default_theme": "clean"}
+        ).status_code == 200
+        backup = tmp_path / "config.local.yaml.bak"
+        assert backup.is_file(), "no backup of the replaced config"
+        assert yaml.safe_load(backup.read_text())["default_theme"] == "cyberpunk"
+        assert yaml.safe_load(local.read_text())["default_theme"] == "clean"

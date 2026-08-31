@@ -21,6 +21,8 @@ class NvidiaModule(Module):
 
     name = "nvidia"
     default_interval = 1.0
+    # Feeds the GPU sparkline — every poll is one sample, see system.py.
+    dedupe = False
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)

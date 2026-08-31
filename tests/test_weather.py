@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import time
-
 import httpx
 import pytest
 
 from backend.modules.base import clear_registry, register_module
-from backend.modules.weather import WeatherModule, OPEN_METEO_URL
+from backend.modules.weather import OPEN_METEO_URL, WeatherModule
 
 
 @pytest.fixture(autouse=True)

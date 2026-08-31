@@ -175,7 +175,13 @@ class _Player:
 @register_module
 class MediaModule(Module):
     name = "media"
-    default_interval = 0.5
+    # MPRIS pushes: PlaybackStatus, Metadata and the Can* flags all arrive as
+    # PropertiesChanged signals, so the payload goes out the moment it changes.
+    # The only property that never signals is Position — and the widget
+    # extrapolates that from `position_ts` + `rate` on its own. What is left
+    # for the clock is a slow correction pass that catches drift and seeks
+    # performed by other applications.
+    default_interval = 5.0
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)
@@ -186,6 +192,9 @@ class MediaModule(Module):
         self._unavailable_reason: str | None = None
         self._owner_changed_listener = None
         self._dbus_iface = None
+        #: Tasks started from D-Bus callbacks, held until they finish.
+        self._tasks: set[asyncio.Task] = set()
+        self._emit_task: asyncio.Task[None] | None = None
 
     # ----------------------------------------------------------------- setup
     async def setup(self) -> None:
@@ -221,6 +230,12 @@ class MediaModule(Module):
             if name.startswith(MPRIS_PREFIX):
                 await self._add_player(name)
 
+    def _track(self, coro) -> None:
+        """Run a coroutine as a task and hold on to it until it is done."""
+        task = asyncio.create_task(coro)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
     async def _watch_name_changes(self) -> None:
         try:
             iface = await self._dbus_proxy()
@@ -231,10 +246,14 @@ class MediaModule(Module):
         def on_owner_changed(name: str, old_owner: str, new_owner: str) -> None:
             if not name.startswith(MPRIS_PREFIX):
                 return
+            # The task has to be kept referenced until it finishes. The event
+            # loop only holds a weak reference, so a task nobody keeps can be
+            # collected mid-flight, and a player that had just appeared on the
+            # bus would then never be registered.
             if new_owner and not old_owner:
-                asyncio.create_task(self._add_player(name))
+                self._track(self._add_player(name))
             elif old_owner and not new_owner:
-                asyncio.create_task(self._remove_player(name))
+                self._track(self._remove_player(name))
 
         iface.on_name_owner_changed(on_owner_changed)
         self._owner_changed_listener = on_owner_changed
@@ -278,6 +297,7 @@ class MediaModule(Module):
             player.props_listener = cb
             self._players[bus_name] = player
             logger.info(f"media: discovered player '{player.identity}' ({bus_name})")
+            self._schedule_emit()
         except Exception as exc:
             msg = str(exc)
             # Chromium and some other apps expose the MPRIS root but not the
@@ -298,6 +318,7 @@ class MediaModule(Module):
         except Exception:
             pass
         logger.info(f"media: player '{player.identity}' disappeared")
+        self._schedule_emit()
 
     async def _refresh_player(self, player: _Player) -> None:
         iface = player.player_iface
@@ -376,6 +397,29 @@ class MediaModule(Module):
                 player.shuffle = bool(v)
             elif k == "LoopStatus":
                 player.loop_status = str(v)
+        self._schedule_emit()
+
+    # -------------------------------------------------------------- push
+    def _schedule_emit(self) -> None:
+        """Broadcast the current payload, coalescing a burst of signals.
+
+        A track change arrives as several PropertiesChanged signals in a row
+        (Metadata, PlaybackStatus, CanGoNext …). Building one payload per
+        signal would send the same state three or four times, so the first
+        signal schedules the send and the ones right behind it ride along.
+        """
+        if self._emit_task is not None and not self._emit_task.done():
+            return
+        self._emit_task = asyncio.create_task(self._emit_soon())
+
+    async def _emit_soon(self) -> None:
+        try:
+            await asyncio.sleep(0.05)
+            await self.emit(await self._build_payload())
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(f"media: push failed: {exc}")
 
     # ------------------------------------------------------------- pick
     def pick_active(self) -> _Player | None:
@@ -395,6 +439,10 @@ class MediaModule(Module):
 
     # ---------------------------------------------------------- payload
     async def poll(self) -> dict[str, Any]:
+        """Correction pass — the interesting updates arrive via signals."""
+        return await self._build_payload()
+
+    async def _build_payload(self) -> dict[str, Any]:
         if not self._available:
             return {"available": False, "reason": self._unavailable_reason or "unknown"}
         if not self._players:
@@ -404,7 +452,8 @@ class MediaModule(Module):
         if player is None:
             return {"available": True, "active": False}
 
-        # Position doesn't fire signals; refresh on every poll.
+        # Position is the one property MPRIS never signals: read it here so
+        # every frame carries a fresh anchor for the widget to count from.
         try:
             player.position_us = int(await player.player_iface.get_position())
             player.position_ts = time.time()
@@ -511,6 +560,9 @@ class MediaModule(Module):
 
     # ---------------------------------------------------------- teardown
     async def teardown(self) -> None:
+        if self._emit_task is not None:
+            self._emit_task.cancel()
+            self._emit_task = None
         # Detach signal handlers first; ignore any errors.
         for player in list(self._players.values()):
             try:

@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the settings UI is allowed to ask of Tauri. Tauri 2 denies every API call that is not listed here, silently from the page's point of view, so anything the window does to itself has to be named.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close"
+  ]
+}

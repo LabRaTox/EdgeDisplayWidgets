@@ -329,3 +329,51 @@ async def test_poll_returns_unavailable_when_module_disabled():
     data = await mod.poll()
     assert data["available"] is False
     assert data["reason"] == "no D-Bus"
+
+
+# ------------------------------------------------------------- signal pushes
+
+@pytest.mark.asyncio
+async def test_property_change_pushes_without_waiting_for_the_poll():
+    """A track change has to reach the widget now, not up to 5 s later."""
+    sent: list[tuple[str, dict]] = []
+
+    async def emitter(name: str, data: dict) -> None:
+        sent.append((name, data))
+
+    mod = MediaModule({})
+    mod.bind(emitter)
+    mod._available = True
+    player = _make_player("Spotify", status="Paused", last_active=time.time())
+    mod._players = {player.bus_name: player}
+
+    mod._apply_changes(player, {"PlaybackStatus": "Playing"})
+    assert player.playback_status == "Playing"
+    await asyncio.sleep(0.15)  # the burst-coalescing delay
+
+    assert sent, "property change never produced a push"
+    name, data = sent[-1]
+    assert name == "media"
+    assert data["playback_status"] == "Playing"
+
+
+@pytest.mark.asyncio
+async def test_burst_of_property_changes_collapses_into_one_push():
+    sent: list[dict] = []
+
+    async def emitter(_name: str, data: dict) -> None:
+        sent.append(data)
+
+    mod = MediaModule({})
+    mod.bind(emitter)
+    mod._available = True
+    player = _make_player("Spotify", status="Playing", last_active=time.time())
+    mod._players = {player.bus_name: player}
+
+    # What a track change actually looks like on the bus.
+    mod._apply_changes(player, {"Metadata": {}})
+    mod._apply_changes(player, {"PlaybackStatus": "Playing"})
+    mod._apply_changes(player, {"CanGoNext": True})
+    await asyncio.sleep(0.15)
+
+    assert len(sent) == 1

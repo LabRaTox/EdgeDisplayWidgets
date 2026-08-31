@@ -4,6 +4,24 @@
 // Usage:
 //   const s = new Sparkline(canvas, { max: 100, samples: 60 });
 //   s.push(value);
+//
+// With `scroll: true` the curve travels continuously instead of jumping one
+// sample width whenever a value arrives: between two samples the whole line
+// slides left by exactly the distance the next sample will take up, so the
+// newest point is always sliding towards the right edge as its successor
+// lands there. The travel speed comes from the *measured* gap between pushes,
+// so it adapts when a module's interval is changed at runtime.
+//
+// The travelling is a **CSS transform transition**, not a redraw per frame.
+// Redrawing was measurably expensive: five canvases on a 2560x720 kiosk, each
+// re-rasterised and re-uploaded 25 times a second, for a picture that only
+// moves sideways. As a transform the browser reuses the texture it already
+// has and the compositor does the moving, so the canvas is only drawn when a
+// sample actually arrives — once a second instead of twenty-five times.
+
+import { SMOOTH_UPDATES } from "./smooth.js";
+
+const DEFAULT_GAP_MS = 1000;
 
 export class Sparkline {
   constructor(canvas, {
@@ -14,6 +32,7 @@ export class Sparkline {
     axisEl = null,        // optional HTMLElement to render the Y-axis into
     axisTicks = 5,        // how many tick labels (including 0 and max)
     axisFormat = null,    // fn(value) => string; defaults to Math.round + ""
+    scroll = false,       // animate between samples instead of stepping
   } = {}) {
     this.canvas = canvas;
     this.max = max;
@@ -26,6 +45,9 @@ export class Sparkline {
     this._buf = new Float32Array(samples);
     this._head = 0;
     this._count = 0;
+    this.scroll = scroll && SMOOTH_UPDATES;
+    this._gap = null;       // measured push interval
+    this._lastPush = null;
     this._resizeIfNeeded();
     this._renderAxis();
   }
@@ -49,6 +71,39 @@ export class Sparkline {
     this._head = (this._head + 1) % this.samples;
     this._count = Math.min(this._count + 1, this.samples);
     this.draw();
+    if (this.scroll) this._startTravel();
+  }
+
+  /**
+   * Hand the sideways movement to the compositor: snap back to the drawn
+   * position, then transition one sample width to the left over the time the
+   * next sample is expected to take.
+   */
+  _startTravel() {
+    const now = performance.now();
+    if (this._lastPush !== null) {
+      const observed = Math.min(Math.max(now - this._lastPush, 80), 5000);
+      this._gap = this._gap === null ? observed : this._gap * 0.7 + observed * 0.3;
+    }
+    this._lastPush = now;
+
+    const stepX = this._w / (this.samples - 1);
+    const style = this.canvas.style;
+    style.transition = "none";
+    style.transform = "translateX(0)";
+    // Read something layout-dependent so the reset is not coalesced with the
+    // transition below — otherwise the browser sees only the end state and
+    // nothing moves.
+    void this.canvas.offsetWidth;
+    style.transition = `transform ${Math.round(this._gap ?? DEFAULT_GAP_MS)}ms linear`;
+    style.transform = `translateX(${-stepX}px)`;
+  }
+
+  destroy() {
+    if (this.scroll) {
+      this.canvas.style.transition = "";
+      this.canvas.style.transform = "";
+    }
   }
 
   setMax(max) {
@@ -101,20 +156,22 @@ export class Sparkline {
     };
 
     // Latest sample on the right edge: leave the left blank until we have
-    // enough samples to fill the buffer.
+    // enough samples to fill the buffer. The sideways travel between samples
+    // is done by the transform in _startTravel, not here.
     const startIdx = this.samples - values.length;
+    const xFor = (i) => (startIdx + i) * stepX;
 
     ctx.beginPath();
-    ctx.moveTo(startIdx * stepX, yFor(values[0]));
+    ctx.moveTo(xFor(0), yFor(values[0]));
     for (let i = 1; i < values.length; i++) {
-      ctx.lineTo((startIdx + i) * stepX, yFor(values[i]));
+      ctx.lineTo(xFor(i), yFor(values[i]));
     }
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = stroke;
     ctx.stroke();
 
-    ctx.lineTo((startIdx + values.length - 1) * stepX, h);
-    ctx.lineTo(startIdx * stepX, h);
+    ctx.lineTo(xFor(values.length - 1), h);
+    ctx.lineTo(xFor(0), h);
     ctx.closePath();
     ctx.fillStyle = fillStyle;
     ctx.fill();

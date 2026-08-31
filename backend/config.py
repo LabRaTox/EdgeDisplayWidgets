@@ -135,6 +135,13 @@ class AppConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     default_theme: str = "cyberpunk"
+    # Interface language of the kiosk. "auto" keeps the old behaviour of
+    # detecting it from the browser. It lives in the config rather than in the
+    # kiosk's localStorage because the settings window is a separate
+    # application on a separate profile: it cannot reach into the kiosk's
+    # browser storage, so anything the window is allowed to change has to be
+    # server-side state.
+    default_language: str = "auto"
     modules: dict[str, ModuleConfig] = Field(default_factory=dict)
     pages: list[PageConfig] = Field(default_factory=list)
 

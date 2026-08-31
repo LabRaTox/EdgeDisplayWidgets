@@ -253,3 +253,119 @@ async def test_hub_keeps_polling_when_a_module_raises():
         assert hub.snapshot()["flaky"]["data"]["calls"] >= 1
     finally:
         await hub.stop()
+
+
+# ---------------------------------------------------------------- dedupe / push
+
+class _CollectingWS:
+    """Minimal WSLike that records every frame it was sent."""
+
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+
+    async def send_text(self, data: str) -> None:
+        self.sent.append(data)
+
+    async def close(self, code: int = 1000) -> None:
+        pass
+
+    def frames(self, module: str | None = None) -> list[dict]:
+        out = [json.loads(s) for s in self.sent]
+        return [f for f in out if module is None or f.get("module") == module]
+
+
+@pytest.mark.asyncio
+async def test_unchanged_payload_is_not_rebroadcast():
+    @register_module
+    class Constant(Module):
+        name = "constant"
+        default_interval = 0.02
+
+        async def poll(self):
+            return {"value": 1}
+
+    cfg = AppConfig(modules={"constant": ModuleConfig(enabled=True, interval=0.02)})
+    hub = Hub(cfg)
+    await hub.start()
+    try:
+        # Connect only after the first poll landed, so the snapshot replay is
+        # the one and only frame this client should ever see.
+        for _ in range(50):
+            if hub.snapshot():
+                break
+            await asyncio.sleep(0.01)
+        ws = _CollectingWS()
+        await hub.connect(ws)
+        sent_on_connect = len(ws.frames("constant"))
+        assert sent_on_connect == 1
+        await asyncio.sleep(0.2)  # ~10 polls, all with identical data
+        assert len(ws.frames("constant")) == sent_on_connect
+    finally:
+        await hub.stop()
+
+
+@pytest.mark.asyncio
+async def test_sample_stream_module_broadcasts_every_poll():
+    @register_module
+    class Stream(Module):
+        name = "stream"
+        default_interval = 0.02
+        dedupe = False
+
+        async def poll(self):
+            return {"value": 1}
+
+    cfg = AppConfig(modules={"stream": ModuleConfig(enabled=True, interval=0.02)})
+    hub = Hub(cfg)
+    await hub.start()
+    try:
+        ws = _CollectingWS()
+        await hub.connect(ws)
+        before = len(ws.frames("stream"))
+        await asyncio.sleep(0.2)
+        assert len(ws.frames("stream")) > before + 2
+    finally:
+        await hub.stop()
+
+
+@pytest.mark.asyncio
+async def test_module_can_emit_between_polls():
+    @register_module
+    class Pushy(Module):
+        name = "pushy"
+        default_interval = 60.0  # would never fire during the test
+
+        async def poll(self):
+            return {"source": "poll"}
+
+    cfg = AppConfig(modules={"pushy": ModuleConfig(enabled=True, interval=60.0)})
+    hub = Hub(cfg)
+    await hub.start()
+    try:
+        ws = _CollectingWS()
+        await hub.connect(ws)
+        await hub.modules["pushy"].emit({"source": "signal"})
+        pushed = [f for f in ws.frames("pushy") if f["data"] == {"source": "signal"}]
+        assert pushed, "emitted payload never reached the client"
+        # And it becomes the value a joining client is handed.
+        assert hub.snapshot()["pushy"]["data"] == {"source": "signal"}
+    finally:
+        await hub.stop()
+
+
+@pytest.mark.asyncio
+async def test_publish_sends_a_control_frame():
+    cfg = AppConfig(modules={})
+    hub = Hub(cfg)
+    await hub.start()
+    try:
+        ws = _CollectingWS()
+        await hub.connect(ws)
+        await hub.publish("settings", settings={"default_theme": "toxic"})
+        frames = [json.loads(s) for s in ws.sent]
+        control = [f for f in frames if f.get("event") == "settings"]
+        assert control, "control frame never arrived"
+        assert control[0]["settings"]["default_theme"] == "toxic"
+        assert "module" not in control[0]  # must not look like module data
+    finally:
+        await hub.stop()
