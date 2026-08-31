@@ -66,9 +66,12 @@ class Hub:
                 logger.warning(f"module '{name}' enabled in config but no producer found")
                 continue
             try:
-                self.modules[name] = cls(mod_cfg.model_dump())
+                module = cls(mod_cfg.model_dump())
             except Exception as exc:
                 logger.exception(f"failed to instantiate module '{name}': {exc}")
+                continue
+            module.bind(self.push)
+            self.modules[name] = module
 
         for name in registry:
             if name not in cfg_modules:
@@ -120,7 +123,12 @@ class Hub:
 
     # ----------------------------------------------------------------- polling
     async def _run(self, module: Module) -> None:
-        """Poll one module on its interval and broadcast each result."""
+        """Poll one module on its interval and broadcast each *new* result.
+
+        Modules with ``dedupe = True`` (the default) only reach the clients
+        when their data actually changed; the cached value is refreshed either
+        way so a joining client still gets a current snapshot.
+        """
         interval = max(0.05, module.interval)  # safety floor
         while True:
             started = time.monotonic()
@@ -131,14 +139,47 @@ class Hub:
                     "data": data,
                     "ts": time.time(),
                 }
+                previous = self._last.get(module.name)
+                unchanged = previous is not None and previous["data"] == data
                 self._last[module.name] = payload
-                await self._broadcast(payload)
+                if not (module.dedupe and unchanged):
+                    await self._broadcast(payload)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 logger.exception(f"poll failed for '{module.name}': {exc}")
             elapsed = time.monotonic() - started
             await asyncio.sleep(max(0.0, interval - elapsed))
+
+    # -------------------------------------------------------------------- push
+    async def push(self, module_name: str, data: dict[str, Any]) -> None:
+        """Broadcast a module payload that was produced by an event, not a poll.
+
+        Modules whose source signals them (MPRIS property changes, D-Bus unit
+        state) call this from their own callbacks. Same envelope and same
+        last-value cache as the polled path, so clients cannot tell the
+        difference — and a module may mix both.
+        """
+        payload: dict[str, Any] = {
+            "module": module_name,
+            "data": data,
+            "ts": time.time(),
+        }
+        previous = self._last.get(module_name)
+        self._last[module_name] = payload
+        module = self.modules.get(module_name)
+        unchanged = previous is not None and previous["data"] == data
+        if unchanged and module is not None and module.dedupe:
+            return
+        await self._broadcast(payload)
+
+    async def publish(self, event: str, **fields: Any) -> None:
+        """Broadcast a non-module control frame, e.g. ``event="settings"``.
+
+        Module frames carry a ``module`` key, control frames carry ``event``.
+        Clients dispatch on whichever is present, so the two never collide.
+        """
+        await self._broadcast({"event": event, "ts": time.time(), **fields})
 
     # ----------------------------------------------------------------- websocket
     async def connect(self, ws: WSLike) -> None:

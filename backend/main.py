@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shlex
+import signal
+import subprocess
 import sys
 from contextlib import asynccontextmanager
 from copy import deepcopy
@@ -15,14 +18,18 @@ from typing import Any
 
 import yaml
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
+from pydantic import BaseModel
 
+from . import autostart
 from .config import AppConfig, load_config
 from .hub import Hub
 from .modules.base import get_registry
 from .notes import MAX_BODY_LEN, MAX_TITLE_LEN, NotesStore, public_view
+from .tray import SystemTray
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = ROOT / "config.yaml"
@@ -341,6 +348,7 @@ def _settings_view(cfg: AppConfig) -> dict[str, Any]:
         modules[name] = dumped
     return {
         "default_theme": cfg.default_theme,
+        "default_language": cfg.default_language,
         "modules": modules,
         "pages": [p.model_dump() for p in cfg.pages],
     }
@@ -368,6 +376,83 @@ class _RevalidatingStaticFiles(StaticFiles):
         return response
 
 
+class AutostartPayload(BaseModel):
+    enabled: bool
+
+
+# `static variants = ["compact", "wide"]` in a widget's JS file. Read rather
+# than duplicated in a table here: the list belongs next to the code that acts
+# on it, and a table would be wrong the first time someone forgets it.
+_WIDGET_VARIANTS_RE = re.compile(r"static\s+variants\s*=\s*\[([^\]]*)\]")
+_JS_STRING_RE = re.compile(r"""["']([^"']+)["']""")
+
+
+def _widget_variants(path: Path) -> list[str]:
+    """Variant names a widget JS file declares, or [] if it declares none.
+
+    Deliberately a regex and not a JS parser: the declaration is one literal
+    line of one known shape, and the alternative — a manifest file per widget,
+    or a list maintained in Python — is another thing to keep in sync. A
+    widget that writes it differently simply offers no variants, which is
+    exactly what a widget without the line does.
+    """
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    match = _WIDGET_VARIANTS_RE.search(text)
+    if not match:
+        return []
+    return _JS_STRING_RE.findall(match.group(1))
+
+
+def _write_local_config(path: Path, data: dict[str, Any]) -> None:
+    """Write the local config, atomically, keeping the previous version.
+
+    `write_text` truncates first and then writes: a crash, a full disk or a
+    power cut in between leaves a half-written or empty config, and this file
+    is the only place the settings live. Staging to a temporary file in the
+    same directory and renaming it is atomic on POSIX, so a reader sees either
+    the old file or the new one.
+
+    The `.bak` copy is the second half of that: it survives a *valid* but
+    unwanted write, which no amount of atomicity protects against.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = yaml.safe_dump(
+        deepcopy(data), default_flow_style=False, sort_keys=False, allow_unicode=True
+    )
+    if path.is_file():
+        # Copied, not renamed: a rename would briefly leave no config at all.
+        with contextlib.suppress(OSError):
+            path.with_suffix(path.suffix + ".bak").write_text(
+                path.read_text(encoding="utf-8"), encoding="utf-8"
+            )
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def _quit_dashboard() -> None:
+    """Tray → Quit: take the kiosk down, then ourselves.
+
+    Leaving the kiosk running would park it on its waiting screen forever,
+    which reads as a crash rather than as "you switched it off". SIGINT is
+    what the unit sends too (`KillSignal=SIGINT`), so uvicorn shuts down the
+    same way it would on `systemctl stop` — cleanly, and with an exit code
+    that keeps `Restart=on-failure` from bringing it straight back.
+    """
+    logger.info("quit requested from the tray")
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
+        subprocess.run(
+            ["systemctl", "--user", "stop", "edge-kiosk.service"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    os.kill(os.getpid(), signal.SIGINT)
+
+
 def create_app(config_path: str | Path | None = None) -> FastAPI:
     cfg_path = resolve_config_path(config_path)
     cfg = load_config(cfg_path)
@@ -376,18 +461,56 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
 
     hub = Hub(cfg)
 
+    # The tray icon is opt-in through the environment rather than the config,
+    # because it must not appear when the app is merely constructed: the test
+    # suite builds `create_app()` dozens of times, and on a developer machine
+    # with a session bus every one of them would register an icon in the
+    # panel. `main()` sets the variable, so the service gets a tray and
+    # nothing else does. `EDGE_TRAY=0` in the unit turns it off again.
+    tray = SystemTray(
+        url=f"http://{cfg.server.host}:{cfg.server.port}",
+        language=cfg.default_language,
+        on_quit=_quit_dashboard,
+    )
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         await hub.start()
+        if os.environ.get("EDGE_TRAY", "0") == "1":
+            await tray.start()
         try:
             yield
         finally:
+            await tray.stop()
             await hub.stop()
 
     app = FastAPI(title="Edge Dashboard", version=app_version(), lifespan=lifespan)
     app.state.config_path = cfg_path
     app.state.config = cfg
     app.state.hub = hub
+    app.state.tray = tray
+
+    # ------------------------------------------------------------- CORS
+    #
+    # The kiosk is served from this very origin and needs nothing here. The
+    # settings window is a separate application: inside its Tauri frame the
+    # page lives under `tauri://localhost` (Linux/WebKitGTK also uses
+    # `http://tauri.localhost`), so every call to the backend is cross-origin
+    # and the webview blocks it unless we say otherwise — silently, which
+    # looks exactly like a dead backend from the outside.
+    #
+    # Nothing is opened up by this: the server binds 127.0.0.1, so no one
+    # outside the machine can reach it in the first place.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=(
+            r"^(https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?"
+            r"|https?://tauri\.localhost"
+            r"|tauri://localhost)$"
+        ),
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # ------------------------------------------------------ Origin check
     #
@@ -401,7 +524,10 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
     # matches the server's own host. Modern browsers always send Origin for
     # cross-origin POST/PUT/DELETE; same-origin POSTs in fetch() also send
     # it. Tools like curl can still hit the API since they omit Origin.
-    _ALLOWED_HOSTS = {cfg.server.host, "127.0.0.1", "localhost"}
+    # `tauri.localhost` is the settings window, not a remote site: Tauri serves
+    # the bundled UI from that host inside its own frame.
+    _ALLOWED_HOSTS = {cfg.server.host, "127.0.0.1", "localhost", "tauri.localhost"}
+    _LOOPBACK_ONLY = cfg.server.host in {"127.0.0.1", "localhost", "::1"}
 
     def _origin_host_matches(origin: str | None, request_host: str | None) -> bool:
         if not origin:
@@ -416,9 +542,14 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
             return False
         if parsed.hostname not in _ALLOWED_HOSTS:
             return False
-        # When we know the request's own Host header, also enforce port match
-        # to avoid a same-host-different-port relay.
-        if request_host and ":" in request_host:
+        # A different port on the same host is a different application. That
+        # matters when the server is reachable from outside — someone else's
+        # service on this machine could then relay a request. While we are
+        # bound to loopback only, every such origin is by definition a program
+        # the user runs themselves, and requiring an exact port match would
+        # lock out the settings window's own dev server (Vite on 5173) with no
+        # security gained.
+        if not _LOOPBACK_ONLY and request_host and ":" in request_host:
             host_port = request_host.rsplit(":", 1)[-1]
             if parsed.port and str(parsed.port) != host_port:
                 return False
@@ -542,12 +673,55 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
 
         Used by the Layout-Editor to populate the 'add widget' picker. Drop
         a new ``<name>.js`` and it appears here.
+
+        `variants` carries the display variants each widget declares, so the
+        editor can offer a list instead of a free-text field. Only widgets
+        that declare any appear in it; an empty map is the normal case for a
+        widget with a single look.
         """
         widgets_dir = FRONTEND_DIR / "js" / "widgets"
         if not widgets_dir.is_dir():
-            return JSONResponse({"widgets": []})
-        names = sorted(p.stem for p in widgets_dir.glob("*.js") if not p.stem.startswith("_"))
-        return JSONResponse({"widgets": names})
+            return JSONResponse({"widgets": [], "variants": {}})
+        files = sorted(
+            (p for p in widgets_dir.glob("*.js") if not p.stem.startswith("_")),
+            key=lambda p: p.stem,
+        )
+        variants = {}
+        for path in files:
+            declared = _widget_variants(path)
+            if declared:
+                variants[path.stem] = declared
+        return JSONResponse({"widgets": [p.stem for p in files], "variants": variants})
+
+    @app.get("/api/health")
+    async def health() -> JSONResponse:
+        """Liveness probe for the settings window's connection banner."""
+        return JSONResponse(
+            {"ok": True, "version": app_version(), "clients": current_hub().client_count},
+            headers=_NO_STORE,
+        )
+
+    # Deliberately synchronous: `systemctl` is a subprocess. In an `async`
+    # route it would block the event loop and with it the WebSocket the kiosk
+    # feeds on, so FastAPI is left to run these in its threadpool.
+
+    @app.get("/api/autostart")
+    def get_autostart() -> JSONResponse:
+        """Whether the dashboard starts itself at login."""
+        return JSONResponse(autostart.status().as_dict(), headers=_NO_STORE)
+
+    @app.post("/api/autostart")
+    def set_autostart(payload: AutostartPayload) -> JSONResponse:
+        """Body: `{enabled: bool}` — switches both user units together."""
+        try:
+            state = autostart.set_enabled(payload.enabled)
+        except autostart.AutostartUnavailable as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (autostart.AutostartError, OSError, subprocess.SubprocessError) as exc:
+            raise HTTPException(
+                status_code=500, detail=f"autostart could not be switched: {exc}"
+            ) from exc
+        return JSONResponse(state.as_dict(), headers=_NO_STORE)
 
     @app.get("/api/settings")
     async def get_settings() -> JSONResponse:
@@ -594,15 +768,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         # Persist to config.local.yaml so the change survives restarts.
         target = LOCAL_CONFIG
         try:
-            target.write_text(
-                yaml.safe_dump(
-                    deepcopy(merged),
-                    default_flow_style=False,
-                    sort_keys=False,
-                    allow_unicode=True,
-                ),
-                encoding="utf-8",
-            )
+            _write_local_config(target, merged)
         except OSError as exc:
             raise HTTPException(status_code=500, detail=f"failed to write {target}: {exc}")
 
@@ -611,16 +777,21 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         app.state.config = new_cfg
         app.state.config_path = target
         logger.info(f"settings updated; persisted to {target}")
-        return JSONResponse(
-            {"ok": True, "settings": _settings_view(new_cfg)},
-            headers=_NO_STORE,
-        )
+        view = _settings_view(new_cfg)
+        # The editor is its own window now, so the change has to travel to the
+        # kiosk on its own. Without this frame the display keeps rendering the
+        # old theme and the old page layout until someone reloads it.
+        await current_hub().publish("settings", settings=view)
+        return JSONResponse({"ok": True, "settings": view}, headers=_NO_STORE)
 
     @app.websocket("/ws")
     async def ws_endpoint(ws: WebSocket) -> None:
-        # WebSockets bypass the http middleware, so re-apply the origin check.
-        # Cross-Site WebSocket Hijacking would otherwise let a malicious tab
-        # subscribe to the data stream from the same browser profile.
+        # WebSockets bypass the http middleware *and* CORS, so re-apply the
+        # origin check by hand. Cross-Site WebSocket Hijacking would otherwise
+        # let a malicious tab subscribe to the data stream from the same
+        # browser profile. The settings window passes this as `tauri.localhost`
+        # (see _ALLOWED_HOSTS) — it needs the socket to know whether the
+        # backend is alive and to hear about settings saved elsewhere.
         origin = ws.headers.get("origin")
         host = ws.headers.get("host")
         if not _origin_host_matches(origin, host):
@@ -630,6 +801,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         await ws.accept()
         hub_now = current_hub()
         await hub_now.connect(ws)
+        tray.update(clients=hub_now.client_count)
         try:
             while True:
                 await ws.receive_text()
@@ -637,6 +809,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
             pass
         finally:
             await hub_now.disconnect(ws)
+            tray.update(clients=hub_now.client_count)
 
     @app.post("/api/smart_lights/{device_id}/control")
     async def control_smart_light(device_id: str, request: Request) -> JSONResponse:
@@ -747,15 +920,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
 
         target = LOCAL_CONFIG
         try:
-            target.write_text(
-                yaml.safe_dump(
-                    deepcopy(merged),
-                    default_flow_style=False,
-                    sort_keys=False,
-                    allow_unicode=True,
-                ),
-                encoding="utf-8",
-            )
+            _write_local_config(target, merged)
         except OSError as exc:
             raise HTTPException(500, f"failed to write {target}: {exc}")
 
@@ -763,6 +928,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         app.state.config = new_cfg
         app.state.config_path = target
         logger.info(f"quick_actions config updated; persisted to {target}")
+        await current_hub().publish("settings", settings=_settings_view(new_cfg))
         return JSONResponse({"ok": True, "count": len(validated_actions)}, headers=_NO_STORE)
 
     @app.post("/api/quick_actions/{action_id}/run")
@@ -824,6 +990,10 @@ app = create_app()
 
 def main() -> None:
     import uvicorn
+
+    # Only the real server gets a tray icon; see the comment in create_app.
+    # `setdefault` so `EDGE_TRAY=0` in the unit still wins.
+    os.environ.setdefault("EDGE_TRAY", "1")
 
     cfg: AppConfig = app.state.config
     uvicorn.run(

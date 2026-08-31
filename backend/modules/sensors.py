@@ -145,8 +145,13 @@ def _prettify_nvme_model(model: str) -> str:
 
 class _Reading:
     __slots__ = (
-        "chip", "label", "path", "primary", "id",
-        "display_chip", "display_label",
+        "chip",
+        "display_chip",
+        "display_label",
+        "id",
+        "label",
+        "path",
+        "primary",
     )
 
     def __init__(

@@ -1,10 +1,13 @@
 // Tiny i18n: flat key lookup with {placeholder} substitution.
 //
-// Language is auto-detected from navigator.languages on first load (falls
-// back to English). The user can override via the Settings sheet; the choice
-// persists in localStorage. Locale JSON lives in /locales/<code>.json and
-// is fetched at init — adding a new language = drop a JSON file + extend
-// SUPPORTED below.
+// The language comes from the backend config (`default_language`), because the
+// settings window is a separate application and cannot write this display's
+// localStorage. "auto" — the default — falls back to detecting it from
+// navigator.languages, which is what the kiosk did before there was a window
+// to choose in. localStorage only caches the result so index.html can set
+// <html lang> before the first response arrives. Locale JSON lives in
+// /locales/<code>.json and is fetched at init — adding a new language = drop a
+// JSON file + extend SUPPORTED below.
 
 const STORAGE_KEY = "edge-dashboard.lang";
 const FALLBACK = "en";
@@ -40,6 +43,19 @@ async function loadLocale(code) {
   return r.json();
 }
 
+async function serverLanguage() {
+  try {
+    const r = await fetch("/api/settings");
+    if (!r.ok) return null;
+    const body = await r.json();
+    const wanted = body?.default_language;
+    return SUPPORTED_CODES.includes(wanted) ? wanted : null;
+  } catch (err) {
+    console.warn("[i18n] could not read the configured language:", err);
+    return null;
+  }
+}
+
 export async function initI18n() {
   // The fallback bundle is always loaded so missing keys in a translated
   // locale don't render as English-shaped placeholders; they render as
@@ -51,11 +67,8 @@ export async function initI18n() {
     _fallbackStrings = {};
   }
 
-  let stored = null;
-  try { stored = localStorage.getItem(STORAGE_KEY); } catch (_) { /* private mode */ }
-  const target = (stored && SUPPORTED_CODES.includes(stored))
-    ? stored
-    : detectBrowserLang();
+  // Config first, browser preference only when the config says "auto".
+  const target = (await serverLanguage()) || detectBrowserLang();
 
   if (target === FALLBACK) {
     _strings = _fallbackStrings;
@@ -71,6 +84,9 @@ export async function initI18n() {
     }
   }
   document.documentElement.lang = _current;
+  try {
+    localStorage.setItem(STORAGE_KEY, _current);
+  } catch (_) { /* ignore — only the pre-paint hint is lost */ }
 }
 
 export function t(key, params) {
@@ -103,6 +119,7 @@ export async function setLang(code) {
   }
   _current = code;
   document.documentElement.lang = code;
+  // Cache for the pre-paint bootstrap in index.html, not a preference.
   try { localStorage.setItem(STORAGE_KEY, code); } catch (_) { /* ignore */ }
   for (const fn of _listeners) {
     try { fn(code); } catch (err) { console.error("[i18n] listener failed:", err); }

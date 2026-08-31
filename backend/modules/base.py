@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Literal
+from collections.abc import Awaitable, Callable
+from typing import Any, ClassVar, Literal, TypeAlias
 
 from loguru import logger
 from pydantic import BaseModel
+
+# (module name, payload) -> broadcast; implemented by the hub.
+EmitFn: TypeAlias = Callable[[str, dict[str, Any]], Awaitable[None]]
 
 
 class SettingField(BaseModel):
@@ -46,12 +50,21 @@ class Module(ABC):
 
     Subclasses may:
       - set ``default_interval`` (seconds between polls when config omits it)
+      - set ``dedupe = False`` when every poll must reach the clients
+      - call ``await self.emit(data)`` to push outside the poll interval
       - set ``settings_schema`` (editable config fields exposed in the UI)
       - override ``setup()`` / ``teardown()`` for resource lifecycle
     """
 
     name: ClassVar[str] = ""
     default_interval: ClassVar[float] = 1.0
+    # When True the hub suppresses a broadcast whose data is byte-identical to
+    # the previous one — the module describes *state*, and an unchanged state
+    # is not news. Set False for modules whose payload is a *sample stream*:
+    # widgets that append every frame to a history buffer (sparklines) need a
+    # frame even when the value happens to repeat, or their graph freezes
+    # instead of drawing a flat line.
+    dedupe: ClassVar[bool] = True
     # Module-specific config fields (beyond the common enabled/interval) that
     # the Settings UI should render an input for. Empty ⇒ nothing extra.
     settings_schema: ClassVar[list[SettingField]] = []
@@ -62,6 +75,24 @@ class Module(ABC):
         self.interval: float = (
             float(interval) if interval is not None else float(self.default_interval)
         )
+        self._emitter: EmitFn | None = None
+
+    # ------------------------------------------------------------------ push
+    def bind(self, emitter: EmitFn) -> None:
+        """Hand the module a way to broadcast outside its poll interval.
+
+        Called by the hub right after instantiation. A module whose source
+        signals it (D-Bus property changes, unit state) can then deliver a
+        payload the moment it learns about it instead of waiting out the
+        interval — the poll loop keeps running as a slower correction pass.
+        """
+        self._emitter = emitter
+
+    async def emit(self, data: dict[str, Any]) -> None:
+        """Broadcast ``data`` now. No-op when the module runs unbound (tests)."""
+        if self._emitter is None:
+            return
+        await self._emitter(self.name, data)
 
     async def setup(self) -> None:
         """One-time init; override to open files, dbus connections, etc."""

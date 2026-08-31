@@ -30,8 +30,10 @@ Probe config (like commands/URLs/headers) is never exposed — only the derived
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 import shlex
+import time
 from collections.abc import Iterator
 from typing import Any, ClassVar, Literal
 
@@ -208,6 +210,8 @@ class QuickActionsModule(Module):
     # but we keep a small one so a config edit + hub-reload shows up quickly.
     # Lower the configured interval to make live-status tiles more responsive.
     default_interval = 60.0
+    # Shortest gap between two signal-driven probe passes, in seconds.
+    MIN_REPROBE_GAP = 2.0
     # The tile grid itself (`columns`/`rows`) and individual tiles are edited in
     # the widget's own edit mode; only the global timeouts are surfaced here.
     settings_schema: ClassVar[list[SettingField]] = [
@@ -265,6 +269,88 @@ class QuickActionsModule(Module):
 
         self.actions = prune(self.actions)
         self._index: dict[str, QuickAction] = {a.id: a for a in _walk(self.actions)}
+        self._buses: list[Any] = []
+        self._reprobe_task: asyncio.Task[None] | None = None
+        self._last_reprobe: float = 0.0
+
+    # --------------------------------------------------------- live status
+    async def setup(self) -> None:
+        """Listen for systemd job completions so tiles stop lagging a minute behind.
+
+        The deck's status probes are generic shell/HTTP calls, and running them
+        on a clock is why a tile can show a stale state for up to a full
+        interval. systemd announces every finished start/stop/restart as a
+        ``JobRemoved`` signal on the Manager interface — one subscription per
+        bus covers *every* unit, so we don't have to guess which probe watches
+        which unit. A signal just means "something changed, look again".
+
+        Entirely optional: without D-Bus, without systemd, or without the
+        permission to subscribe, the poll interval carries on as before.
+        """
+        if not any(a.status is not None for a in _walk(self.actions)):
+            return  # no live-status tiles — nothing to watch for
+        try:
+            from dbus_next.aio import MessageBus
+            from dbus_next.constants import BusType
+        except ImportError as exc:
+            logger.debug(f"quick_actions: no live status ({exc})")
+            return
+
+        for bus_type in (BusType.SESSION, BusType.SYSTEM):
+            try:
+                bus = await MessageBus(bus_type=bus_type).connect()
+                intr = await bus.introspect(
+                    "org.freedesktop.systemd1", "/org/freedesktop/systemd1"
+                )
+                obj = bus.get_proxy_object(
+                    "org.freedesktop.systemd1", "/org/freedesktop/systemd1", intr
+                )
+                manager = obj.get_interface("org.freedesktop.systemd1.Manager")
+                # Without Subscribe() systemd only emits job signals to clients
+                # that asked for them.
+                await manager.call_subscribe()
+                manager.on_job_removed(self._on_job_removed)
+                self._buses.append(bus)
+                logger.debug(f"quick_actions: watching {bus_type.name.lower()} bus for unit changes")
+            except Exception as exc:
+                logger.debug(
+                    f"quick_actions: {bus_type.name.lower()} bus unavailable "
+                    f"({type(exc).__name__}: {exc})"
+                )
+
+    def _on_job_removed(self, _job_id: int, _job_path: str, _unit: str, _result: str) -> None:
+        self._schedule_reprobe()
+
+    def _schedule_reprobe(self) -> None:
+        """Re-run the probes once, shortly. Bursts collapse into one pass."""
+        if self._reprobe_task is not None and not self._reprobe_task.done():
+            return
+        self._reprobe_task = asyncio.create_task(self._reprobe_soon())
+
+    async def _reprobe_soon(self) -> None:
+        try:
+            # Let the burst finish (a restart is a stop job plus a start job),
+            # then keep a floor between passes: probes spawn subprocesses, and
+            # a busy machine can fire job signals continuously.
+            await asyncio.sleep(0.4)
+            wait = self.MIN_REPROBE_GAP - (time.monotonic() - self._last_reprobe)
+            if wait > 0:
+                await asyncio.sleep(wait)
+            self._last_reprobe = time.monotonic()
+            await self.emit(await self.poll())
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.debug(f"quick_actions: re-probe failed: {type(exc).__name__}: {exc}")
+
+    async def teardown(self) -> None:
+        if self._reprobe_task is not None:
+            self._reprobe_task.cancel()
+            self._reprobe_task = None
+        for bus in self._buses:
+            with contextlib.suppress(Exception):
+                bus.disconnect()
+        self._buses.clear()
 
     async def poll(self) -> dict[str, Any]:
         states = await self._probe_all()
@@ -327,7 +413,7 @@ class QuickActionsModule(Module):
             return "unknown"
         try:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=self.status_timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             return "unknown"
@@ -365,6 +451,10 @@ class QuickActionsModule(Module):
         # waiting for the next poll cycle.
         if action.status is not None:
             result["state"] = await self._probe(action.status)
+            # The caller sees the new state in this response; every other
+            # client (the kiosk, a second window) only learns about it if we
+            # broadcast it.
+            self._schedule_reprobe()
         return result
 
     async def _run_shell(self, action: QuickAction) -> dict[str, Any]:
@@ -377,7 +467,7 @@ class QuickActionsModule(Module):
             import subprocess
 
             try:
-                subprocess.Popen(  # noqa: S603 (argv list, no shell)
+                subprocess.Popen(
                     action.command,  # type: ignore[arg-type]
                     start_new_session=True,
                     stdin=subprocess.DEVNULL,
@@ -401,7 +491,7 @@ class QuickActionsModule(Module):
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=self.timeout_seconds,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             return {"ok": False, "error": f"timeout after {self.timeout_seconds}s"}

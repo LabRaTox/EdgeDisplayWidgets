@@ -1,12 +1,15 @@
 # Edge Dashboard
 
-![Edge Dashboard](docs/screenshots/demo.gif)
+*[Deutsche Fassung](README.de.md)*
 
-Modular kiosk dashboard for the **Corsair Xeneon Edge 14.5"** (2560×720)
-secondary touch display. Runs as a local FastAPI server, rendered fullscreen
-by a Chromium kiosk on a second monitor. Built and tested on
-[CachyOS](https://cachyos.org/) (Arch-based) with an NVIDIA GPU, but the
-backend is portable to any Linux distro.
+![The Edge Dashboard on a Corsair Xeneon Edge: network, clock, weather, CPU, GPU and RAM widgets](docs/screenshots/kiosk-main.png)
+
+Dashboard for the **Corsair Xeneon Edge 14.5"** (2560x720), the second touch
+display that sits under the monitors. It runs on Linux, developed and used
+daily on [CachyOS](https://cachyos.org/) (Arch Linux) with KDE Plasma and an
+NVIDIA GPU. Three parts: a local FastAPI server, a kiosk window on Qt
+WebEngine that fills the display, and **EDGE//DASH**, a separate desktop
+application for the settings.
 
 - **Live widgets**: CPU / RAM / GPU / network / temperature sensors, disk
   usage, top processes, clock, weather (Open-Meteo), media controls
@@ -14,41 +17,69 @@ backend is portable to any Linux distro.
   pomodoro, notes.
 - **Pages + swipe navigation**: arrange widgets in CSS-Grid layouts across
   multiple pages; horizontal swipe between them on the touchscreen.
-- **In-browser layout editor**: drag, resize, add, remove widgets and pages
-  without editing YAML.
+- **Settings window**: themes, module options, weather, YouTube, the quick
+  action deck and the page layout, edited in a desktop application rather than
+  on the touch strip. It lives in the tray and in the application menu.
+- **Widget variants**: a widget can offer more than one look. The metric
+  widgets know `compact`, which drops the chart for small tiles and costs no
+  drawing time at all.
 - **Themes**: cyberpunk, clean, steampunk, light, toxic, nightclub,
-  industrial — drop a CSS file to add more.
-- **i18n**: English / German out of the box, auto-detected from the
-  browser; per-user override persisted to localStorage.
-- **Hot-reload**: settings saved through the UI are written back to
-  `config.local.yaml` and applied without a restart.
+  industrial. Drop a CSS file to add more.
+- **i18n**: English / German out of the box; the display's language is a
+  config value, the window has its own under `Language`.
+- **Hot-reload**: what the settings window saves is written to
+  `config.local.yaml` and announced over the WebSocket, so the display follows
+  along without a restart or a reload.
+
+Guides for extending it: [Writing a widget](docs/widgets.md) and
+[Writing a theme](docs/themes.md).
 
 ## Touch gestures
 
-The dashboard is designed for touch input — there are no visible menu
-buttons. Everything is reachable via a small set of gestures:
+The display shows; it is not configured on itself. What is left on the
+touchscreen is what a finger is good at:
 
 | Gesture | Action |
 |---------|--------|
 | Horizontal swipe (or click + drag) | Switch between pages |
 | Tap on a page indicator dot (bottom centre) | Jump to that page |
-| **Swipe up from the bottom edge** | Open the settings sheet |
-| **Long-press a page indicator dot** | Open the settings sheet |
-| **Long-press the Quick Actions deck** | Enter tile edit mode (drag / resize / add tiles) |
-| Tap × / backdrop on the settings sheet | Close it |
+| Tap a quick-action tile | Run it |
 
-Inside the settings sheet, the `Layout` tab → "Enable edit mode" turns
-the dashboard into a visual editor for moving, resizing, adding, and
-removing widgets and pages.
+Everything else, meaning themes, module options, the action deck and the page layout,
+lives in the settings window (`gui/`, see [Settings window](#settings-window)).
+That is a deliberate split: editing an argv list or a grid template with a
+finger on a 2560×720 strip was the worst part of the old design.
 
 ## Architecture
 
-The codebase follows a **module registry pattern**. Each widget = one
-backend producer (`backend/modules/<x>.py` subclassing `Module`, decorated
-with `@register_module`) + one frontend consumer
-(`frontend/js/widgets/<x>.js` calling `registerWidget`). Data flows
-backend → hub → WebSocket → all matching widget instances. Adding a widget
-requires no changes to the core scaffolding.
+Three processes, each doing one thing:
+
+| Process | What it is | Runs on |
+|---------|-----------|---------|
+| `backend/` | FastAPI + the module hub, the only writer of the config | project virtualenv (`uv`) |
+| `shell/edge_kiosk` | the kiosk window on the Xeneon | **system** Python + system PySide6 |
+| `gui/` | EDGE//DASH, the settings window | Tauri 2 + React |
+
+The kiosk and the settings window are both plain clients of the backend over
+HTTP and one WebSocket. Keeping them apart means the settings still open when
+the kiosk is not running, and a crashed renderer never takes the data
+collection with it.
+
+The backend also carries the tray icon (`backend/tray.py`, over D-Bus rather
+than a GUI toolkit) and starts the settings window from it. It is the only one
+of the three that always runs, which makes it the only sensible place for it.
+
+The code follows a **module registry pattern**. Each widget = one backend
+producer (`backend/modules/<x>.py` subclassing `Module`, decorated with
+`@register_module`) + one frontend consumer (`frontend/js/widgets/<x>.js`
+calling `registerWidget`). Data flows backend → hub → WebSocket → all matching
+widget instances. Adding a widget requires no changes to the core scaffolding.
+
+A module produces its data on a clock (`interval`), by pushing when its source
+signals it (`await self.emit(...)`, as MPRIS property changes and systemd unit
+state), or both. Unchanged payloads are not re-sent unless the module sets
+`dedupe = False`, which the sample-stream modules do because a sparkline needs
+a frame even when the value repeats.
 
 ## Requirements
 
@@ -57,7 +88,7 @@ requires no changes to the core scaffolding.
 - **Linux** with systemd (Arch / CachyOS reference; Fedora / Ubuntu work
   if you adapt the package names).
 - Wayland or X11 session for the kiosk display detection (Sway, Hyprland,
-  KDE Plasma, GNOME — all supported via either `wlr-randr` or `xrandr`).
+  KDE Plasma, GNOME, all supported via either `wlr-randr` or `xrandr`).
 
 ### Hard dependencies
 
@@ -65,18 +96,25 @@ requires no changes to the core scaffolding.
 |-----------|---------|--------------|
 | Python ≥ 3.11 | runtime | `python` |
 | [uv](https://github.com/astral-sh/uv) | virtualenv + dependency manager | `uv` |
-| Chromium-compatible browser | kiosk renderer | `chromium`, `google-chrome`, or `brave-browser` |
-| `systemd` | user service | (preinstalled) |
+| PySide6 (system-wide) | the kiosk window, which is Qt WebEngine | `pyside6` |
+| `systemd` | user services | (preinstalled) |
 
 ```bash
-sudo pacman -S python uv chromium
+sudo pacman -S python uv pyside6
+```
+
+Node and Rust are needed only to build the settings window; the installer says
+so if they are missing and carries on without it.
+
+```bash
+sudo pacman -S nodejs npm rust webkit2gtk-4.1
 ```
 
 ### Optional dependencies (per module)
 
 | Module | Needs | Arch package | Notes |
 |--------|-------|--------------|-------|
-| `nvidia` | NVIDIA driver + nvml | `nvidia`, `nvidia-utils` | Falls back to "no GPU detected" if absent — safe to leave enabled. |
+| `nvidia` | NVIDIA driver + nvml | `nvidia`, `nvidia-utils` | Falls back to "no GPU detected" if absent, safe to leave enabled. |
 | `sensors` | `/sys/class/hwmon` populated | `lm_sensors` | Run `sudo sensors-detect` once. AMD CPUs need `k10temp` autoloaded. |
 | `media` | D-Bus session bus + an MPRIS player | (preinstalled) | Works with Spotify, MPV, browsers via the [MPRIS extension](https://github.com/F-Hauri/Plasma-Browser-Integration), VLC, etc. |
 | `weather` | internet access | — | Uses Open-Meteo's free, key-less API. |
@@ -84,17 +122,49 @@ sudo pacman -S python uv chromium
 | `smart_lights` | Govee and/or Tuya account | — | API keys configured per provider (see below). |
 | `quick_actions` | varies per action | `libnotify` for `notify-send`, etc. | Each action declares its own `command`. |
 
-### KDE Plasma 6 (optional)
+### Desktop environments
 
-If you run KDE Plasma 6 on Wayland and want deterministic kiosk window
-placement, also install:
+Built and used on KDE Plasma 6 (Wayland). What the other environments need:
+
+| Session | Kiosk out of the task list | Tray icon |
+|---|---|---|
+| **Any X11 session** | automatic | yes |
+| **KDE Plasma** (Wayland) | automatic, a KWin rule | yes |
+| **Hyprland** | a snippet to source, the installer writes it | yes (Waybar and others) |
+| **Sway / i3** | partly, see below | yes (Waybar and others) |
+| **GNOME** (Wayland) | not possible | needs an extension |
+| **Others** (Wayland) | not automatic | usually yes |
+
+Two things are environment-specific, and both are cosmetic. The dashboard
+itself runs everywhere.
+
+**Keeping the kiosk out of the task manager.** On X11 the window asks for this
+itself: it sets `_NET_WM_WINDOW_TYPE_UTILITY`, which every window manager
+understands, so an X11 session needs no configuration at all. Wayland has no
+equivalent, because xdg-shell knows no window types, so the compositor has to
+be told instead. `scripts/window-rule.sh` does that, and the installer runs it:
 
 ```bash
-sudo pacman -S kwriteconfig5 qt6-tools     # provides kwriteconfig6 + qdbus6
+./scripts/window-rule.sh
+systemctl --user restart edge-kiosk    # applies to windows opened afterwards
 ```
 
-`scripts/kiosk.sh` detects KDE automatically and installs a KWin window
-rule per launch — see [Kiosk display](#kiosk-display-setup).
+It writes a KWin rule on Plasma, a `windowrulev2` snippet on Hyprland (which
+has to be sourced from `hyprland.conf`, the script says so), and a `for_window`
+line for Sway. Sway has no skip-taskbar flag as such, so there the window is
+marked and a bar can filter it. GNOME under Wayland offers no way at all; the
+window will appear in the overview.
+
+`EDGE_KIOSK_NO_FOCUS=1 ./scripts/window-rule.sh` additionally makes the kiosk
+refuse the keyboard focus, so touching the dashboard leaves the keyboard where
+it was. Off by default, because Wayland offers no way to take pointer input
+while refusing the keyboard: without focus every text field on the kiosk is
+read-only, which makes the notes widget pointless.
+
+**The tray icon** uses StatusNotifierItem over D-Bus, which Plasma, Waybar,
+XFCE, Cinnamon and most others implement. GNOME needs the *AppIndicator and
+KStatusNotifierItem Support* extension. Without any of it the backend runs
+unchanged and the settings window still opens from the application menu.
 
 ## Installation
 
@@ -106,64 +176,162 @@ cd EdgeDisplayWidgets
 ./scripts/install.sh
 ```
 
-The installer:
+That is the whole installation. When it finishes, the dashboard is on the
+display, the tray icon is there, the settings window is in the application
+menu, and everything comes back at the next login. Nothing else has to be run
+by hand.
 
-1. Runs `uv sync` to create `.venv/` and install Python deps locked in
-   `uv.lock`.
-2. Renders `systemd/edge-dashboard.service` into
-   `~/.config/systemd/user/edge-dashboard.service` (with the project path
-   and `uv` binary path baked in).
-3. Reloads the systemd user daemon.
+The installer, step by step:
 
-Re-running is idempotent.
+1. Checks what is present and names the package for anything missing:
+   `uv`, a systemd user session, the system PySide6, and a panel that can show
+   a tray icon.
+2. Runs `uv sync` to create `.venv/` from `uv.lock`.
+3. Builds the settings window, if `npm` and `cargo` are there. Without them
+   everything else still works, only the settings UI is missing.
+4. Installs its icon and menu entry into `~/.local/share`, and refreshes the
+   menu cache.
+5. Tells the compositor to keep the kiosk window out of the task list, in
+   whatever way that compositor understands (see
+   [Desktop environments](#desktop-environments)).
+6. Renders both systemd units into `~/.config/systemd/user/`, with the project
+   path and the `uv` path baked in.
+7. Enables and starts them, then reports whether they came up.
 
-### Starting the service
+Re-running is idempotent. Options:
 
 ```bash
-systemctl --user start  edge-dashboard         # one-shot run
-systemctl --user enable --now edge-dashboard   # auto-start at graphical login
-journalctl --user -u edge-dashboard -f         # live logs
+./scripts/install.sh --no-build      # skip building the settings window
+./scripts/install.sh --no-start      # install, but do not start anything
+./scripts/install.sh --no-autostart  # start now, but not at the next login
 ```
 
-The dashboard is now served at `http://127.0.0.1:8765/` — open it in any
-browser to test.
-
-### Launching the kiosk
+The kiosk window needs the **distribution's** PySide6, not a wheel in the
+virtualenv: it links against the system Qt WebEngine, which is the build that
+carries the codecs the YouTube widget plays.
 
 ```bash
-./scripts/kiosk.sh
+sudo pacman -S pyside6           # Arch / CachyOS
 ```
 
-By default this picks the first connected output matching the Edge's
-native `2560×720` resolution and opens Chromium fullscreen on it. See
-[Kiosk display setup](#kiosk-display-setup) for overrides and
-multi-monitor edge cases.
+### Afterwards
+
+```bash
+systemctl --user status edge-dashboard edge-kiosk         # what is running
+journalctl --user -u edge-dashboard -u edge-kiosk -f      # live logs
+systemctl --user stop   edge-dashboard edge-kiosk         # stop both
+```
+
+The dashboard is also served at `http://127.0.0.1:8765/`, so it can be opened
+in any browser to test without the kiosk window.
+
+![The EDGE//DASH settings window showing the theme picker](docs/screenshots/settings-theme.png)
+
+### Launching the kiosk by hand
+
+```bash
+PYTHONPATH=$PWD/shell /usr/bin/python3 -m edge_kiosk
+```
+
+It picks the output matching the Edge's native `2560×720` and fills it. If
+the display appears later than the window (a cold boot), the window moves over
+by itself when it shows up. `--help` lists the overrides; see
+[Kiosk display setup](#kiosk-display-setup).
+
+### Settings window
+
+The installer builds it. These are the commands behind that, for development
+or for a rebuild after changing the UI:
+
+```bash
+cd gui
+npm install
+npm run tauri dev                 # dev server on http://localhost:5173
+npm run tauri build -- --no-bundle # just the binary, which is all that is used
+npm run tauri build               # additionally a .deb (and an AppImage)
+```
+
+Needs Node ≥ 20, Rust, and `webkit2gtk-4.1`. Running from the checkout needs
+no bundle: the binary in `src-tauri/target/release/` is what the tray and the
+menu entry point at, which is why the installer passes `--no-bundle`. The full
+build also produces a `.deb`; its AppImage step currently fails in
+`linuxdeploy` on Arch.
+
+The window talks to the same backend over HTTP, and nothing about it is
+required for the display to run. It can also be opened as a plain page during
+development, which is what the dev server is for.
+
+![The quick action deck being edited in the settings window](docs/screenshots/settings-actions.png)
+
+There are two ways in, and the installer sets up both: the **tray icon** and
+the **EDGE//DASH entry in the application menu**. A click on the tray opens
+the window, a right click gives a small menu. The window is a single instance,
+so opening it again brings the existing one forward instead of stacking up
+another. Finding no backend, it starts the services itself rather than only
+reporting that nothing answers.
+
+The icon and the menu entry come from `scripts/install-desktop.sh`. Without
+them a task manager has no `.desktop` file to match the window's app id
+(`edgedash`) against and shows a question mark instead of an icon:
+
+```bash
+./scripts/install-desktop.sh    # into ~/.local/share, no root needed
+```
+
+The icon itself is drawn by `backend/brand.py`, the same code the tray uses,
+so the two cannot drift apart. After changing it:
+
+```bash
+uv run python scripts/make-icon.py    # re-renders every icon file
+./scripts/install-desktop.sh          # copies them into the icon theme
+```
+
+The icon needs the settings window to have been built, and the tray starts the
+binary it finds, in this order:
+
+1. `$EDGE_GUI_BINARY`
+2. `/usr/bin/edgedash`, `/usr/local/bin/edgedash` (installed from the `.deb`)
+3. `gui/src-tauri/target/release/edgedash`, then the debug build
+4. `edgedash` anywhere on `$PATH`
+
+Without a panel that speaks StatusNotifierItem, or without a session bus at
+all, the tray is skipped and the backend runs on unchanged. `EDGE_TRAY=0` in
+the unit turns it off deliberately.
+
+### Autostart
+
+**System** in the settings window switches the autostart for both user units
+at once. It writes the same units `scripts/install.sh` renders and runs
+`systemctl --user enable`/`disable` on them, deliberately without `--now`, so
+the switch governs the next login and never restarts the backend that is
+answering the request.
 
 ### Manual install (without the script)
 
 ```bash
 uv sync                                # install deps into ./.venv
 uv run python -m backend.main          # run on http://127.0.0.1:8765
-uv run pytest                          # 130-test suite, should pass clean
+uv run pytest                          # ~200 tests, should pass clean
 ```
 
-To run as a system service without the installer, copy
-`systemd/edge-dashboard.service` to `~/.config/systemd/user/`, replace
-`__PROJECT_DIR__` with the absolute path of your checkout and `__UV__`
-with `$(command -v uv)`, then `systemctl --user daemon-reload`.
+To run as a service without the installer, copy both units from `systemd/`
+into `~/.config/systemd/user/`, replacing `__PROJECT_DIR__` with the absolute
+path of the checkout and `__UV__` with `$(command -v uv)`, then
+`systemctl --user daemon-reload` and enable them. The kiosk unit deliberately
+runs `/usr/bin/python3`, not the virtualenv, for the system PySide6.
 
 ## Configuration
 
 The dashboard loads its config in this order:
 
-1. `$EDGE_CONFIG` environment variable (explicit path — useful for tests).
+1. `$EDGE_CONFIG` environment variable (explicit path, useful for tests).
 2. `config.local.yaml` in the project root, if it exists.
 3. `config.yaml` (the committed template).
 
-**Workflow**: edit settings through the UI (swipe up from the bottom
-edge, or long-press a page indicator dot — see [Touch gestures](#touch-gestures)).
-Changes persist to `config.local.yaml`, which is gitignored. The committed
-`config.yaml` stays as a clean template.
+**Workflow**: edit in the settings window, not in the file. What it saves
+goes to `config.local.yaml`, which is gitignored, so the committed
+`config.yaml` stays a clean template. The write is atomic and keeps the
+replaced version as `config.local.yaml.bak`.
 
 ### Top-level schema
 
@@ -188,15 +356,15 @@ Each key under `modules:` matches a `Module` subclass's `name`. Common
 fields: `enabled` (bool) and `interval` (seconds between polls). Module-
 specific keys are forwarded to the module.
 
-> **Edit in the UI, not the file.** The `Settings → Module` tab renders an
-> input for every editable field a module declares — enable/interval plus
-> module-specific options (Smart-Lights API keys, disk `min_size_gb` /
-> mountpoints, `top_processes` limit, Quick-Actions timeouts, …). Secrets
-> are masked (`••••`) and only overwritten when you type a new value. The
-> YAML below is the reference for what those fields mean; you rarely need to
-> touch it by hand. Modules expose these fields via `settings_schema` (see
-> `SettingField` in `backend/modules/base.py`) — declaring one there makes it
-> appear in the UI automatically, no bespoke UI code.
+> **Edit in the settings window, not in the file.** Its **Module** view
+> renders an input for every field a module declares: enabled and interval,
+> plus whatever is module-specific (smart-light API keys, disk `min_size_gb`
+> and mountpoints, the `top_processes` limit, quick-action timeouts). Secrets
+> are masked and only overwritten when a new value is typed. The YAML below is
+> the reference for what those fields mean, not a place you normally edit.
+> A module declares them through `settings_schema` (see `SettingField` in
+> `backend/modules/base.py`), and declaring one there is all it takes for the
+> window to show it.
 
 ```yaml
 modules:
@@ -253,7 +421,7 @@ modules:
 
 A **Stream-Deck-style tile grid**. Each tile runs a local shell command,
 fires an HTTP request, launches a desktop app, or opens a folder of nested
-tiles. The frontend only ever knows opaque action IDs — the actual
+tiles. The frontend only ever knows opaque action IDs, the actual
 commands, URLs and HTTP headers stay in the backend config and never reach
 the browser. Shell actions run via an argv list (no shell interpreter, so
 no globbing / interpolation / pipes).
@@ -263,16 +431,14 @@ and paginates the overflow with a pager strip. Tiles can span multiple
 cells, carry their own colours, sit at a fixed cell, and show a live
 on/off status dot.
 
-**Editing.** The easiest path is in the widget itself: **long-press the
-deck** to enter edit mode, then drag tiles between cells, resize them from
-the corner handle, remove with `×`, and tap an empty `+` cell for the
-quick-add menu (lock / reboot / volume / folder / *launch a program…* /
-custom / blank). A single tile editor covers icon, label, kind,
-command/URL, confirm dialog, colours, size and live status. `Save` writes
-the whole tree back. The same actions are also editable under
-`Settings → Aktionen`.
+**Editing.** In the settings window under `Aktionen`: the deck is drawn as a
+grid, clicking a cell selects the tile and the panel beside it holds icon,
+label, kind, command or URL, HTTP headers, confirmation, colours, size,
+position and the live-status probe. `Ausführen` fires the action so you can
+check it without leaving the editor, and a double click descends into a
+folder.
 
-![Edge Dashboard](docs/screenshots/Shot_3.png)
+![The quick action deck on the display](docs/screenshots/kiosk-actions.png)
 
 #### YAML schema
 
@@ -356,17 +522,17 @@ modules:
 
 Field notes:
 
-- `icon` — emoji/plain text, `ti:<name>` for a vendored [Tabler](https://tabler.io/icons)
+- `icon`: emoji/plain text, `ti:<name>` for a vendored [Tabler](https://tabler.io/icons)
   icon, or `app:<name>` for a resolved desktop-app icon.
-- `color` / `text_color` — hex only (`#rgb` or `#rrggbb`); omit to inherit
+- `color` / `text_color`: hex only (`#rgb` or `#rrggbb`); omit to inherit
   the theme.
-- `w` / `h` — tile span in grid cells (1..4). `page` / `x` / `y` pin it to
+- `w` / `h`: tile span in grid cells (1..4). `page` / `x` / `y` pin it to
   a cell; leave `x` / `y` unset to auto-flow into the next free cell.
-- `status` — optional live probe (`shell` or `http`). With a `match` regex
+- `status`: an optional live probe (`shell` or `http`). With a `match` regex
   the state is `on` if the output matches, else `off`; without `match` it
   follows success (shell exit 0 / HTTP 2xx). A failing probe yields
   `unknown`. Only the derived `state` is sent to the frontend.
-- `detach` (shell) — launch fire-and-forget in a new session; use it for
+- `detach` (shell): launch fire-and-forget in a new session; use it for
   GUI programs that outlive the request.
 
 ### Smart lights
@@ -395,7 +561,7 @@ modules:
       region:    "eu"       # eu | us | cn | in (closest to your account)
 ```
 
-Leave either block empty (`api_key: ""`) to disable that provider — the
+Leave either block empty (`api_key: ""`) to disable that provider. The
 widget shows a "not configured" hint instead of erroring out.
 
 ### Pages and widget placement
@@ -403,7 +569,16 @@ widget shows a "not configured" hint instead of erroring out.
 Each page is a CSS-Grid container. `grid.columns` and `grid.rows` are
 literal `grid-template-columns` / `grid-template-rows` values. Each
 widget gets a 1-indexed `col` / `row` plus optional `colspan` / `rowspan`.
-The optional `variant` is an opaque string the widget can branch on.
+The optional `variant` picks one of the looks a widget offers. A widget
+declares them in its own JS file (`static variants = [...]`), the backend
+reads that when it scans the widget directory, and the layout editor offers
+exactly those in a list, so there is nothing to remember or mistype. Leave it
+out for the widget's default look.
+
+The metric widgets (cpu, gpu, ram, network, sensors, disk_usage) know
+`compact`: the number and its subtitle, no chart. It is meant for small tiles,
+and it leaves the chart out of the page entirely rather than hiding it, so it
+costs no drawing time at all.
 
 ```yaml
 pages:
@@ -429,16 +604,17 @@ pages:
       columns: "1fr 1fr"
       rows: "1fr 1fr"
     widgets:
-      - { id: cpu,     col: 1, row: 1, variant: detail }
-      - { id: gpu,     col: 2, row: 1, variant: detail }
+      - { id: cpu,     col: 1, row: 1, variant: compact }
+      - { id: gpu,     col: 2, row: 1, variant: compact }
       - { id: network, col: 1, row: 2 }
       - { id: sensors, col: 2, row: 2 }
 ```
 
-In practice it's easier to set this up visually with the **layout editor**:
-open the settings sheet, tab `Layout` → "Enable edit mode". Drag to move,
-resize from the bottom-right handle, `×` to remove, `+` to add widgets
-or pages.
+In practice it's easier to set this up in the settings window under `Layout`:
+pages as tabs, a preview locked to the display's 32:9 proportion, and the
+column/row/span numbers for every widget beside it.
+
+![Pomodoro, disks and sensors on the second page](docs/screenshots/kiosk-tools.png)
 
 ## Available widgets
 
@@ -456,94 +632,101 @@ or pages.
 | `weather` | `weather` | Current + hourly forecast |
 | `media` | `media` | MPRIS player controls + album art |
 | `youtube` | `youtube` | Tile grid; tap opens fullscreen embed |
-| `quick_actions` | `quick_actions` | Stream-Deck tile grid — shell / HTTP / app-launch tiles, folders, live status |
+| `quick_actions` | `quick_actions` | Stream-Deck tile grid: shell, HTTP and app-launch tiles, folders, live status |
 | `smart_lights` | `smart_lights` | Govee + Tuya unified control |
 | `pomodoro` | none (frontend-only) | Pomodoro timer + stopwatch |
 | `notes` | (REST `/api/notes`) | Tabbed plain-text notepad |
 
 ## Kiosk display setup
 
-`scripts/kiosk.sh` picks the output matching `EDGE_WIDTH × EDGE_HEIGHT`
-(default `2560×720`). Detection order:
+The kiosk window picks its output itself, in this order:
 
-1. `$EDGE_OUTPUT` (forces a specific connector, e.g. `DP-3`).
-2. **Wayland**: `wlr-randr` — first output with that mode marked
-   `current`. Works on wlroots-based compositors (Sway, Hyprland, river,
-   labwc, …).
-3. **X11 / XWayland**: `xrandr` — first connected output with that
-   geometry.
-4. **Fallback**: plain `--kiosk` on the primary display.
-
-### Override examples
+1. `--output` / `$EDGE_OUTPUT`: a connector name, e.g. `DP-4`.
+2. The first screen whose resolution matches `--width × --height`
+   (default `2560×720`).
+3. The primary screen, as a fallback, and it moves over as soon as the real
+   display appears.
 
 ```bash
-EDGE_OUTPUT=DP-3 ./scripts/kiosk.sh         # force a connector
-EDGE_WIDTH=1920 EDGE_HEIGHT=1080 …          # different panel
-EDGE_URL=http://my-host:8765 …              # remote dashboard
-EDGE_BROWSER=brave-browser …                # different Chromium build
+edge-kiosk --output DP-4                 # force a connector
+edge-kiosk --width 1920 --height 1080    # different panel
+edge-kiosk --url http://my-host:8765     # remote backend
+edge-kiosk --windowed                    # a normal window, for development
+edge-kiosk --debug-port 9222             # Chromium remote debugging
 ```
 
-### KDE Plasma 6 (Wayland)
+(`edge-kiosk` above is `PYTHONPATH=$PWD/shell /usr/bin/python3 -m edge_kiosk`.)
 
-KWin Wayland ignores `--window-position` from XWayland clients and
-applies its own placement policy — which often lands the kiosk on the
-primary monitor at cold boot, before the target output is fully
-arranged. To make placement deterministic, `kiosk.sh` writes a
-per-session KWin window rule to `~/.config/kwinrulesrc` on every launch:
+Ctrl+R reloads, Ctrl+Q quits, F11 leaves fullscreen, for the times a keyboard
+is actually attached. The cursor is hidden unless `--show-cursor` is given.
 
-- Match: `chrome-<host>` substring on the window's resource class (so the
-  rule survives port / path changes in `EDGE_URL`).
-- Force: `output`, `position`, `size`, `fullscreen`,
-  `skip taskbar/pager/switcher`.
-- Reload via `qdbus6 org.kde.KWin reconfigure`.
+### Why this is not a browser any more
 
-The rule is upserted by id — your other KWin rules stay intact. To remove
-it, delete the `[edge-dashboard-kiosk]` group from `kwinrulesrc`. The
-behaviour only activates when `kwriteconfig6` + `qdbus6` are present
-(Plasma 6); on other compositors `kiosk.sh` skips it silently.
+It used to be Chromium started from a shell script, and placing that window was
+the hard part: Chromium is an XWayland client, KWin ignores the geometry such a
+client asks for, and on a cold boot the window regularly landed on the primary
+monitor because the Xeneon was not arranged yet. The workaround was a generated
+KWin rule in `~/.config/kwinrulesrc`.
+
+The window is ours now, so Qt places it directly on the `QScreen` we picked and
+no rule is involved in placing it. The `[edge-dashboard-kiosk]` group in
+`~/.config/kwinrulesrc` still exists, but it does something else entirely now:
+it only keeps the window out of the task list, carries no geometry, and is
+rewritten by `scripts/window-rule.sh`. If you ran an older version, that
+script clears the stale placement keys out of it on its next run.
 
 ## Adding a widget
 
+The full walkthrough is in [Writing a widget](docs/widgets.md). In short:
+
 The registry pattern means new widgets need **zero changes** to the core:
 
-1. **Backend producer** — drop a `Module` subclass in
+1. **Backend producer**: drop a `Module` subclass in
    `backend/modules/<name>.py`, decorate with `@register_module`. Override
    `setup()` (one-time init), `poll()` (returns a JSON-serialisable dict),
    and optionally `teardown()`.
-2. **Frontend consumer** — drop a class in `frontend/js/widgets/<name>.js`
+2. **Frontend consumer**: drop a class in `frontend/js/widgets/<name>.js`
    that calls `registerWidget(name, class)`. The class needs at least
    `mount(el, initial, meta)` and `update(data, moduleName, ts)`, plus
    a static `modules = [...]` listing which backend modules to subscribe
    to. `destroy()` is called on teardown.
-3. **Wire it up** — add the module to `config.yaml` under `modules:` and
-   place the widget on a page (or do it in the layout editor at runtime).
+3. **Wire it up**: add the module to `config.yaml` under `modules:` and
+   place the widget on a page (or do it in the settings window's Layout view).
 
 Frontend-only widgets (no backend producer) work too: just set
 `static modules = []`. See `clock.js`, `pomodoro.js`, `notes.js`.
 
 ## Themes
 
-Drop a `<name>.css` file in `frontend/css/themes/` and it appears in the
-settings sheet automatically — themes are auto-discovered by the backend
-from the directory listing. CSS files should define the same custom
+See [Writing a theme](docs/themes.md) for the variables and what to watch out
+for. In short: drop a `<name>.css` file in `frontend/css/themes/` and it
+appears in the settings window automatically. Themes are auto-discovered by the backend from
+the directory listing, and the window previews each one by loading its actual
+stylesheet. CSS files should define the same custom
 properties as `cyberpunk.css` (the canonical reference).
 
 ## Languages
 
 UI strings live in `frontend/locales/<code>.json`, fetched at boot by
-`frontend/js/i18n.js`. Detection: `navigator.languages` → first match in
-`SUPPORTED` → fallback to English. The user can override in
-`Settings → Design → Sprache`; the override persists in `localStorage`.
+`frontend/js/i18n.js`. The display's language is the config value
+`default_language` (`auto` | `en` | `de`), set in the settings window under
+`Design`; `auto` falls back to `navigator.languages`. It is a config value
+rather than a per-device preference because the settings window is a separate
+application and cannot write the display's browser storage.
+
+The window has its own language under `Language`, and pulls the same locale
+files from the backend so module labels need no second translation.
 
 Adding a language: drop a new JSON file alongside `en.json` / `de.json`,
-extend `SUPPORTED` in `frontend/js/i18n.js`. That's it.
+extend `SUPPORTED` in `frontend/js/i18n.js`, and `SUPPORTED_LANGUAGES` in
+`gui/src/i18n/index.ts`.
 
 ## Development
 
 ```bash
 uv sync                              # set up .venv
 uv run python -m backend.main        # dev server with auto-restart via uvicorn flags
-uv run pytest                        # 130-test suite
+uv run pytest                        # ~200 tests
 uv run ruff check                    # lint
 uv run ruff format                   # format
 ```
@@ -556,7 +739,10 @@ backend/
   hub.py              Module runner, WebSocket fanout, hot-reload
   config.py           Pydantic schema (single source of truth)
   notes.py            REST store for the notes widget
-  modules/            Module subclasses — one file per backend producer
+  tray.py             Tray icon (StatusNotifierItem over D-Bus)
+  autostart.py        The autostart switch, writes and enables the units
+  brand.py            The app icon, drawn once for the tray and the window
+  modules/            Module subclasses, one file per backend producer
 frontend/
   index.html
   js/
@@ -564,35 +750,36 @@ frontend/
     registry.js       registerWidget / getWidget
     i18n.js           Tiny t() helper
     ws.js             WebSocket client with auto-reconnect
-    swiper.js         Page swiping + long-press + bottom-edge swipe-up
-    theme.js          Theme manager + settings sheet
-    layout_editor.js  In-browser drag/resize/add layout editor
+    swiper.js         Page swiping
+    theme.js          Theme manager (follows the backend's default_theme)
     confirm.js        Themed confirm dialog
     widgets/          One file per frontend consumer
-    settings/         Editor sub-views (currently just quick_actions)
-    lib/              Sparkline (in-house, no dependencies)
+    lib/              Sparkline, icons, frame ticker, value smoothing
   css/
     base.css          Layout + general components
     widgets.css       Per-widget styles
     fonts.css
     themes/           One file per theme
   locales/            One JSON file per language
+shell/
+  edge_kiosk/         The kiosk window (Qt WebEngine, system Python)
+gui/
+  src/                EDGE//DASH — the settings window (React)
+  src-tauri/          Its window frame (Tauri 2)
 config.yaml           Committed template
-config.local.yaml     Gitignored, written by the UI
-systemd/              User unit template
+config.local.yaml     Gitignored, written by the settings window
+systemd/              User unit templates (backend + kiosk)
 scripts/
-  install.sh          Idempotent installer (uv sync + systemd unit)
-  kiosk.sh            Chromium kiosk launcher with output detection
+  install.sh          The installer, does everything below as well
+  install-desktop.sh  Icon and menu entry for the settings window
+  window-rule.sh      Keeps the kiosk out of the task list, per compositor
+  make-icon.py        Renders every icon file from backend/brand.py
+docs/
+  widgets.md          Guide: writing a widget
+  themes.md           Guide: writing a theme
 tests/                pytest, asyncio mode auto
 ```
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
-## Support
-
-If this is useful to you, you can support development on
-[Ko-Fi](https://ko-fi.com/labratox).
-
-![Edge Dashboard](docs/screenshots/Shot_2.png)
+MIT, see [LICENSE](LICENSE).

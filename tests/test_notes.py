@@ -37,7 +37,8 @@ pages:
       - { id: heartbeat, area: hb }
 """
     )
-    from backend import main as main_mod, notes as notes_mod
+    from backend import main as main_mod
+    from backend import notes as notes_mod
 
     monkeypatch.setattr(main_mod, "LOCAL_CONFIG", tmp_path / "config.local.yaml")
     # Pin notes storage to the tmp dir so the test doesn't touch real data.
@@ -98,7 +99,8 @@ pages: [{ id: main, grid: { columns: "1fr", rows: "1fr", areas: ["hb"] },
           widgets: [{ id: heartbeat, area: hb }] }]
 """
     )
-    from backend import main as main_mod, notes as notes_mod
+    from backend import main as main_mod
+    from backend import notes as notes_mod
 
     monkeypatch.setattr(main_mod, "LOCAL_CONFIG", tmp_path / "config.local.yaml")
     monkeypatch.setattr(

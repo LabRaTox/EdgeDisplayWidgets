@@ -11,9 +11,14 @@ function classify(temp) {
 
 class SensorsWidget {
   static modules = ["sensors"];
+  static variants = ["compact"];
 
-  mount(el) {
+  mount(el, _, ctx) {
     this.el = el;
+    // No chart to drop here — this widget is a list, so compact shortens the
+    // list instead: only the readings the backend marked as primary, which is
+    // what fits on a small tile anyway.
+    this.compact = ctx?.variant === "compact";
     el.innerHTML = `
       <h3>${t("widget.sensors.title")}</h3>
       <div class="sensors-list" data-bind="list">
@@ -30,7 +35,13 @@ class SensorsWidget {
       this._cells.clear();
       return;
     }
-    const readings = data.readings || [];
+    let readings = data.readings || [];
+    if (this.compact) {
+      // Fall back to the full list rather than showing an empty widget when
+      // no reading is marked primary — that depends on the machine's sensors.
+      const primary = readings.filter((r) => r.primary);
+      if (primary.length > 0) readings = primary;
+    }
     if (readings.length === 0) {
       list.innerHTML = `<div class="sensors-empty">${t("widget.sensors.empty")}</div>`;
       this._cells.clear();

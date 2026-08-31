@@ -44,6 +44,9 @@ class SystemModule(Module):
 
     name = "system"
     default_interval = 1.0
+    # Feeds the CPU / RAM / network sparklines: every poll is one sample of a
+    # history graph, so an unchanged value still has to reach the clients.
+    dedupe = False
 
     def __init__(self, config: dict[str, Any]) -> None:
         super().__init__(config)

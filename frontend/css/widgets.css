@@ -82,6 +82,23 @@ body[data-ws-status="connecting"] .hb-dot {
   min-height: 0;
 }
 
+/* The `compact` variant (see the widget JS): the chart is not in the DOM at
+   all, so what is left has to fill the tile on its own. Without this the
+   number sits at the top with the empty half below it, which reads as a
+   widget that failed to load rather than a deliberately small one. */
+.widget[data-variant="compact"] {
+  justify-content: center;
+}
+.widget[data-variant="compact"] .metric-sub {
+  margin-bottom: 0;
+}
+/* The list widgets have no chart to begin with; compact only shortens their
+   rows, and those should still start at the top. */
+.widget-sensors[data-variant="compact"],
+.widget-disk_usage[data-variant="compact"] {
+  justify-content: flex-start;
+}
+
 .widget .metric-head {
   display: flex;
   justify-content: space-between;
@@ -1264,18 +1281,6 @@ body[data-ws-status="connecting"] .hb-dot {
   height: 20px;
   flex-shrink: 0;
 }
-.qa-deck-nav-spacer { flex: 1; }
-.qa-deck-back {
-  appearance: none;
-  background: transparent;
-  border: none;
-  color: var(--fg-muted);
-  font-family: inherit;
-  font-size: 0.78rem;
-  cursor: pointer;
-  padding: 2px 4px;
-}
-.qa-deck-back:hover { color: var(--fg); }
 .qa-deck-arrow {
   appearance: none;
   background: transparent;
@@ -1306,180 +1311,9 @@ body[data-ws-status="connecting"] .hb-dot {
 }
 .qa-deck-dot.is-active { opacity: 1; background: var(--accent); }
 
-/* ---- In-widget edit mode ---- */
-.qa-editing .qa-deck-grid { outline: 1px dashed var(--card-border); outline-offset: 4px; border-radius: 8px; }
-.qa-tile-edit {
-  cursor: grab;
-  user-select: none;
-  touch-action: none;
-}
-.qa-tile-edit.is-grabbing { cursor: grabbing; opacity: 0.92; z-index: 5; }
-.qa-edit-remove {
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.55);
-  color: #fff;
-  border: none;
-  font-size: 0.95rem;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2;
-}
-.qa-edit-resize {
-  position: absolute;
-  right: 3px;
-  bottom: 3px;
-  width: 13px;
-  height: 13px;
-  cursor: nwse-resize;
-  border-right: 3px solid var(--accent);
-  border-bottom: 3px solid var(--accent);
-  opacity: 0.85;
-  z-index: 2;
-}
-.qa-edit-cell {
-  border: 1px dashed var(--card-border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.02);
-  color: var(--fg-muted);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  transition: border-color 120ms ease, color 120ms ease;
-}
-.qa-edit-cell:hover { border-color: var(--accent); color: var(--accent); }
-.qa-edit-btn {
-  appearance: none;
-  background: transparent;
-  border: 1px solid var(--card-border);
-  border-radius: 6px;
-  color: var(--fg);
-  font-family: inherit;
-  font-size: 0.78rem;
-  padding: 3px 12px;
-  cursor: pointer;
-}
-.qa-edit-btn.is-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #04121a;
-  font-weight: 600;
-}
-.qa-edit-pageno { font-size: 0.75rem; color: var(--fg-muted); }
-.qa-add-menu {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 30;
-  background: var(--bg);
-  border: 1px solid var(--card-border);
-  border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
-  padding: 6px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  max-width: 92%;
-}
-.qa-add-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: var(--fg);
-  font-family: inherit;
-  font-size: 0.85rem;
-  cursor: pointer;
-  text-align: left;
-}
-.qa-add-item:hover { border-color: var(--accent); }
-.qa-add-icon { display: inline-flex; }
-.qa-add-icon .ti-svg { width: 20px; height: 20px; }
-
-/* Installed-program picker (launch button flow). */
-.qa-app-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1150;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-.qa-app-picker {
-  width: min(420px, 96vw);
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
-  padding: 12px;
-  gap: 8px;
-}
-.qa-app-search {
-  padding: 8px 10px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid var(--card-border);
-  border-radius: 6px;
-  color: var(--fg);
-  font-family: inherit;
-  font-size: 0.95rem;
-}
-.qa-app-list {
-  overflow-y: auto;
-  scrollbar-width: thin;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.qa-app-item {
-  appearance: none;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  text-align: left;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--fg);
-  font-family: inherit;
-  font-size: 0.9rem;
-  padding: 7px 10px;
-  cursor: pointer;
-}
-.qa-app-item:hover { background: rgba(255, 255, 255, 0.06); border-color: var(--accent); }
-.qa-app-ico {
-  width: 26px;
-  height: 26px;
-  flex-shrink: 0;
-  object-fit: contain;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.qa-app-ico-ph { color: var(--fg-muted); }
-.qa-app-ico-ph .ti-svg { width: 22px; height: 22px; }
-.qa-app-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.qa-app-empty { color: var(--fg-muted); text-align: center; padding: 12px; }
-
 /* App icons rendered as <img> (app:<name>) on tiles and in pickers. */
 .qa-appimg { object-fit: contain; }
 .qa-tile-icon .qa-appimg { width: 1.9rem; height: 1.9rem; }
-.qa-icon-btn .qa-appimg { width: 22px; height: 22px; }
 
 /* --- Smart lights widget ------------------------------------------ */
 .smart-lights-widget {
