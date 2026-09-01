@@ -43,8 +43,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .base import Module, SettingField, register_module
 
-# Tiles inject `color` / `text_color` into a `style` attribute on the frontend,
-# so restrict them to plain hex to keep arbitrary CSS (url(), expressions) out.
+# `color` / `text_color` are handed to the display and painted as given, so
+# restrict them to plain hex: a value that is not a colour would otherwise
+# reach a colour property, and the kiosk checks again for the same reason.
 _HEX_COLOR = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 
 

@@ -1,18 +1,19 @@
 # Ein Widget schreiben
 
-Ein Widget besteht aus zwei Dateien, die einander nie importieren:
+Ein Widget besteht aus drei Dateien, die einander nie importieren:
 
 * ein **Backend-Modul** in `backend/modules/`, das Daten erzeugt
-* ein **Frontend-Widget** in `frontend/js/widgets/`, das sie zeichnet
+* eine **Anzeige** in `shell/qml_kiosk/qml/widgets/`, die sie zeichnet
+* ein **Manifest** in `widgets/`, das es dem Layout-Editor bekannt macht
 
 Verbunden werden sie vom Hub. Er ruft jedes Modul auf dessen eigenem Takt auf
-und schickt das Ergebnis über einen WebSocket; im Frontend landet jeder Frame
-bei den Widgets, die dieses Modul abonniert haben. Keine Seite weiß von der
-anderen. Deshalb lässt sich ein Widget austauschen, ohne die Datenquelle
+und schickt das Ergebnis über einen WebSocket; im Kiosk landet jeder Frame bei
+den Widgets, die dieses Modul abonniert haben. Keine Seite weiß von der
+anderen. Deshalb lässt sich eine Anzeige austauschen, ohne die Datenquelle
 anzufassen, und ein Modul kann mehrere Widgets versorgen.
 
-Ein Widget, das keine eigenen Daten braucht, kommt ohne Backend-Hälfte aus, so
-wie `clock.js` und `pomodoro.js`.
+Ein Widget, das keine eigenen Daten braucht, kommt ohne Backend-Teil aus, so
+wie Uhr und Pomodoro.
 
 ## Kurzfassung
 
@@ -20,14 +21,17 @@ wie `clock.js` und `pomodoro.js`.
 # 1. die Quelle
 $EDITOR backend/modules/mondphase.py
 # 2. die Anzeige
-$EDITOR frontend/js/widgets/mondphase.js
-# 3. einschalten und platzieren
+$EDITOR shell/qml_kiosk/qml/widgets/Mondphase.qml
+# 3. die Anmeldung
+$EDITOR widgets/mondphase.json
+# 4. einschalten und platzieren
 $EDITOR config.yaml
-systemctl --user restart edge-dashboard
+systemctl --user restart edge-dashboard edge-kiosk
 ```
 
-Beide Dateien werden über ihren Namen gefunden: das Modul meldet sich per
-Dekorator an, die Widget-Datei wird über die id aus dem Layout importiert.
+Alle drei werden über ihren Namen gefunden: das Modul meldet sich per
+Dekorator an, das Manifest liegt unter seiner id, und die Anzeige heißt wie
+die id in CamelCase.
 
 ## Das Backend-Modul
 
@@ -59,7 +63,7 @@ class MoonPhaseModule(Module):
         """Beim Neuladen und beim Beenden. Schließen, was setup geöffnet hat."""
 ```
 
-Das ist ein vollständiges Modul. Was die Basisklasse darüber hinaus anbietet:
+Das ist ein vollständiges Modul. Was die Basisklasse sonst noch anbietet:
 
 | | |
 |---|---|
@@ -73,8 +77,8 @@ nicht mit.
 
 ### Einstellbare Felder
 
-`enabled` und `interval` bekommt jedes Modul ohne Zutun. Alles darüber hinaus
-wird deklariert, und das Fenster baut daraus die Eingabe:
+`enabled` und `interval` bekommt jedes Modul ohne Zutun. Alles Weitere wird
+deklariert, und das Fenster baut daraus die Eingabe:
 
 ```python
 from .base import Module, SettingField, register_module
@@ -103,79 +107,149 @@ dort in beiden Sprachen ergänzen.
 weist unbekannte Schlüssel ab, ein Wert, den der laufende Prozess nicht kennt,
 scheitert beim Speichern an der Validierung.
 
-## Das Frontend-Widget
+## Die Anzeige
 
-```js
-import { registerWidget } from "../registry.js";
-import { t } from "../i18n.js";
+Die Anzeige ist eine QML-Datei in `shell/qml_kiosk/qml/widgets/`. Sie heißt
+wie das Widget, in CamelCase: `mondphase` wird zu `Mondphase.qml`.
 
-class MoonPhaseWidget {
-  // Welche Module empfangen werden. Leer, wenn das Widget keine Daten braucht.
-  static modules = ["mondphase"];
-  // Freiwillig: die Darstellungen, die dieses Widget kennt. Der Layout-Editor
-  // bietet genau diese an.
-  static variants = ["compact"];
+```qml
+import QtQuick
+import QtQuick.Layouts
+import ".."
 
-  mount(el, initial, ctx) {
-    this.el = el;
-    this.compact = ctx?.variant === "compact";
-    el.innerHTML = `
-      <div class="metric-head">
-        <h3>${t("widget.mondphase.title")}</h3>
-        <div class="metric-big" data-bind="phase">–</div>
-      </div>
-      ${this.compact ? "" : `<div class="metric-sub" data-bind="days">–</div>`}
-    `;
-    if (initial) this.update(initial);
-  }
+Item {
+    id: root
+    // Wird vom Fenster gesetzt, sobald das Widget geladen ist.
+    property var theme
+    // Welche Module ankommen. Leer, wenn das Widget keine Daten braucht.
+    readonly property var moduleNames: ["mondphase"]
+    // Was im Layout unter `options` steht, unverändert.
+    property var options: ({})
+    // Ist die Kachel als `compact` platziert?
+    property bool compact: false
 
-  update(data, moduleName, ts) {
-    if (!data) return;
-    this.el.querySelector('[data-bind="phase"]').textContent =
-      `${Math.round(data.fraction * 100)}%`;
-    if (this.compact) return;
-    this.el.querySelector('[data-bind="days"]').textContent =
-      `${data.days.toFixed(1)} d`;
-  }
+    property var payload: null
 
-  destroy() {
-    // Timer stoppen, Observer trennen, Sparklines abbauen. Wird aufgerufen,
-    // wenn das Widget verschwindet oder die Seite nach einer Änderung neu
-    // aufgebaut wird.
-  }
+    // Wird für jeden Frame eines abonnierten Moduls gerufen. Bei mehreren
+    // Einträgen in `moduleNames` sagt `module`, um welches es geht.
+    function receive(module, data) {
+        payload = data
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 0
+
+        Heading {
+            theme: root.theme
+            label: bridge.tr("widget.mondphase.title")
+            Layout.bottomMargin: Style.headingBottom
+        }
+
+        Text {
+            text: root.payload ? Math.round(root.payload.fraction * 100) + "%" : "–"
+            color: root.theme ? root.theme["accent"] : "#00e0ff"
+            font.pixelSize: bridge.metrics.metric_size
+            font.family: root.theme ? root.theme["font-mono"] : "monospace"
+        }
+
+        Text {
+            visible: !root.compact
+            text: root.payload ? root.payload.days.toFixed(1) + " d" : "–"
+            color: root.theme ? root.theme["fg-muted"] : "#888888"
+            font.pixelSize: Style.subSize
+            font.family: root.theme ? root.theme["font-mono"] : "monospace"
+        }
+    }
 }
-
-registerWidget("mondphase", MoonPhaseWidget);
 ```
 
-Die drei Methoden:
+Der Vertrag ist klein:
 
-* **`mount(el, initial, ctx)`** baut das DOM einmal auf. `el` ist die Kachel,
-  `initial` ist die zuletzt bekannte Antwort, falls es eine gibt, damit ein
-  Widget auf einem laufenden Dashboard nicht leer beginnt. `ctx` enthält
-  `{id, variant, options}`.
-* **`update(data, moduleName, ts)`** wird pro Frame aufgerufen. Bei mehreren
-  Einträgen in `static modules` sagt `moduleName`, um welches es geht.
-* **`destroy()`** muss zurücknehmen, was `mount` aufgebaut hat. Ein
-  verschobenes Widget wird abgebaut und neu aufgebaut.
+* **`moduleNames`** bestimmt, was ankommt. Das Fenster stellt nur diese Frames
+  zu, damit eine Kachel nicht bei jedem fremden Frame neu rechnet.
+* **`receive(module, data)`** wird pro Frame gerufen. Beim Laden bekommt das
+  Widget außerdem die zuletzt bekannte Antwort nachgereicht, damit es auf
+  einem laufenden Kiosk nicht leer beginnt.
+* **`theme`**, **`options`**, **`compact`** und **`confirm`** setzt das
+  Fenster, sofern das Widget sie deklariert. `confirm` ist der gemeinsame
+  Rückfrage-Dialog, `ask(text, knopf, gefährlich, callback)`.
+* **`padH`** und **`padV`** sind der Innenabstand, den die Kachel nehmen soll.
+  Ein Theme darf ihn überschreiben, solange die Kachel Platz dafür hat.
+
+Das Aufräumen übernimmt QML: mit dem Objekt geht alles, was daran hängt.
+
+Farben kommen aus `theme`, Maße aus dem Singleton `Style`, Texte aus
+`bridge.tr(...)`. Für die üblichen Formen gibt es fertige Bausteine:
+`Heading`, `Chart`, `MetricWidget`, `CoreBars` und `Confirm`.
+
+Das Fenster findet die Datei über den Namen: `mondphase` wird zu
+`Mondphase.qml`, `disk_usage` zu `DiskUsage.qml`. Die Regel steht in
+`shell/qml_kiosk/views.py`. Findet sich keine Datei, zeigt die Kachel das an,
+statt leer zu bleiben.
+
+## Das Manifest
+
+Erst durch `widgets/<name>.json` kennt der Layout-Editor das Widget. Dass die
+Datei da ist, ist die Anmeldung; was drinsteht, ist freiwillig.
+
+```json
+{
+  "modules": ["mondphase"],
+  "variants": ["compact"]
+}
+```
+
+`modules` wiederholt, was die Anzeige in `moduleNames` deklariert. Der Kiosk
+liest es nicht, er richtet sich nach der QML-Datei; im Manifest steht es,
+damit die Doku und die Anzeige gegeneinander geprüft werden können. Ein Test
+schlägt an, wenn die beiden auseinanderlaufen.
 
 ### Varianten
 
-`static variants = ["compact"]` bringt den Layout-Editor dazu, eine Auswahl
-statt eines Textfelds zu zeigen: das Backend liest diese Zeile beim Scannen
-des Verzeichnisses aus der Datei. Die Variante erreicht das Widget als
-`ctx.variant`, und `data-variant` steht auf der Kachel, damit auch CSS darauf
-zugreifen kann.
+`variants` bringt den Layout-Editor dazu, eine Auswahl statt eines Textfelds
+zu zeigen. Die Variante erreicht das Widget als `compact`.
 
 Die andere Darstellung wirklich bauen, nicht verstecken. `compact` lässt bei
-den Messwert-Widgets das Diagramm aus dem DOM, statt es auf `display: none`
-zu setzen, denn eine versteckte Sparkline zeichnet bei jedem Messwert weiter.
+den Messwert-Widgets das Diagramm über einen `Loader` ganz weg, statt es auf
+`visible: false` zu setzen, denn ein verstecktes Diagramm hält weiter seine
+Textur.
 
 ### Optionen
 
-Was im Layout unter `options` steht, erreicht `ctx.options` unverändert. Der
-Platz für Einstellungen einer einzelnen Instanz, die kein Schema wert sind, so
-wie die Uhr `options: { show_seconds: true }` nimmt.
+`options` beschreibt Felder, die im Layout-Editor unter der Kachel erscheinen,
+im selben Format wie die Modul-Einstellungen (`SettingField`):
+
+```json
+{
+  "modules": ["mondphase"],
+  "options": [
+    {
+      "key": "show_days",
+      "type": "bool",
+      "label_key": "settings.widget.mondphase.show_days",
+      "default": true
+    }
+  ]
+}
+```
+
+Die Typen sind `bool`, `int`, `float`, `text`, `select`, `list` und `color`.
+Ein `select` kann seine Werte vom Server erfragen, statt sie fest zu nennen:
+`"options_source": "sensors"` füllt die Liste mit den aktuellen Sensoren und
+setzt lesbare Beschriftungen dazu. Der Wert landet unverändert in `options`
+des Widgets.
+
+Gespeichert wird dabei die id eines Messwerts, etwa `k10temp@0000:00:18.3:1`.
+Sie nennt den Chip und die Adresse, an der er sitzt, also den PCI-Steckplatz
+oder die i2c-Adresse. Damit zeigt eine Kachel nach einem Neustart weiter auf
+denselben Sensor, und sie kann nie auf einen anderen zeigen: der Chipname
+gehört zur id. Findet sich die id nicht mehr, sagt das Widget das, statt einen
+Nachbarwert anzuzeigen.
+
+Ein fehlerhaftes Manifest kostet das Widget seine Varianten und Optionen und
+schreibt eine Warnung. Das Widget bleibt in der Auswahl, der Editor läuft
+weiter.
 
 ## Einbinden
 
@@ -194,8 +268,8 @@ pages:
       - { id: mondphase, col: 3, row: 2, variant: compact }
 ```
 
-Die id unter `widgets` ist der Dateiname in `frontend/js/widgets/`, der
-Schlüssel unter `modules` ist der `name` des Moduls. Platzieren geht bequemer
+Die id unter `widgets` ist der Dateiname in `widgets/`, der Schlüssel unter
+`modules` ist der `name` des Moduls. Platzieren geht bequemer
 im Layout-Bereich des Einstellungsfensters, der dasselbe YAML schreibt.
 
 Übersetzungen kommen nach `frontend/locales/de.json` und `en.json`. Die
@@ -204,22 +278,29 @@ Syntax zum Einsetzen.
 
 ## Worauf zu achten ist
 
-**Nicht pro Frame animieren.** Das ist der Fehler, der wehtut. 32 CPU-Kerne
-in JavaScript zu interpolieren kostete auf diesem Rechner 29 CPU-Punkte, für
-Balken, die `transition: height 200ms` in CSS ohnehin schon bewegt hat. Ein
-Schreibvorgang pro Messwert, das Bewegen macht CSS.
+**Nicht dauernd animieren.** Das ist der Fehler, der wehtut. Eine Fläche, die
+sich ständig bewegt, kostet auf diesem Rechner rund 20 CPU-Punkte, unabhängig
+davon, wie klein sie ist. Deshalb steht `Chart.travel` auf `false` und deshalb
+zählt das Medien-Widget den Abspielkopf viermal je Sekunde weiter statt pro
+Bild. Bewegung nur da, wo sie etwas erklärt.
 
-**Nur schreiben, wenn sich etwas geändert hat.** `update()` läuft so oft, wie
-das Modul abfragt. Die Knoten in `mount()` merken statt sie jedes Mal neu zu
-suchen, und den Schreibvorgang auslassen, wenn der Text derselbe ist.
+**Bindungen statt Zuweisungen.** Ein Wert, der einmal zugewiesen wird,
+ersetzt die Bindung und wird nie wieder aktualisiert. So zeigte das
+GPU-Widget einmal für immer „GPU“ statt des Kartennamens, weil `text` in
+`Component.onCompleted` gesetzt wurde.
 
 **Listen nur neu aufbauen, wenn sich der Satz ändert**, nicht bei jedem Wert.
-Das Sensoren-Widget vergleicht die aneinandergehängten ids und schreibt sonst
-nur die Zahlen um.
+Ein `clear()` auf einem `ListModel` wirft die Delegates weg, setzt die
+Scrollposition zurück und lädt Bilder neu. Das Sensoren-Widget vergleicht die
+aneinandergehängten ids und schreibt sonst nur die Zahlen um.
 
-**Alles von außen maskieren.** Was aus einer Antwort in `innerHTML` landet,
-muss maskiert werden; in `disk_usage.js` stehen die zwei Hilfsfunktionen
-dafür. Für Werte in einem Attribut gilt dasselbe.
+**Nur die eigenen Module verarbeiten.** `moduleNames` sorgt dafür, dass
+`receive` nicht bei jedem fremden Frame läuft. Ohne das rechnet jede Kachel
+fünfmal je Sekunde für Daten, die einmal je Minute kommen.
+
+**Farben ohne Prüfung sind ein Absturz.** Was aus der Konfiguration in eine
+`color`-Eigenschaft geht, muss vorher gegen `#rgb`/`#rrggbb` geprüft werden;
+`safeColour` in `QuickActions.qml` und `SensorFocus.qml` macht genau das.
 
 **Kacheln sind breit und flach**, und die Anzeige wird berührt, nicht
 geklickt. Ziele unter etwa 44 Pixeln sind darauf ärgerlich.
@@ -228,14 +309,27 @@ geklickt. Ziele unter etwa 44 Pixeln sind darauf ärgerlich.
 
 ```bash
 uv run pytest tests/test_mondphase.py     # ein Modultest braucht keine Anzeige
-uv run python -m backend.main             # dann http://127.0.0.1:8765 öffnen
+/usr/lib/qt6/bin/qmllint -I shell/qml_kiosk/qml \
+    shell/qml_kiosk/qml/widgets/Mondphase.qml
+systemctl --user restart edge-kiosk
 ```
 
 Modultests erzeugen die Klasse und warten auf `poll()`, Beispiele dafür stehen
-reichlich in `tests/`. Fürs Frontend ist der Browser der schnellere Weg: der
-Kiosk hat keine Entwicklerwerkzeuge, dieselbe Seite bekommt aber jeder
-Browser, und ein Neuladen zieht eine geänderte Widget-Datei.
+reichlich in `tests/`. Für die Anzeige ist `qmllint` der schnelle erste
+Durchgang; er findet Tippfehler und unbekannte Eigenschaften, bevor das
+Fenster startet.
+
+Wer nicht jedes Mal den echten Kiosk neu starten will, kann das Fenster
+abseits des Displays rendern:
+
+```bash
+cd shell
+QT_QPA_PLATFORM=offscreen /usr/bin/python3 -m qml_kiosk.main --windowed
+```
+
+Fehler in QML landen dabei auf der Standardfehlerausgabe. `--windowed` setzt
+das Fenster auf den Hauptbildschirm statt auf den Xeneon.
 
 ---
 
-[Ein Theme schreiben](themes.de.md) · [README](../README.de.md) · [English](widgets.md)
+[Ein Theme schreiben](themes.de.md) · [Warum es so aussieht](entscheidungen.md) · [README](../README.de.md) · [English](widgets.md)

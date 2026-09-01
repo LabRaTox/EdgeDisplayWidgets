@@ -154,7 +154,7 @@ def test_post_settings_can_save_new_pages_layout(app):
 
 
 def test_api_widgets_lists_files():
-    """Smoke-test against the real frontend dir."""
+    """Smoke-test against the real manifest directory."""
     from backend.main import create_app
 
     a = create_app()

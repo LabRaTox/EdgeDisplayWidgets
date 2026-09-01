@@ -1,0 +1,79 @@
+{
+  "modules": [
+    "sensors"
+  ],
+  "options": [
+    {
+      "key": "sensor_a",
+      "type": "select",
+      "label_key": "settings.widget.sensor_focus.sensor_a",
+      "default": "",
+      "options_source": "sensors"
+    },
+    {
+      "key": "label_a",
+      "type": "text",
+      "label_key": "settings.widget.sensor_focus.label_a",
+      "help_key": "settings.widget.sensor_focus.label_help",
+      "default": ""
+    },
+    {
+      "key": "color_a",
+      "type": "color",
+      "label_key": "settings.widget.sensor_focus.color_a",
+      "help_key": "settings.widget.sensor_focus.color_help",
+      "default": ""
+    },
+    {
+      "key": "sensor_b",
+      "type": "select",
+      "label_key": "settings.widget.sensor_focus.sensor_b",
+      "default": "",
+      "options_source": "sensors"
+    },
+    {
+      "key": "label_b",
+      "type": "text",
+      "label_key": "settings.widget.sensor_focus.label_b",
+      "help_key": "settings.widget.sensor_focus.label_help",
+      "default": ""
+    },
+    {
+      "key": "color_b",
+      "type": "color",
+      "label_key": "settings.widget.sensor_focus.color_b",
+      "help_key": "settings.widget.sensor_focus.color_help",
+      "default": ""
+    },
+    {
+      "key": "display",
+      "type": "select",
+      "label_key": "settings.widget.sensor_focus.display",
+      "default": "line",
+      "options": [
+        "line",
+        "circle"
+      ],
+      "option_label_keys": [
+        "settings.widget.sensor_focus.display.line",
+        "settings.widget.sensor_focus.display.circle"
+      ]
+    },
+    {
+      "key": "max_c",
+      "type": "float",
+      "label_key": "settings.widget.sensor_focus.max_c",
+      "help_key": "settings.widget.sensor_focus.max_c_help",
+      "default": 100,
+      "min": 20,
+      "max": 150,
+      "step": 5
+    },
+    {
+      "key": "show_unit",
+      "type": "bool",
+      "label_key": "settings.widget.sensor_focus.show_unit",
+      "default": true
+    }
+  ]
+}

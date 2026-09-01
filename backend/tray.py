@@ -77,9 +77,9 @@ TOOLTIP = {
 def _resolve_language(language: str) -> str:
     """Maps the config value to a language the menu has labels for.
 
-    `default_language` may be "auto", which the dashboard resolves in the
-    browser — there is no browser here, so the locale of the session the
-    backend runs in is the next best source.
+    `default_language` may be "auto". The kiosk resolves that from its own
+    environment; here the locale of the session the backend runs in is the
+    next best source.
     """
     if language in LABELS:
         return language

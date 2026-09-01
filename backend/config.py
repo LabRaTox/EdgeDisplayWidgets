@@ -76,8 +76,10 @@ class GridDef(BaseModel):
 def _compute_area_rects(areas: list[str]) -> dict[str, dict[str, int]]:
     """Return the bounding rectangle (1-indexed) for every named area.
 
-    CSS-Grid requires named areas to form rectangles. We don't enforce that
-    again here; the browser would refuse a non-rectangular layout anyway.
+    The format comes from CSS-Grid, where a named area has to form a rectangle.
+    That is not enforced again here: a layout that breaks the rule places its
+    widgets by the bounding box, which is odd but not fatal, and the layout
+    editor writes coordinates rather than areas anyway.
     """
     positions: dict[str, dict[str, int]] = {}
     for r, row_str in enumerate(areas):
@@ -135,12 +137,10 @@ class AppConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     default_theme: str = "cyberpunk"
-    # Interface language of the kiosk. "auto" keeps the old behaviour of
-    # detecting it from the browser. It lives in the config rather than in the
-    # kiosk's localStorage because the settings window is a separate
-    # application on a separate profile: it cannot reach into the kiosk's
-    # browser storage, so anything the window is allowed to change has to be
-    # server-side state.
+    # Interface language of the kiosk. "auto" takes it from `LANG`. It lives in
+    # the config rather than in the kiosk's own storage because the settings
+    # window is a separate application: it cannot write anything the kiosk
+    # keeps to itself, so what the window may change has to be server-side.
     default_language: str = "auto"
     modules: dict[str, ModuleConfig] = Field(default_factory=dict)
     pages: list[PageConfig] = Field(default_factory=list)

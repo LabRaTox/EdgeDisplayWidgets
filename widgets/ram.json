@@ -1,0 +1,9 @@
+{
+  "modules": [
+    "system",
+    "sensors"
+  ],
+  "variants": [
+    "compact"
+  ]
+}

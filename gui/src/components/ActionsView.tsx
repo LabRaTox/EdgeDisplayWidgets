@@ -391,8 +391,8 @@ export interface Placement {
 /**
  * Work out where every tile actually lands.
  *
- * A port of `assignPlacements` in frontend/js/widgets/quick_actions.js, and it
- * has to stay one: the editor is a preview of that widget, and a preview that
+ * A port of `assignPlacements` in the kiosk's QuickActions.qml, and it has to
+ * stay one: the editor is a preview of that widget, and a preview that
  * computes positions differently from the thing it previews is worse than no
  * preview at all. Explicit coordinates win, a tile that does not fit where it
  * asks moves to the first free area of its size, and tiles without

@@ -1,8 +1,9 @@
-"""FastAPI entrypoint: lifespan-managed Hub + WebSocket + static frontend."""
+"""FastAPI entrypoint: lifespan-managed Hub, WebSocket and the REST API."""
 
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import re
 import shlex
@@ -27,7 +28,7 @@ from pydantic import BaseModel
 from . import autostart
 from .config import AppConfig, load_config
 from .hub import Hub
-from .modules.base import get_registry
+from .modules.base import SettingField, get_registry
 from .notes import MAX_BODY_LEN, MAX_TITLE_LEN, NotesStore, public_view
 from .tray import SystemTray
 
@@ -35,6 +36,8 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG = ROOT / "config.yaml"
 LOCAL_CONFIG = ROOT / "config.local.yaml"
 FRONTEND_DIR = ROOT / "frontend"
+#: One manifest per widget; the file being here is the registration.
+WIDGETS_DIR = ROOT / "widgets"
 
 
 # .desktop Exec field codes (https://specifications.freedesktop.org/...) —
@@ -360,14 +363,13 @@ _NO_STORE = {"Cache-Control": "no-store"}
 
 
 class _RevalidatingStaticFiles(StaticFiles):
-    """StaticFiles that forces the browser to revalidate every request.
+    """StaticFiles that forces the client to revalidate every request.
 
     Without an explicit Cache-Control header Chromium applies "heuristic
-    freshness" (based on Last-Modified) and reuses cached JS modules even
-    across browser restarts — so a redeploy of the dashboard can show stale
-    widget code on the kiosk. `no-cache` keeps the cache, but the browser must
-    revalidate every request; with the ETag we already emit, that's a cheap
-    304 when nothing has changed.
+    freshness" (based on Last-Modified) and reuses cached files across
+    restarts, so a replaced asset can keep serving its old version. `no-cache`
+    keeps the cache but requires a revalidation each time; with the ETag we
+    already emit that is a cheap 304 when nothing has changed.
     """
 
     async def get_response(self, path, scope):
@@ -380,30 +382,72 @@ class AutostartPayload(BaseModel):
     enabled: bool
 
 
-# `static variants = ["compact", "wide"]` in a widget's JS file. Read rather
-# than duplicated in a table here: the list belongs next to the code that acts
-# on it, and a table would be wrong the first time someone forgets it.
-_WIDGET_VARIANTS_RE = re.compile(r"static\s+variants\s*=\s*\[([^\]]*)\]")
-_JS_STRING_RE = re.compile(r"""["']([^"']+)["']""")
 
+def _widget_manifest(path: Path) -> dict[str, Any]:
+    """One widget's manifest, or an empty one when it cannot be read.
 
-def _widget_variants(path: Path) -> list[str]:
-    """Variant names a widget JS file declares, or [] if it declares none.
+    A widget is registered by having a file here at all; what it declares
+    inside is optional. `variants` and `options` are handed to the layout
+    editor. `modules` is not: it records which backend modules the widget
+    consumes, which the kiosk decides for itself in the view's `moduleNames`.
+    It is here so the two can be checked against each other and against the
+    table in the README, which tests/test_docs_match_code.py does.
 
-    Deliberately a regex and not a JS parser: the declaration is one literal
-    line of one known shape, and the alternative — a manifest file per widget,
-    or a list maintained in Python — is another thing to keep in sync. A
-    widget that writes it differently simply offers no variants, which is
-    exactly what a widget without the line does.
+    A malformed manifest is a warning and not a failure: one bad file costs
+    that widget its variants and options, and it still appears in the picker,
+    rather than taking the whole picker down with it.
     """
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        logger.warning(f"ignoring {path.name}: {exc}")
+        return {}
+    if not isinstance(data, dict):
+        logger.warning(f"ignoring {path.name}: expected an object")
+        return {}
+    return data
+
+
+def _manifest_options(path: Path, manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """The `options` block of a manifest, validated against SettingField.
+
+    Validated here rather than trusted, because the editor renders one input
+    per field and a type it does not know renders as nothing at all.
+    """
+    fields = manifest.get("options")
+    if not fields:
         return []
-    match = _WIDGET_VARIANTS_RE.search(text)
-    if not match:
+    if not isinstance(fields, list):
+        logger.warning(f"ignoring options in {path.name}: expected a list of fields")
         return []
-    return _JS_STRING_RE.findall(match.group(1))
+    try:
+        return [SettingField.model_validate(f).model_dump() for f in fields]
+    except Exception as exc:
+        logger.warning(f"ignoring options in {path.name}: {_summarize_validation_error(exc)}")
+        return []
+
+
+def _sensor_choices(hub: Any) -> tuple[list[str], list[str]]:
+    """The sensor ids currently reported, and a readable name for each.
+
+    An id (`k10temp@0000:00:18.3:1`) names the chip and the address it sits at,
+    so it points at the same reading after a reboot and can never resolve to a
+    different sensor. Readable it is not, hence the second list.
+
+    An empty first entry lets a field be cleared, which is how the second
+    sensor is left unset.
+    """
+    frame = hub.snapshot().get("sensors") or {}
+    data = frame.get("data") or {}
+    if data.get("available") is not True:
+        return [""], [""]
+    ids, labels = [""], [""]
+    for reading in data.get("readings") or []:
+        chip = str(reading.get("display_chip") or reading.get("chip") or "")
+        label = str(reading.get("display_label") or reading.get("label") or "")
+        ids.append(str(reading.get("id", "")))
+        labels.append(f"{chip} {label}".strip() or str(reading.get("id", "")))
+    return ids, labels
 
 
 def _write_local_config(path: Path, data: dict[str, Any]) -> None:
@@ -669,29 +713,43 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
 
     @app.get("/api/widgets")
     async def get_widgets() -> JSONResponse:
-        """List widget JS files discovered in frontend/js/widgets/.
+        """List the widgets declared in widgets/.
 
         Used by the Layout-Editor to populate the 'add widget' picker. Drop
-        a new ``<name>.js`` and it appears here.
+        a new ``<name>.json`` and it appears here.
 
         `variants` carries the display variants each widget declares, so the
-        editor can offer a list instead of a free-text field. Only widgets
-        that declare any appear in it; an empty map is the normal case for a
-        widget with a single look.
+        editor can offer a list instead of a free-text field, and `options`
+        its editable settings. Only widgets that declare either appear in the
+        respective map; both being empty is the normal case.
         """
-        widgets_dir = FRONTEND_DIR / "js" / "widgets"
-        if not widgets_dir.is_dir():
-            return JSONResponse({"widgets": [], "variants": {}})
+        if not WIDGETS_DIR.is_dir():
+            return JSONResponse({"widgets": [], "variants": {}, "options": {}})
         files = sorted(
-            (p for p in widgets_dir.glob("*.js") if not p.stem.startswith("_")),
+            (p for p in WIDGETS_DIR.glob("*.json") if not p.stem.startswith("_")),
             key=lambda p: p.stem,
         )
-        variants = {}
+        variants: dict[str, list[str]] = {}
+        options: dict[str, list[dict[str, Any]]] = {}
         for path in files:
-            declared = _widget_variants(path)
-            if declared:
-                variants[path.stem] = declared
-        return JSONResponse({"widgets": [p.stem for p in files], "variants": variants})
+            manifest = _widget_manifest(path)
+            if manifest.get("variants"):
+                variants[path.stem] = manifest["variants"]
+            fields = _manifest_options(path, manifest)
+            if fields:
+                options[path.stem] = fields
+
+        # The choices a field defers to the server are filled in here, so the
+        # editor never has to know where a list like this comes from.
+        ids, labels = _sensor_choices(current_hub())
+        for fields in options.values():
+            for field in fields:
+                if field.get("options_source") == "sensors":
+                    field["options"] = ids
+                    field["option_labels"] = labels
+
+        return JSONResponse({"widgets": [p.stem for p in files],
+                             "variants": variants, "options": options})
 
     @app.get("/api/health")
     async def health() -> JSONResponse:
@@ -975,12 +1033,32 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="note not found")
         return JSONResponse({"ok": True}, headers=_NO_STORE)
 
-    if FRONTEND_DIR.is_dir():
-        app.mount("/", _RevalidatingStaticFiles(directory=str(FRONTEND_DIR), html=True), name="frontend")
+    """
+    What is served over HTTP as a file rather than through the API.
+
+    Two things ask for one: the kiosk opens `player.html` in its video window,
+    and the settings window fetches the emoji data set from `vendor/`. Nothing
+    else is exposed, so `/` is a 404.
+    """
+    vendor_dir = FRONTEND_DIR / "vendor"
+    if vendor_dir.is_dir():
+        app.mount("/vendor", _RevalidatingStaticFiles(directory=str(vendor_dir)),
+                  name="vendor")
     else:
-        logger.warning(
-            f"frontend directory not found at {FRONTEND_DIR} — static mount skipped"
-        )
+        logger.warning(f"vendor directory not found at {vendor_dir} — icons unavailable")
+
+    @app.get("/player.html")
+    async def player_page() -> Response:
+        """The page the kiosk's video window loads.
+
+        It embeds the player itself; pointing the window straight at the embed
+        fails, because the player wants an origin to sit on.
+        """
+        path = FRONTEND_DIR / "player.html"
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="player.html not found")
+        return FileResponse(path, media_type="text/html",
+                            headers={"Cache-Control": "no-cache"})
 
     return app
 

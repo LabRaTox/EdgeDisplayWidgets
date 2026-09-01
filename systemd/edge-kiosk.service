@@ -1,10 +1,10 @@
 [Unit]
-Description=Edge Dashboard kiosk window (Qt WebEngine on the Xeneon Edge)
+Description=Edge Dashboard kiosk window (QML on the Xeneon Edge)
 Documentation=file://__PROJECT_DIR__/README.md
 # The backend is a separate service on purpose: the settings window still has
-# something to talk to when the kiosk is closed, and a dying renderer never
+# something to talk to when the kiosk is closed, and a dying window never
 # takes the data collection with it. `Wants` rather than `Requires` because
-# the shell shows a waiting screen and retries on its own if the backend is
+# the window shows a waiting screen and retries on its own if the backend is
 # not up yet.
 After=graphical-session.target edge-dashboard.service
 Wants=edge-dashboard.service
@@ -15,13 +15,27 @@ Type=simple
 WorkingDirectory=__PROJECT_DIR__
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=__PROJECT_DIR__/shell
-# The system Python, not the project virtualenv: the shell needs the
-# distribution's PySide6, which links the system Qt WebEngine — the build that
-# carries the codecs the YouTube widget plays.
-ExecStart=/usr/bin/python3 -m edge_kiosk
+# The system Python, not the project virtualenv: the window needs the
+# distribution's PySide6. It talks to the backend over Qt's own WebSocket, so
+# nothing from the virtualenv is required here.
+ExecStart=/usr/bin/python3 -m qml_kiosk.main
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=10
+
+# Measured on 2026-09-01: the window itself sits at about 130 MB and stays
+# there. The headroom above that belongs to the video player, which is a
+# Chromium in a process of its own and needs roughly 490 MB while a video
+# runs; it starts on a tap and exits with the video, so the peak is short.
+#
+# MemoryHigh is the working limit: over it the kernel pushes the processes to
+# reclaim, throttling rather than killing. MemoryMax above it is the emergency
+# stop for the case where reclaim cannot keep up. Hitting it kills a process,
+# which systemd restarts, at the cost of a blank display for a moment. Hence
+# the gap between the two.
+MemoryHigh=800M
+MemoryMax=1200M
+MemoryAccounting=true
 
 [Install]
 WantedBy=graphical-session.target

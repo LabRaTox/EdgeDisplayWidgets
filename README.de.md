@@ -8,13 +8,13 @@ Dashboard für das **Corsair Xeneon Edge 14,5"** (2560x720), das zweite
 Touchdisplay unter dem Monitor. Läuft unter Linux, entwickelt und im
 Dauerbetrieb auf [CachyOS](https://cachyos.org/) (Arch Linux) mit KDE Plasma
 und NVIDIA-Grafik. Es besteht aus drei Teilen: einem lokalen FastAPI-Server,
-einem Kioskfenster auf Qt-WebEngine, das die Anzeige füllt, und
+einem Kioskfenster in QML, das die Anzeige füllt, und
 **EDGE//DASH**, einer eigenen Anwendung für die Einstellungen.
 
 - **Widgets mit Livedaten**: CPU, RAM, GPU, Netzwerk, Temperatursensoren,
-  Datenträger, Prozessliste, Uhr, Wetter (Open-Meteo), Mediensteuerung über
-  MPRIS, YouTube-Kacheln, smarte Lampen (Govee und Tuya), Quick Actions,
-  Pomodoro und Notizen.
+  einzelne Sensoren als Kurve oder Ring, Datenträger, Prozessliste, Uhr,
+  Wetter (Open-Meteo), Mediensteuerung über MPRIS, YouTube-Kacheln, smarte
+  Lampen (Govee und Tuya), Quick Actions, Pomodoro und Notizen.
 - **Seiten und Wischen**: Widgets werden in CSS-Grid-Layouts über mehrere
   Seiten verteilt, auf dem Touchscreen wischt man waagerecht zwischen ihnen.
 - **Einstellungsfenster**: Design, Moduloptionen, Wetter, YouTube, das
@@ -22,8 +22,8 @@ einem Kioskfenster auf Qt-WebEngine, das die Anzeige füllt, und
   bearbeitet, nicht auf dem schmalen Display. Sie sitzt im Systemabschnitt der
   Leiste und im Anwendungsmenü.
 - **Widget-Varianten**: ein Widget kann mehrere Darstellungen anbieten. Die
-  Messwert-Widgets kennen `compact`, das für kleine Kacheln auf das Diagramm
-  verzichtet und dadurch gar keine Zeichenzeit kostet.
+  Messwert-Widgets kennen `compact` für kleine Kacheln, das nur die Zahl und
+  ihre Unterzeile zeigt.
 - **Designs**: cyberpunk, clean, steampunk, light, toxic, nightclub,
   industrial. Eine CSS-Datei ablegen genügt für ein weiteres.
 - **Zwei Sprachen**: Deutsch und Englisch. Die Sprache der Anzeige steht in
@@ -33,7 +33,8 @@ einem Kioskfenster auf Qt-WebEngine, das die Anzeige füllt, und
   zieht nach, ohne dass etwas neu geladen wird.
 
 Anleitungen zum Erweitern: [Ein Widget schreiben](docs/widgets.de.md) und
-[Ein Theme schreiben](docs/themes.de.md).
+[Ein Theme schreiben](docs/themes.de.md). Warum einiges so ist, wie es ist,
+steht in [Warum es so aussieht](docs/entscheidungen.md).
 
 ## Bedienung am Display
 
@@ -58,7 +59,7 @@ Drei Prozesse, jeder mit einer Aufgabe:
 | Prozess | Was es ist | Läuft auf |
 |---|---|---|
 | `backend/` | FastAPI und der Modul-Hub, der einzige Schreiber der Konfiguration | virtuelle Umgebung des Projekts (`uv`) |
-| `shell/edge_kiosk` | das Kioskfenster auf dem Xeneon | **System**-Python mit System-PySide6 |
+| `shell/qml_kiosk` | das Kioskfenster auf dem Xeneon | **System**-Python mit System-PySide6 |
 | `gui/` | EDGE//DASH, das Einstellungsfenster | Tauri 2 und React |
 
 Kiosk und Einstellungsfenster sind beide gewöhnliche Clients des Backends
@@ -73,9 +74,10 @@ immer läuft, und damit der einzige sinnvolle Ort dafür.
 
 Der Code folgt einem **Registry-Muster**: ein Widget besteht aus einer Quelle
 im Backend (`backend/modules/<x>.py`, Unterklasse von `Module`, mit
-`@register_module` versehen) und einer Anzeige im Frontend
-(`frontend/js/widgets/<x>.js`, meldet sich über `registerWidget` an). Die
-Daten fließen vom Backend über den Hub und den WebSocket zu allen passenden
+`@register_module` versehen), einer Anzeige im Kiosk
+(`shell/qml_kiosk/qml/widgets/<X>.qml`) und einem Manifest
+(`widgets/<x>.json`), das es dem Layout-Editor bekannt macht. Die Daten
+fließen vom Backend über den Hub und den WebSocket zu allen passenden
 Widgets. Ein neues Widget braucht keine Änderung am Gerüst.
 
 Ein Modul liefert seine Daten auf einem Takt (`interval`), von sich aus, wenn
@@ -95,7 +97,7 @@ bleibt.
 |---|---|---|
 | Python ab 3.11 | Laufzeit | `python` |
 | [uv](https://github.com/astral-sh/uv) | Umgebung und Abhängigkeiten | `uv` |
-| PySide6, systemweit | das Kioskfenster, es ist Qt-WebEngine | `pyside6` |
+| PySide6, systemweit | das Kioskfenster (Qt Quick) und der Videoplayer (Qt-WebEngine) | `pyside6` |
 | systemd | die beiden Dienste | vorinstalliert |
 
 ```bash
@@ -205,8 +207,9 @@ Ein erneuter Lauf ändert nichts, was schon stimmt. Schalter:
 ```
 
 Das Kioskfenster braucht das PySide6 **der Distribution**, nicht ein Rad in
-der virtuellen Umgebung: es bindet sich an die systemweite Qt-WebEngine, und
-das ist die Fassung mit den Codecs, die das YouTube-Widget abspielt.
+der virtuellen Umgebung. Das Fenster selbst ist Qt Quick. Für ein Video
+startet es einen eigenen Prozess auf der systemweiten Qt-WebEngine, und das
+ist die Fassung mit den Codecs, die YouTube abspielt.
 
 ### Danach
 
@@ -216,15 +219,12 @@ journalctl --user -u edge-dashboard -u edge-kiosk -f      # Protokoll mitlesen
 systemctl --user stop   edge-dashboard edge-kiosk         # beide anhalten
 ```
 
-Das Dashboard liegt außerdem unter `http://127.0.0.1:8765/`, lässt sich also
-in jedem Browser öffnen, um ohne Kioskfenster zu probieren.
-
 ![Das Einstellungsfenster EDGE//DASH mit der Designauswahl](docs/screenshots/settings-theme.png)
 
 ### Das Kioskfenster von Hand starten
 
 ```bash
-PYTHONPATH=$PWD/shell /usr/bin/python3 -m edge_kiosk
+PYTHONPATH=$PWD/shell /usr/bin/python3 -m qml_kiosk.main
 ```
 
 Es sucht die Anzeige mit der Auflösung 2560x720 und füllt sie. Taucht das
@@ -280,7 +280,7 @@ gerade die Anfrage beantwortet.
 
 ```bash
 uv sync                                # Umgebung anlegen
-uv run python -m backend.main          # läuft auf http://127.0.0.1:8765
+uv run python -m backend.main          # API auf http://127.0.0.1:8765
 uv run pytest                          # rund 200 Tests, sollten alle grün sein
 ```
 
@@ -545,14 +545,14 @@ Werte für `grid-template-columns` und `grid-template-rows`. Jedes Widget
 bekommt `col` und `row`, ab 1 gezählt, dazu wahlweise `colspan` und `rowspan`.
 
 `variant` wählt eine der Darstellungen, die ein Widget anbietet. Ein Widget
-deklariert sie in seiner eigenen JS-Datei (`static variants = [...]`), das
-Backend liest das beim Durchsehen des Verzeichnisses, und der Layout-Editor
+deklariert sie in seinem Manifest (`variants` in `widgets/<id>.json`), das
+Backend liest sie beim Durchsehen des Verzeichnisses, und der Layout-Editor
 bietet genau diese zur Auswahl an. Ohne Angabe gilt die Standarddarstellung.
 
 Die Messwert-Widgets (cpu, gpu, ram, network, sensors, disk_usage) kennen
-`compact`: nur die Zahl und ihre Unterzeile, kein Diagramm. Gedacht für kleine
-Kacheln, und das Diagramm fehlt tatsächlich im Dokument, statt versteckt zu
-werden, kostet also keine Zeichenzeit.
+`compact`: nur die Zahl und ihre Unterzeile. Gedacht für kleine Kacheln. Das
+Diagramm wird dabei gar nicht erst geladen, kostet also weder Zeichenzeit noch
+Speicher.
 
 ```yaml
 pages:
@@ -596,16 +596,17 @@ Ausdehnung für jedes Widget.
 |---|---|---|
 | `heartbeat` | `heartbeat` | Verbindung und Laufzeit |
 | `clock` | keins | Uhrzeit und Datum in der eingestellten Sprache |
-| `cpu` | `system` | Auslastung je Kern mit Sparkline |
-| `ram` | `system` | Arbeitsspeicher mit Sparkline |
+| `cpu` | `system`, `sensors` | Auslastung je Kern mit Kurve, dazu die Temperatur |
+| `ram` | `system`, `sensors` | Arbeitsspeicher mit Kurve, dazu die Temperatur |
 | `gpu` | `nvidia` | Auslastung, Speicher, Temperatur, Leistungsaufnahme |
 | `network` | `system` | Durchsatz hoch und runter mit zwei Kurven |
-| `sensors` | `sensors` | Temperaturen aus hwmon |
+| `sensors` | `sensors` | Alle Temperaturen aus hwmon als Tabelle |
+| `sensor_focus` | `sensors` | Ein oder zwei gewählte Sensoren als Kurve oder Ring |
 | `disk_usage` | `disk_usage` | Belegung je eingehängtem Datenträger |
 | `top_processes` | `top_processes` | Die aufwendigsten Prozesse |
 | `weather` | `weather` | Aktuelles Wetter und Vorhersage |
 | `media` | `media` | Titel, Cover und Steuerung über MPRIS |
-| `youtube` | `youtube` | Kacheln, die im Overlay abspielen |
+| `youtube` | `youtube` | Kacheln, ein Tippen öffnet das Videofenster |
 | `smart_lights` | `smart_lights` | Lampen von Govee und Tuya schalten und dimmen |
 | `quick_actions` | `quick_actions` | Das Kachelraster mit Befehlen, HTTP und Programmen |
 | `pomodoro` | keins | Pomodoro-Uhr und Stoppuhr |
@@ -626,29 +627,27 @@ edge-kiosk --output DP-4                 # Anschluss erzwingen
 edge-kiosk --width 1920 --height 1080    # anderes Panel
 edge-kiosk --url http://rechner:8765     # Backend woanders
 edge-kiosk --windowed                    # normales Fenster, für Entwicklung
-edge-kiosk --debug-port 9222             # Chromium-Fernsteuerung zum Debuggen
+edge-kiosk --show-cursor                 # Mauszeiger sichtbar lassen
 ```
 
-(`edge-kiosk` steht für `PYTHONPATH=$PWD/shell /usr/bin/python3 -m edge_kiosk`.)
+(`edge-kiosk` steht für `PYTHONPATH=$PWD/shell /usr/bin/python3 -m qml_kiosk.main`.)
 
-Strg+R lädt neu, Strg+Q beendet, F11 verlässt den Vollbild, für die Fälle, in
-denen tatsächlich eine Tastatur angeschlossen ist. Der Mauszeiger ist
+Tastenkürzel hat das Kioskfenster keine, gestartet und beendet wird es über
+systemd. Im Videofenster schließt Esc das Video. Der Mauszeiger ist
 ausgeblendet, außer man gibt `--show-cursor` an.
 
-### Warum kein Browser mehr
+### Das Fenster auf dem Xeneon
 
-Früher war es ein Chromium, gestartet aus einem Shell-Skript, und das Fenster
-auf die richtige Anzeige zu bekommen war der schwierige Teil: Chromium ist ein
-XWayland-Client, KWin ignoriert die Geometrie, die ein solcher Client
-verlangt, und nach einem Kaltstart landete das Fenster regelmäßig auf dem
-Hauptmonitor, weil der Xeneon noch nicht eingerichtet war. Der Umweg war eine
-erzeugte KWin-Regel.
+Qt setzt das Fenster direkt auf den ausgewählten Bildschirm. Findet der Kiosk
+beim Start keine Anzeige mit der gesuchten Auflösung, nimmt er den
+Hauptbildschirm und wechselt später, sobald der Xeneon auftaucht.
 
-Das Fenster gehört jetzt uns, Qt setzt es direkt auf den ausgewählten
-Bildschirm, und an der Platzierung ist keine Regel mehr beteiligt. Die Gruppe
-`[edge-dashboard-kiosk]` in `~/.config/kwinrulesrc` gibt es weiterhin, sie tut
-aber etwas anderes: sie hält das Fenster aus der Fensterliste heraus, enthält
-keine Geometrie und wird von `scripts/window-rule.sh` geschrieben.
+Die Gruppe `[edge-dashboard-kiosk]` in `~/.config/kwinrulesrc` hält das
+Fenster aus der Fensterliste heraus. Sie enthält keine Geometrie und wird von
+`scripts/window-rule.sh` geschrieben.
+
+Warum das Fenster QML ist und kein Browser, steht in
+[Warum es so aussieht](docs/entscheidungen.md).
 
 ## Erweitern
 
@@ -656,14 +655,19 @@ Wie man ein Widget baut, steht ausführlich in
 [Ein Widget schreiben](docs/widgets.de.md), wie man ein Design baut in
 [Ein Theme schreiben](docs/themes.de.md). Die Kurzfassung:
 
-Ein Widget besteht aus einer Quelle im Backend
-(`backend/modules/<name>.py`, Unterklasse von `Module` mit `@register_module`,
-mindestens `poll()`) und einer Anzeige im Frontend
-(`frontend/js/widgets/<name>.js`, meldet sich mit `registerWidget` an,
-mindestens `mount()` und `update()`, dazu `static modules = [...]`). Danach
-das Modul in `config.yaml` eintragen und das Widget auf einer Seite
-platzieren. Widgets ohne eigene Daten setzen `static modules = []`, so wie
-`clock.js` und `pomodoro.js`.
+Ein Widget besteht aus drei Teilen:
+
+* eine Quelle im Backend (`backend/modules/<name>.py`, Unterklasse von
+  `Module` mit `@register_module`, mindestens `poll()`). Entfällt bei Widgets
+  ohne eigene Daten, etwa Uhr und Pomodoro.
+* eine Anzeige in `shell/qml_kiosk/qml/widgets/<Name>.qml`. Sie wird über
+  ihren Namen gefunden: `disk_usage` wird zu `DiskUsage.qml`.
+* ein Manifest `widgets/<name>.json`. Erst dadurch kennt der Layout-Editor
+  das Widget. Es nennt die Module, die es verbraucht, und kann Varianten und
+  einstellbare Optionen deklarieren.
+
+Danach das Modul in `config.yaml` eintragen und das Widget auf einer Seite
+platzieren.
 
 Ein Design ist eine CSS-Datei in `frontend/css/themes/`. Sie taucht von selbst
 im Einstellungsfenster auf, weil das Backend das Verzeichnis ausliest.
@@ -673,7 +677,7 @@ im Einstellungsfenster auf, weil das Backend das Verzeichnis ausliest.
 Die Texte liegen in `frontend/locales/<code>.json` und werden beim Start
 geladen. Die Sprache der Anzeige ist der Konfigurationswert
 `default_language` (`auto`, `en` oder `de`), einstellbar unter `Design`; bei
-`auto` entscheidet die Browsersprache. Es ist bewusst ein Konfigurationswert
+`auto` entscheidet `LANG` aus der Umgebung. Es ist bewusst ein Konfigurationswert
 und keine Einstellung pro Gerät, denn das Einstellungsfenster ist eine eigene
 Anwendung und kann den Speicher der Anzeige nicht beschreiben.
 
@@ -682,8 +686,9 @@ Textdateien vom Backend, damit Modulbeschriftungen nicht zweimal übersetzt
 werden müssen.
 
 Eine Sprache ergänzen: eine neue JSON-Datei neben `en.json` und `de.json`
-legen, in `frontend/js/i18n.js` die Liste `SUPPORTED` erweitern und in
-`gui/src/i18n/index.ts` die Liste `SUPPORTED_LANGUAGES`.
+legen und in `gui/src/i18n/index.ts` die Liste `SUPPORTED_LANGUAGES`
+erweitern. Der Kiosk lädt die Datei über den Konfigurationswert und braucht
+keine Liste.
 
 ## Entwicklung
 
@@ -707,24 +712,18 @@ backend/
   autostart.py        Der Autostart-Schalter, schreibt und aktiviert die Units
   brand.py            Das App-Symbol, einmal gezeichnet für Leiste und Fenster
   modules/            Je Datei ein Modul
-frontend/
-  index.html
-  js/
-    app.js            Startet, holt die Konfiguration, hängt Widgets ein
-    registry.js       registerWidget und getWidget
-    i18n.js           Kleiner Übersetzungshelfer
-    ws.js             WebSocket mit Neuverbinden
-    swiper.js         Wischen zwischen den Seiten
-    theme.js          Designwechsel, folgt dem Backend
-    widgets/          Je Datei ein Widget
-    lib/              Sparkline, Symbole, Bildtakt, Wertglättung
-  css/
-    base.css          Grundgerüst und Bausteine
-    widgets.css       Stile je Widget
-    themes/           Je Datei ein Design
+widgets/              Je Datei ein Widget-Manifest, das ist die Registrierung
+frontend/             Was Kiosk und Einstellungsfenster von der Platte lesen
+  player.html         Die Seite, die das Videofenster lädt
+  css/themes/         Je Datei ein Design
   locales/            Je Datei eine Sprache
+  vendor/             Tabler-Symbole, Schriften, Emoji-Datensatz
 shell/
-  edge_kiosk/         Das Kioskfenster, Qt-WebEngine auf System-Python
+  qml_kiosk/
+    qml/widgets/      Je Datei ein Widget, das ist die Anzeige
+    views.py          Findet die QML-Datei zu einer Widget-id
+    theme.py          Liest die Designs aus den CSS-Dateien
+    bridge.py         WebSocket, Konfiguration, Texte, Symbole
 gui/
   src/                EDGE//DASH, das Einstellungsfenster, React
   src-tauri/          Dessen Rahmen, Tauri 2
@@ -745,8 +744,3 @@ tests/                pytest, asyncio im Automatikmodus
 ## Lizenz
 
 MIT, siehe [LICENSE](LICENSE).
-
-## Unterstützen
-
-Wenn dir das Projekt nützt, kannst du die Entwicklung auf
-[Ko-Fi](https://ko-fi.com/labratox) unterstützen.

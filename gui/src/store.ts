@@ -32,6 +32,7 @@ interface StoreState {
   schemas: Record<string, SettingField[]>;
   themes: string[];
   widgets: string[];
+  widgetOptions: Record<string, SettingField[]>;
   /** Per widget: the display variants it offers, if any. */
   widgetVariants: Record<string, string[]>;
   quickActions: QuickActionsConfig | null;
@@ -61,6 +62,7 @@ export const useStore = create<StoreState>((set, get) => ({
   schemas: {},
   themes: [],
   widgets: [],
+  widgetOptions: {},
   widgetVariants: {},
   quickActions: null,
   error: null,
@@ -89,6 +91,7 @@ export const useStore = create<StoreState>((set, get) => ({
         themes: themes.themes,
         widgets: widgets.widgets,
         widgetVariants: widgets.variants ?? {},
+        widgetOptions: widgets.options ?? {},
         quickActions,
       });
     } catch (err) {

@@ -26,7 +26,7 @@ set -euo pipefail
 
 RULE_ID="edge-dashboard-kiosk"
 # Matches the Wayland app id, which Qt takes from `setDesktopFileName()` in
-# shell/edge_kiosk/kiosk.py. Change one, change the other.
+# shell/qml_kiosk/main.py. Change one, change the other.
 APP_ID="edge-dashboard"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 
@@ -156,8 +156,8 @@ desktop="${XDG_CURRENT_DESKTOP:-}"
 session="${XDG_SESSION_TYPE:-}"
 
 if [ "$session" = "x11" ]; then
-    # `Qt::Tool` in the kiosk already sets _NET_WM_WINDOW_TYPE_UTILITY, which
-    # is what a window manager reads to keep a window out of its lists.
+    # `Qt.Tool` on the kiosk window already sets _NET_WM_WINDOW_TYPE_UTILITY,
+    # which is what a window manager reads to keep a window out of its lists.
     log "X11 session: the window asks for this itself, nothing to configure"
     exit 0
 fi
