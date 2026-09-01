@@ -1,29 +1,32 @@
 # Writing a widget
 
-A widget is two files that never import each other:
+A widget is three files that never import each other:
 
 * a **backend module** in `backend/modules/`, which produces data
-* a **frontend widget** in `frontend/js/widgets/`, which draws it
+* a **view** in `shell/qml_kiosk/qml/widgets/`, which draws it
+* a **manifest** in `widgets/`, which makes it known to the layout editor
 
 The hub connects them. It runs every module on its own clock and pushes what
-they return over one WebSocket; the frontend routes each frame to the widgets
+they return over one WebSocket; the kiosk routes each frame to the widgets
 that subscribed to that module. Neither side knows the other exists, which is
-why a widget can be replaced without touching its data source and why a module
+why a view can be replaced without touching its data source and why a module
 can feed several widgets.
 
-A widget that needs no data of its own can skip the backend half entirely, as
-`clock.js` and `pomodoro.js` do.
+A widget that needs no data of its own can skip the backend part entirely, as
+the clock and the pomodoro do.
 
 ## The short version
 
 ```bash
 # 1. the producer
 $EDITOR backend/modules/moonphase.py
-# 2. the consumer
-$EDITOR frontend/js/widgets/moonphase.js
-# 3. switch it on and place it
+# 2. the view
+$EDITOR shell/qml_kiosk/qml/widgets/Moonphase.qml
+# 3. the registration
+$EDITOR widgets/moonphase.json
+# 4. switch it on and place it
 $EDITOR config.yaml
-systemctl --user restart edge-dashboard
+systemctl --user restart edge-dashboard edge-kiosk
 ```
 
 Both files are found by name: the module registers itself through a decorator,
@@ -32,7 +35,7 @@ the widget file is imported by the id used in the layout.
 ## The backend module
 
 ```python
-"""Moon phase — one number, once an hour."""
+"""Moon phase, one number, once an hour."""
 
 from __future__ import annotations
 
@@ -102,75 +105,145 @@ value in the API and keeps the stored one when the field comes back unchanged.
 keys, so a value the running process has never heard of fails validation on
 save.
 
-## The frontend widget
+## The view
 
-```js
-import { registerWidget } from "../registry.js";
-import { t } from "../i18n.js";
+The view is a QML file in `shell/qml_kiosk/qml/widgets/`. It is named after
+the widget, in CamelCase: `moonphase` becomes `Moonphase.qml`.
 
-class MoonPhaseWidget {
-  // Which modules to receive. Empty for a widget that needs no data.
-  static modules = ["moonphase"];
-  // Optional: the looks this widget offers, shown in the layout editor.
-  static variants = ["compact"];
+```qml
+import QtQuick
+import QtQuick.Layouts
+import ".."
 
-  mount(el, initial, ctx) {
-    this.el = el;
-    this.compact = ctx?.variant === "compact";
-    el.innerHTML = `
-      <div class="metric-head">
-        <h3>${t("widget.moonphase.title")}</h3>
-        <div class="metric-big" data-bind="phase">–</div>
-      </div>
-      ${this.compact ? "" : `<div class="metric-sub" data-bind="days">–</div>`}
-    `;
-    if (initial) this.update(initial);
-  }
+Item {
+    id: root
+    // Set by the window once the widget is loaded.
+    property var theme
+    // Which modules arrive. Empty when the widget needs no data.
+    readonly property var moduleNames: ["mondphase"]
+    // Whatever the layout put under `options`, unchanged.
+    property var options: ({})
+    // Is the tile placed as `compact`?
+    property bool compact: false
 
-  update(data, moduleName, ts) {
-    if (!data) return;
-    this.el.querySelector('[data-bind="phase"]').textContent =
-      `${Math.round(data.fraction * 100)}%`;
-    if (this.compact) return;
-    this.el.querySelector('[data-bind="days"]').textContent =
-      `${data.days.toFixed(1)} d`;
-  }
+    property var payload: null
 
-  destroy() {
-    // Stop timers, disconnect observers, destroy sparklines. Called when the
-    // widget is removed or the page is rebuilt after a settings change.
-  }
+    // Called for every frame of a subscribed module. With more than one
+    // entry in `moduleNames`, `module` says which one it is.
+    function receive(module, data) {
+        payload = data
+    }
+
+    ColumnLayout {
+        anchors.fill: parent
+        spacing: 0
+
+        Heading {
+            theme: root.theme
+            label: bridge.tr("widget.mondphase.title")
+            Layout.bottomMargin: Style.headingBottom
+        }
+
+        Text {
+            text: root.payload ? Math.round(root.payload.fraction * 100) + "%" : "–"
+            color: root.theme ? root.theme["accent"] : "#00e0ff"
+            font.pixelSize: bridge.metrics.metric_size
+            font.family: root.theme ? root.theme["font-mono"] : "monospace"
+        }
+
+        Text {
+            visible: !root.compact
+            text: root.payload ? root.payload.days.toFixed(1) + " d" : "–"
+            color: root.theme ? root.theme["fg-muted"] : "#888888"
+            font.pixelSize: Style.subSize
+            font.family: root.theme ? root.theme["font-mono"] : "monospace"
+        }
+    }
 }
-
-registerWidget("moonphase", MoonPhaseWidget);
 ```
 
-The three methods:
+The contract is small:
 
-* **`mount(el, initial, ctx)`** builds the DOM once. `el` is the tile,
-  `initial` is the last known payload when there is one (a widget added to a
-  running dashboard is not blank), and `ctx` carries `{id, variant, options}`.
-* **`update(data, moduleName, ts)`** is called per frame. With several entries
-  in `static modules`, `moduleName` says which one this is.
-* **`destroy()`** has to undo what `mount` set up. A widget survives being
-  moved in the layout editor by being destroyed and mounted again.
+* **`moduleNames`** decides what arrives. The window delivers only those
+  frames, so a tile does not recompute on every foreign frame.
+* **`receive(module, data)`** is called per frame. On load the widget is also
+  handed the last known payload, so it does not start empty on a running
+  kiosk.
+* **`theme`**, **`options`**, **`compact`** and **`confirm`** are set by the
+  window, for whichever of them the widget declares. `confirm` is the shared
+  question dialog, `ask(text, button, dangerous, callback)`.
+* **`padH`** and **`padV`** are the inset the tile should use. A theme may
+  override it, as long as the tile has room for it.
+
+Cleaning up is QML's job: the object goes and everything hanging off it goes
+with it.
+
+Colours come from `theme`, sizes from the `Style` singleton, strings from
+`bridge.tr(...)`. For the usual shapes there are ready-made pieces:
+`Heading`, `Chart`, `MetricWidget`, `CoreBars` and `Confirm`.
+
+The window finds the file by name: `moonphase` becomes `Moonphase.qml`,
+`disk_usage` becomes `DiskUsage.qml`. The rule lives in
+`shell/qml_kiosk/views.py`. With no file to find, the tile says so instead of
+staying blank.
+
+## The manifest
+
+`widgets/<name>.json` is what makes the layout editor aware of the widget.
+The file being there is the registration; what is in it is optional.
+
+```json
+{
+  "modules": ["moonphase"],
+  "variants": ["compact"]
+}
+```
+
+`modules` repeats what the view declares in `moduleNames`. The kiosk does not
+read it, it goes by the QML file; it is in the manifest so the docs and the
+view can be checked against each other. A test fails when the two drift apart.
 
 ### Variants
 
-`static variants = ["compact"]` makes the layout editor offer a list instead
-of a free-text field: the backend reads that line out of the file when it
-scans the directory. The variant reaches the widget as `ctx.variant`, and
-`data-variant` is set on the tile so CSS can use it too.
+`variants` makes the layout editor show a picker instead of a free-text
+field. The variant reaches the widget as `compact`.
 
-Build the different look, do not hide it. `compact` on the metric widgets
-leaves the chart out of the DOM rather than setting `display: none`, because a
-hidden sparkline still redraws on every sample.
+Build the other look, do not hide it. On the metric widgets `compact` leaves
+the chart out entirely through a `Loader` rather than setting
+`visible: false`, because a hidden chart still holds its texture.
 
 ### Options
 
-Anything under `options` in the layout reaches `ctx.options` untouched. That
-is the place for per-instance settings that are not worth a config schema, the
-way the clock takes `options: { show_seconds: true }`.
+`options` describes fields the layout editor shows underneath the tile, in
+the same format as the module settings (`SettingField`):
+
+```json
+{
+  "modules": ["moonphase"],
+  "options": [
+    {
+      "key": "show_days",
+      "type": "bool",
+      "label_key": "settings.widget.moonphase.show_days",
+      "default": true
+    }
+  ]
+}
+```
+
+The types are `bool`, `int`, `float`, `text`, `select`, `list` and `color`.
+A `select` can ask the server for its values instead of naming them:
+`"options_source": "sensors"` fills the list with the current sensors and
+adds readable labels. The value lands in the widget's `options` unchanged.
+
+What gets stored is a reading's id, such as `k10temp@0000:00:18.3:1`. It names
+the chip and the address it sits at, a PCI slot or an i2c address, so a tile
+still points at the same sensor after a reboot and can never point at another
+one: the chip name is part of the id. If the id is gone, the widget says so
+rather than showing a neighbouring value.
+
+A malformed manifest costs that widget its variants and options and logs a
+warning. The widget still appears in the picker, and the editor keeps working.
 
 ## Wiring it up
 
@@ -189,7 +262,7 @@ pages:
       - { id: moonphase, col: 3, row: 2, variant: compact }
 ```
 
-The id in `widgets` is the file name in `frontend/js/widgets/`, and the key
+The id in `widgets` is the file name in `widgets/`, and the key
 under `modules` is the module's `name`. Placing widgets is easier in the
 settings window's Layout view, which writes the same YAML.
 
@@ -198,22 +271,28 @@ and dotted, and `{placeholder}` is the interpolation syntax.
 
 ## What to watch out for
 
-**Do not animate per frame.** This is the one that bites. Interpolating 32 CPU
-core bars in JavaScript cost 29 CPU points on this machine, for bars that
-`transition: height 200ms` in CSS was already animating. One style write per
-sample, and let CSS do the moving. The measurements are in the README under
-the kiosk section.
+**Do not animate continuously.** This is the mistake that hurts. A surface
+that keeps moving costs about 20 CPU points on this machine no matter how
+small it is. That is why `Chart.travel` is `false` and why the media widget
+counts the playhead forward four times a second rather than per frame. Move
+something only where the movement explains something.
 
-**Write to the DOM only when something changed.** `update()` runs as often as
-the module polls. Cache the nodes in `mount()` rather than querying them every
-frame, and skip the write when the text is the same.
+**Bindings, not assignments.** A value assigned once replaces the binding and
+never updates again. That is how the GPU widget once showed "GPU" forever
+instead of the card's name, because `text` was set in `Component.onCompleted`.
 
-**Rebuild lists only when the set changes, not on every value.** The sensors
-widget compares the joined ids and patches the numbers in place otherwise.
+**Rebuild lists only when the set changes, not on every value.** A `clear()`
+on a `ListModel` throws the delegates away, resets the scroll position and
+reloads images. The sensors widget compares the joined ids and patches the
+numbers in place otherwise.
 
-**Escape anything from outside.** Payloads reaching `innerHTML` need escaping;
-`disk_usage.js` has the two helpers for it. Values that go into an attribute
-need it too.
+**Handle only your own modules.** `moduleNames` keeps `receive` from running
+on every foreign frame. Without it every tile recomputes five times a second
+for data that arrives once a minute.
+
+**An unchecked colour is a crash.** Anything going from the config into a
+`color` property has to be checked against `#rgb`/`#rrggbb` first;
+`safeColour` in `QuickActions.qml` and `SensorFocus.qml` does exactly that.
 
 **Tiles are wide and short**, and the display is touched, not clicked. Hit
 targets below roughly 44 pixels are frustrating on it.
@@ -222,14 +301,26 @@ targets below roughly 44 pixels are frustrating on it.
 
 ```bash
 uv run pytest tests/test_moonphase.py     # a module test needs no display
-uv run python -m backend.main             # then open http://127.0.0.1:8765
+/usr/lib/qt6/bin/qmllint -I shell/qml_kiosk/qml \
+    shell/qml_kiosk/qml/widgets/Moonphase.qml
+systemctl --user restart edge-kiosk
 ```
 
 Module tests instantiate the class and await `poll()`; there are plenty of
-examples in `tests/`. For the frontend, the browser is the faster loop: the
-kiosk has no devtools, but the same page is served to any browser, and a
-reload picks up an edited widget file.
+examples in `tests/`. For the view, `qmllint` is the fast first pass: it
+catches typos and unknown properties before the window starts.
+
+To avoid restarting the real kiosk every time, render the window away from
+the display:
+
+```bash
+cd shell
+QT_QPA_PLATFORM=offscreen /usr/bin/python3 -m qml_kiosk.main --windowed
+```
+
+QML errors land on stderr. `--windowed` puts the window on the primary screen
+instead of the Xeneon.
 
 ---
 
-[Writing a theme](themes.md) · [README](../README.md) · [Deutsch](widgets.de.md)
+[Writing a theme](themes.md) · [Why it looks the way it does](decisions.md) · [README](../README.md) · [Deutsch](widgets.de.md)

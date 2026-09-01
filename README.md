@@ -7,14 +7,14 @@
 Dashboard for the **Corsair Xeneon Edge 14.5"** (2560x720), the second touch
 display that sits under the monitors. It runs on Linux, developed and used
 daily on [CachyOS](https://cachyos.org/) (Arch Linux) with KDE Plasma and an
-NVIDIA GPU. Three parts: a local FastAPI server, a kiosk window on Qt
-WebEngine that fills the display, and **EDGE//DASH**, a separate desktop
-application for the settings.
+NVIDIA GPU. Three parts: a local FastAPI server, a kiosk window in QML that
+fills the display, and **EDGE//DASH**, a separate desktop application for the
+settings.
 
-- **Live widgets**: CPU / RAM / GPU / network / temperature sensors, disk
-  usage, top processes, clock, weather (Open-Meteo), media controls
-  (MPRIS), YouTube tiles, smart lights (Govee + Tuya), quick actions,
-  pomodoro, notes.
+- **Live widgets**: CPU / RAM / GPU / network / temperature sensors, single
+  sensors as a curve or a dial, disk usage, top processes, clock, weather
+  (Open-Meteo), media controls (MPRIS), YouTube tiles, smart lights
+  (Govee + Tuya), quick actions, pomodoro, notes.
 - **Pages + swipe navigation**: arrange widgets in CSS-Grid layouts across
   multiple pages; horizontal swipe between them on the touchscreen.
 - **Settings window**: themes, module options, weather, YouTube, the quick
@@ -32,7 +32,8 @@ application for the settings.
   along without a restart or a reload.
 
 Guides for extending it: [Writing a widget](docs/widgets.md) and
-[Writing a theme](docs/themes.md).
+[Writing a theme](docs/themes.md). Why some of it is the way it is:
+[Why it looks the way it does](docs/decisions.md).
 
 ## Touch gestures
 
@@ -57,7 +58,7 @@ Three processes, each doing one thing:
 | Process | What it is | Runs on |
 |---------|-----------|---------|
 | `backend/` | FastAPI + the module hub, the only writer of the config | project virtualenv (`uv`) |
-| `shell/edge_kiosk` | the kiosk window on the Xeneon | **system** Python + system PySide6 |
+| `shell/qml_kiosk` | the kiosk window on the Xeneon | **system** Python + system PySide6 |
 | `gui/` | EDGE//DASH, the settings window | Tauri 2 + React |
 
 The kiosk and the settings window are both plain clients of the backend over
@@ -71,9 +72,10 @@ of the three that always runs, which makes it the only sensible place for it.
 
 The code follows a **module registry pattern**. Each widget = one backend
 producer (`backend/modules/<x>.py` subclassing `Module`, decorated with
-`@register_module`) + one frontend consumer (`frontend/js/widgets/<x>.js`
-calling `registerWidget`). Data flows backend → hub → WebSocket → all matching
-widget instances. Adding a widget requires no changes to the core scaffolding.
+`@register_module`) + one kiosk view (`shell/qml_kiosk/qml/widgets/<X>.qml`)
++ one manifest (`widgets/<x>.json`) that makes it known to the layout editor.
+Data flows backend → hub → WebSocket → all matching widget instances. Adding
+a widget requires no changes to the core scaffolding.
 
 A module produces its data on a clock (`interval`), by pushing when its source
 signals it (`await self.emit(...)`, as MPRIS property changes and systemd unit
@@ -96,7 +98,7 @@ a frame even when the value repeats.
 |-----------|---------|--------------|
 | Python ≥ 3.11 | runtime | `python` |
 | [uv](https://github.com/astral-sh/uv) | virtualenv + dependency manager | `uv` |
-| PySide6 (system-wide) | the kiosk window, which is Qt WebEngine | `pyside6` |
+| PySide6 (system-wide) | the kiosk window (Qt Quick) and the video player (Qt WebEngine) | `pyside6` |
 | `systemd` | user services | (preinstalled) |
 
 ```bash
@@ -207,8 +209,9 @@ Re-running is idempotent. Options:
 ```
 
 The kiosk window needs the **distribution's** PySide6, not a wheel in the
-virtualenv: it links against the system Qt WebEngine, which is the build that
-carries the codecs the YouTube widget plays.
+virtualenv. The window itself is Qt Quick. For a video it starts a process of
+its own on the system Qt WebEngine, which is the build that carries the codecs
+YouTube plays.
 
 ```bash
 sudo pacman -S pyside6           # Arch / CachyOS
@@ -222,15 +225,12 @@ journalctl --user -u edge-dashboard -u edge-kiosk -f      # live logs
 systemctl --user stop   edge-dashboard edge-kiosk         # stop both
 ```
 
-The dashboard is also served at `http://127.0.0.1:8765/`, so it can be opened
-in any browser to test without the kiosk window.
-
 ![The EDGE//DASH settings window showing the theme picker](docs/screenshots/settings-theme.png)
 
 ### Launching the kiosk by hand
 
 ```bash
-PYTHONPATH=$PWD/shell /usr/bin/python3 -m edge_kiosk
+PYTHONPATH=$PWD/shell /usr/bin/python3 -m qml_kiosk.main
 ```
 
 It picks the output matching the Edge's native `2560×720` and fills it. If
@@ -310,7 +310,7 @@ answering the request.
 
 ```bash
 uv sync                                # install deps into ./.venv
-uv run python -m backend.main          # run on http://127.0.0.1:8765
+uv run python -m backend.main          # API on http://127.0.0.1:8765
 uv run pytest                          # ~200 tests, should pass clean
 ```
 
@@ -337,7 +337,7 @@ replaced version as `config.local.yaml.bak`.
 
 ```yaml
 server:
-  host: "127.0.0.1"    # bind address — localhost = kiosk on same machine only
+  host: "127.0.0.1"    # bind address, localhost means kiosk on this machine only
   port: 8765
 
 logging:
@@ -399,7 +399,7 @@ modules:
 
   youtube:
     enabled: true
-    interval: 3600         # oEmbed metadata rarely changes — once an hour is plenty
+    interval: 3600         # oEmbed metadata rarely changes, once an hour is plenty
     entries:
       - "https://www.youtube.com/watch?v=dQw4w9WgXcQ"   # video URL
       - "fh-i7gw4Dwg"                                   # bare 11-char ID
@@ -452,7 +452,7 @@ modules:
     columns: 4               # deck grid width  (1..8)
     rows: 3                  # deck grid height (1..8); overflow paginates
     actions:
-      # --- Shell action — argv list, no shell interpreter, no globs.
+      # --- Shell action, argv list, no shell interpreter, no globs.
       - id: lock
         label: "Lock"
         icon: "🔒"            # emoji/text, or "ti:<name>" for a Tabler icon
@@ -546,7 +546,7 @@ modules:
     interval: 30
     govee:
       # Govee API key: Govee Home app → Profile → "Apply for API Key".
-      # Free tier ~10 000 requests/day — far above what this widget uses.
+      # Free tier ~10 000 requests/day, far above what this widget uses.
       api_key: "YOUR-GOVEE-API-KEY"
     tuya:
       # Covers Smart Life, Tuya Smart, Antela and most Tuya-rebranded OEMs.
@@ -570,15 +570,14 @@ Each page is a CSS-Grid container. `grid.columns` and `grid.rows` are
 literal `grid-template-columns` / `grid-template-rows` values. Each
 widget gets a 1-indexed `col` / `row` plus optional `colspan` / `rowspan`.
 The optional `variant` picks one of the looks a widget offers. A widget
-declares them in its own JS file (`static variants = [...]`), the backend
-reads that when it scans the widget directory, and the layout editor offers
-exactly those in a list, so there is nothing to remember or mistype. Leave it
-out for the widget's default look.
+declares them in its manifest (`variants` in `widgets/<id>.json`), the backend
+reads them when it scans the directory, and the layout editor offers exactly
+those in a list. Leave it out for the widget's default look.
 
 The metric widgets (cpu, gpu, ram, network, sensors, disk_usage) know
-`compact`: the number and its subtitle, no chart. It is meant for small tiles,
-and it leaves the chart out of the page entirely rather than hiding it, so it
-costs no drawing time at all.
+`compact`: the number and its subtitle. It is meant for small tiles. The chart
+is never loaded in that variant, so it costs neither drawing time nor
+memory.
 
 ```yaml
 pages:
@@ -621,20 +620,21 @@ column/row/span numbers for every widget beside it.
 | Widget | Backend module | Description |
 |--------|----------------|-------------|
 | `heartbeat` | `heartbeat` | Connection status + uptime |
-| `clock` | none (frontend-only) | Time + locale-formatted date |
-| `cpu` | `system` | Per-core CPU usage + sparkline |
-| `ram` | `system` | Memory usage |
+| `clock` | none | Time + locale-formatted date |
+| `cpu` | `system`, `sensors` | Per-core CPU usage, curve, and the temperature |
+| `ram` | `system`, `sensors` | Memory usage, curve, and the temperature |
 | `network` | `system` | RX/TX rate + dual sparkline |
 | `gpu` | `nvidia` | NVIDIA usage + VRAM + temp + power |
-| `sensors` | `sensors` | hwmon temperature sensors |
+| `sensors` | `sensors` | Every hwmon temperature as a table |
+| `sensor_focus` | `sensors` | One or two picked sensors, as a curve or dials |
 | `disk_usage` | `disk_usage` | Per-mountpoint fill bars |
 | `top_processes` | `top_processes` | Top-N CPU consumers |
 | `weather` | `weather` | Current + hourly forecast |
 | `media` | `media` | MPRIS player controls + album art |
-| `youtube` | `youtube` | Tile grid; tap opens fullscreen embed |
+| `youtube` | `youtube` | Tile grid; a tap opens the video window |
 | `quick_actions` | `quick_actions` | Stream-Deck tile grid: shell, HTTP and app-launch tiles, folders, live status |
 | `smart_lights` | `smart_lights` | Govee + Tuya unified control |
-| `pomodoro` | none (frontend-only) | Pomodoro timer + stopwatch |
+| `pomodoro` | none | Pomodoro timer + stopwatch |
 | `notes` | (REST `/api/notes`) | Tabbed plain-text notepad |
 
 ## Kiosk display setup
@@ -652,28 +652,27 @@ edge-kiosk --output DP-4                 # force a connector
 edge-kiosk --width 1920 --height 1080    # different panel
 edge-kiosk --url http://my-host:8765     # remote backend
 edge-kiosk --windowed                    # a normal window, for development
-edge-kiosk --debug-port 9222             # Chromium remote debugging
+edge-kiosk --show-cursor                 # keep the mouse pointer visible
 ```
 
-(`edge-kiosk` above is `PYTHONPATH=$PWD/shell /usr/bin/python3 -m edge_kiosk`.)
+(`edge-kiosk` above is `PYTHONPATH=$PWD/shell /usr/bin/python3 -m qml_kiosk.main`.)
 
-Ctrl+R reloads, Ctrl+Q quits, F11 leaves fullscreen, for the times a keyboard
-is actually attached. The cursor is hidden unless `--show-cursor` is given.
+The kiosk window has no keyboard shortcuts; systemd starts and stops it. In
+the video window, Esc closes the video. The cursor is hidden unless
+`--show-cursor` is given.
 
-### Why this is not a browser any more
+### The window on the Xeneon
 
-It used to be Chromium started from a shell script, and placing that window was
-the hard part: Chromium is an XWayland client, KWin ignores the geometry such a
-client asks for, and on a cold boot the window regularly landed on the primary
-monitor because the Xeneon was not arranged yet. The workaround was a generated
-KWin rule in `~/.config/kwinrulesrc`.
+Qt places the window directly on the screen we picked. If no display with the
+expected resolution is there at startup, the kiosk takes the primary screen
+and moves over once the Xeneon appears.
 
-The window is ours now, so Qt places it directly on the `QScreen` we picked and
-no rule is involved in placing it. The `[edge-dashboard-kiosk]` group in
-`~/.config/kwinrulesrc` still exists, but it does something else entirely now:
-it only keeps the window out of the task list, carries no geometry, and is
-rewritten by `scripts/window-rule.sh`. If you ran an older version, that
-script clears the stale placement keys out of it on its next run.
+The `[edge-dashboard-kiosk]` group in `~/.config/kwinrulesrc` keeps the window
+out of the task list. It carries no geometry and is written by
+`scripts/window-rule.sh`.
+
+Why the window is QML and not a browser is in
+[Why it looks the way it does](docs/decisions.md).
 
 ## Adding a widget
 
@@ -685,16 +684,18 @@ The registry pattern means new widgets need **zero changes** to the core:
    `backend/modules/<name>.py`, decorate with `@register_module`. Override
    `setup()` (one-time init), `poll()` (returns a JSON-serialisable dict),
    and optionally `teardown()`.
-2. **Frontend consumer**: drop a class in `frontend/js/widgets/<name>.js`
-   that calls `registerWidget(name, class)`. The class needs at least
-   `mount(el, initial, meta)` and `update(data, moduleName, ts)`, plus
-   a static `modules = [...]` listing which backend modules to subscribe
-   to. `destroy()` is called on teardown.
-3. **Wire it up**: add the module to `config.yaml` under `modules:` and
+2. **Kiosk view**: drop a QML file in
+   `shell/qml_kiosk/qml/widgets/<Name>.qml`. It is found by name:
+   `disk_usage` is `DiskUsage.qml`. It needs at least a `moduleNames` property
+   listing the modules it consumes and a `receive(module, data)` function.
+3. **Manifest**: drop a `widgets/<name>.json`. The file existing is the
+   registration; the layout editor lists what it finds there. It may declare
+   `variants` and `options`.
+4. **Wire it up**: add the module to `config.yaml` under `modules:` and
    place the widget on a page (or do it in the settings window's Layout view).
 
-Frontend-only widgets (no backend producer) work too: just set
-`static modules = []`. See `clock.js`, `pomodoro.js`, `notes.js`.
+Widgets without a backend producer work too: leave `moduleNames` empty and
+`modules` out of the manifest. The clock, the pomodoro and the notes do that.
 
 ## Themes
 
@@ -707,19 +708,19 @@ properties as `cyberpunk.css` (the canonical reference).
 
 ## Languages
 
-UI strings live in `frontend/locales/<code>.json`, fetched at boot by
-`frontend/js/i18n.js`. The display's language is the config value
+UI strings live in `frontend/locales/<code>.json`, read at boot by the kiosk
+and by the settings window. The display's language is the config value
 `default_language` (`auto` | `en` | `de`), set in the settings window under
-`Design`; `auto` falls back to `navigator.languages`. It is a config value
-rather than a per-device preference because the settings window is a separate
-application and cannot write the display's browser storage.
+`Design`; `auto` falls back to `LANG` from the environment. It is a config
+value rather than a per-device preference because the settings window is a
+separate application and cannot write the display's own storage.
 
 The window has its own language under `Language`, and pulls the same locale
 files from the backend so module labels need no second translation.
 
-Adding a language: drop a new JSON file alongside `en.json` / `de.json`,
-extend `SUPPORTED` in `frontend/js/i18n.js`, and `SUPPORTED_LANGUAGES` in
-`gui/src/i18n/index.ts`.
+Adding a language: drop a new JSON file alongside `en.json` / `de.json` and
+extend `SUPPORTED_LANGUAGES` in `gui/src/i18n/index.ts`. The kiosk loads the
+file named by the config value and needs no list.
 
 ## Development
 
@@ -743,28 +744,19 @@ backend/
   autostart.py        The autostart switch, writes and enables the units
   brand.py            The app icon, drawn once for the tray and the window
   modules/            Module subclasses, one file per backend producer
-frontend/
-  index.html
-  js/
-    app.js            Bootstrap: fetch config, mount widgets, route WS frames
-    registry.js       registerWidget / getWidget
-    i18n.js           Tiny t() helper
-    ws.js             WebSocket client with auto-reconnect
-    swiper.js         Page swiping
-    theme.js          Theme manager (follows the backend's default_theme)
-    confirm.js        Themed confirm dialog
-    widgets/          One file per frontend consumer
-    lib/              Sparkline, icons, frame ticker, value smoothing
-  css/
-    base.css          Layout + general components
-    widgets.css       Per-widget styles
-    fonts.css
-    themes/           One file per theme
+widgets/              One manifest per widget; the file is the registration
+frontend/             What the kiosk and settings window read off disk
+  player.html         The page the video window loads
+  css/themes/         One file per theme
   locales/            One JSON file per language
+  vendor/             Tabler icons, fonts, emoji data set
 shell/
-  edge_kiosk/         The kiosk window (Qt WebEngine, system Python)
+  qml_kiosk/          The kiosk window (QML, system Python)
+    qml/widgets/      One file per widget; this is the view
+    theme.py          Reads the themes out of the CSS files
+    bridge.py         WebSocket, config, strings, icons
 gui/
-  src/                EDGE//DASH — the settings window (React)
+  src/                EDGE//DASH, the settings window (React)
   src-tauri/          Its window frame (Tauri 2)
 config.yaml           Committed template
 config.local.yaml     Gitignored, written by the settings window

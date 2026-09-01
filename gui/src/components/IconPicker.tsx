@@ -32,7 +32,7 @@ const MAX_RESULTS = 300;
  * Picks the icon for a quick action: a Tabler icon or an emoji.
  *
  * Both are stored in the same field, told apart by the `ti:` prefix, which is
- * what the kiosk expects (see frontend/js/lib/icon.js). Anything typed by
+ * what the kiosk expects (see `Bridge.iconUrl`). Anything typed by
  * hand stays untouched, so an icon set in the YAML survives a visit here.
  */
 export function IconPicker({

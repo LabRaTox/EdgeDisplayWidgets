@@ -195,3 +195,115 @@ async def test_primary_readings_sort_first(tmp_path: Path):
     # 'Package id 0' is in PRIMARY_LABELS, should appear before 'Core 0'
     labels = [r["label"] for r in data["readings"]]
     assert labels.index("Package id 0") < labels.index("Core 0")
+
+
+# --- Stable ids ------------------------------------------------------------
+#
+# A layout stores the id of the sensor a tile shows. hwmon slots are handed out
+# in driver probe order, so an id built from `hwmonN` can point at a different
+# chip after a reboot. These pin down that it is built from the hardware
+# address instead, and that two chips never end up sharing one id.
+
+
+def _link_device(root: Path, slot: int, target: Path) -> None:
+    """Give a fake chip the `device` symlink a real one has."""
+    target.mkdir(parents=True, exist_ok=True)
+    (root / f"hwmon{slot}" / "device").symlink_to(target)
+
+
+@pytest.mark.asyncio
+async def test_id_is_built_from_the_hardware_address(tmp_path: Path):
+    hwmon = tmp_path / "hwmon"
+    _make_chip(hwmon, 3, "k10temp", {1: ("Tctl", 45000)})
+    _link_device(hwmon, 3, tmp_path / "devices" / "pci0000:00" / "0000:00:18.3")
+
+    mod = SensorsModule({"hwmon_root": str(hwmon)})
+    await mod.setup()
+    data = await mod.poll()
+
+    ids = [r["id"] for r in data["readings"]]
+    assert ids == ["k10temp@0000:00:18.3:1"]
+    # The slot must not appear: that is the part that moves.
+    assert "hwmon3" not in ids[0]
+
+
+@pytest.mark.asyncio
+async def test_the_id_survives_a_different_hwmon_slot(tmp_path: Path):
+    """The same chip on the same address, enumerated differently, keeps its id.
+    This is the whole point: a tile still shows the sensor it was given."""
+    ids = []
+    for slot in (3, 7):
+        hwmon = tmp_path / f"boot{slot}"
+        _make_chip(hwmon, slot, "k10temp", {1: ("Tctl", 45000)})
+        _link_device(hwmon, slot, tmp_path / "dev" / "0000:00:18.3")
+        mod = SensorsModule({"hwmon_root": str(hwmon)})
+        await mod.setup()
+        ids.append((await mod.poll())["readings"][0]["id"])
+    assert ids[0] == ids[1]
+
+
+@pytest.mark.asyncio
+async def test_drives_of_the_same_kind_get_different_ids(tmp_path: Path):
+    """Three NVMe drives all report as `nvme`. They sit in different slots, so
+    picking one must not be able to give you another."""
+    hwmon = tmp_path / "hwmon"
+    for slot, pci in enumerate(("0000:02:00.0", "0000:03:00.0", "0000:04:00.0")):
+        _make_chip(hwmon, slot, "nvme", {1: ("Composite", 40000 + slot)})
+        # A drive links to its controller instance, which is a counter itself;
+        # the address one level up is the stable part.
+        _link_device(hwmon, slot, tmp_path / "devices" / pci / "nvme" / f"nvme{slot}")
+
+    mod = SensorsModule({"hwmon_root": str(hwmon)})
+    await mod.setup()
+    ids = [r["id"] for r in (await mod.poll())["readings"]]
+    assert len(set(ids)) == 3, ids
+    assert all("nvme@0000:0" in i for i in ids), ids
+
+
+@pytest.mark.asyncio
+async def test_readings_without_an_address_stay_unique(tmp_path: Path):
+    """Hardware that reports no address at all falls back to the hwmon slot.
+    That is not stable across reboots, but it is still unique, so a tile can
+    never show a sensor other than the one it names."""
+    hwmon = tmp_path / "hwmon"
+    _make_chip(hwmon, 0, "acpitz", {1: ("", 40000)})
+    _make_chip(hwmon, 1, "acpitz", {1: ("", 41000)})
+
+    mod = SensorsModule({"hwmon_root": str(hwmon), "include_unknown": True})
+    await mod.setup()
+    ids = [r["id"] for r in (await mod.poll())["readings"]]
+    assert len(set(ids)) == len(ids), ids
+
+
+@pytest.mark.asyncio
+async def test_ids_are_unique_on_this_machine():
+    """Against the real /sys, when it is there."""
+    if not Path("/sys/class/hwmon").is_dir():
+        pytest.skip("no hwmon on this machine")
+    mod = SensorsModule({})
+    await mod.setup()
+    data = await mod.poll()
+    if data.get("available") is not True:
+        pytest.skip(data.get("reason", "no readings"))
+    ids = [r["id"] for r in data["readings"]]
+    assert len(set(ids)) == len(ids), f"duplicate ids: {ids}"
+
+
+@pytest.mark.asyncio
+async def test_two_chips_on_one_device_are_told_apart(tmp_path: Path, caplog):
+    """One device can expose several hwmon nodes. Same chip name, same address,
+    same input index would be one id for two readings, and a tile pointing at
+    it would show whichever came first. The slot is appended instead, and the
+    fallback is logged rather than silent."""
+    hwmon = tmp_path / "hwmon"
+    device = tmp_path / "devices" / "0000:00:18.3"
+    for slot in (0, 1):
+        _make_chip(hwmon, slot, "k10temp", {1: ("Tctl", 45000 + slot)})
+        _link_device(hwmon, slot, device)
+
+    mod = SensorsModule({"hwmon_root": str(hwmon)})
+    await mod.setup()
+    ids = [r["id"] for r in (await mod.poll())["readings"]]
+
+    assert len(set(ids)) == 2, ids
+    assert all(i.endswith(("#hwmon0", "#hwmon1")) for i in ids), ids

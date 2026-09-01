@@ -85,6 +85,38 @@ LABEL_DISPLAY: dict[str, str] = {
 }
 
 
+#: A hardware address rather than an enumeration index: a PCI slot
+#: (`0000:13:00.0`), an i2c address (`7-0051`), a HID path. Anything without
+#: one of these separators is a counter the kernel hands out in probe order.
+_ADDRESSED = re.compile(r"[0-9a-f]+[:-][0-9a-f]", re.I)
+
+
+def _device_anchor(entry: Path) -> str:
+    """Something about this chip that survives a reboot.
+
+    `hwmon3` does not: the number is handed out in the order drivers register,
+    so the same slot can belong to a different chip after the next boot. The
+    `device` symlink points at the hardware itself, and its address does not
+    move as long as the part stays in the same socket: `0000:00:18.3` for the
+    CPU, `7-0051` for a DIMM.
+
+    NVMe drives link to their controller instance, nvme1 and so on, which is
+    another counter, so the walk goes on up to the PCI slot the drive sits in.
+    Falls back to the hwmon name when there is nothing better, which keeps the
+    id unique for this boot even where it cannot be stable.
+    """
+    try:
+        target = (entry / "device").resolve(strict=True)
+    except (OSError, RuntimeError):
+        return entry.name
+    for part in [target.name, *(p.name for p in target.parents)]:
+        if part in ("", "/", "sys", "devices"):
+            break
+        if _ADDRESSED.search(part):
+            return part
+    return entry.name
+
+
 def _pretty_chip(chip: str) -> str:
     low = chip.lower()
     if low in CHIP_DISPLAY:
@@ -171,6 +203,32 @@ class _Reading:
         self.id = ident
         self.display_chip = display_chip
         self.display_label = display_label
+
+
+def _disambiguate(readings: list[_Reading]) -> None:
+    """Make sure no two readings answer to the same id.
+
+    Two chips of the same kind on hardware that reports no distinct address
+    would otherwise share an id, and a tile pointing at it would show whichever
+    came first: exactly the mix-up the id exists to prevent. Falling back to
+    the hwmon slot costs those two their stability across reboots, which is
+    the lesser problem, and it is logged so it is not a silent choice.
+    """
+    seen: dict[str, list[_Reading]] = {}
+    for reading in readings:
+        seen.setdefault(reading.id, []).append(reading)
+    for ident, group in seen.items():
+        if len(group) < 2:
+            continue
+        logger.warning(
+            f"sensors: {len(group)} readings share the id {ident!r}; "
+            "falling back to the hwmon slot for those, which does not survive "
+            "a reboot"
+        )
+        for reading in group:
+            # The reading's path ends in the hwmon directory it came from.
+            slot = reading.path.parent.name
+            reading.id = f"{reading.id}#{slot}"
 
 
 @register_module
@@ -271,10 +329,12 @@ class SensorsModule(Module):
                         is_only_temp and chip_name in ("k10temp", "zenpower")
                     )
 
-                    # Hwmon slot in the id keeps it globally unique when the
-                    # same chip name appears on multiple devices (e.g. three
-                    # NVMe drives all reporting as `nvme:1`).
-                    ident = f"{entry.name}/{chip_name}:{idx}"
+                    # The id a layout stores to point at this reading. Built
+                    # from the hardware address rather than the hwmon slot, so
+                    # a tile still shows the sensor it was given after a
+                    # reboot. The chip name is part of it as well: an id can
+                    # then only ever match the same chip on the same device.
+                    ident = f"{chip_name}@{_device_anchor(entry)}:{idx}"
 
                     display_chip = _pretty_chip(chip_name)
                     if low == "spd5118":
@@ -290,6 +350,8 @@ class SensorsModule(Module):
                     ))
             except Exception as exc:
                 logger.warning(f"sensors: failed to enumerate {entry}: {exc}")
+
+        _disambiguate(results)
 
         # Sort: primary first, then by display-chip+display-label so visually
         # related rows (all NVMe, all CPU, …) stay grouped in the widget.

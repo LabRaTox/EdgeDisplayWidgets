@@ -21,6 +21,10 @@ class SettingField(BaseModel):
     declaring it here, with no bespoke UI code. This mirrors the registry
     pattern: adding config surface requires zero core changes.
 
+    ``color`` holds a ``#rrggbb`` string and renders as a colour well. An empty
+    value is not a colour but the absence of one, which is how a field says
+    "whatever the theme uses"; the well therefore comes with a way to clear it.
+
     ``key`` is the config key relative to the module block; use dotted notation
     for nested blocks (e.g. ``"govee.api_key"``). ``label_key`` / ``help_key`` /
     ``group_key`` are i18n keys resolved by the frontend (they fall back to the
@@ -28,7 +32,7 @@ class SettingField(BaseModel):
     """
 
     key: str
-    type: Literal["bool", "int", "float", "text", "select", "list"]
+    type: Literal["bool", "int", "float", "text", "select", "list", "color"]
     label_key: str
     default: Any = None
     secret: bool = False
@@ -39,6 +43,17 @@ class SettingField(BaseModel):
     placeholder_key: str | None = None
     help_key: str | None = None
     group_key: str | None = None
+
+    # A `select` whose values are not readable on their own needs something to
+    # show instead. Two ways, because the values come from two places: a fixed
+    # list is translated by the editor from `option_label_keys`, while a list
+    # discovered at runtime (the machine's sensors) arrives already named in
+    # `option_labels`, since only the backend knows what is there.
+    option_labels: list[str] | None = None
+    option_label_keys: list[str] | None = None
+    # Filled in by the server before the schema is handed out. "sensors" means
+    # the readings the sensors module currently reports.
+    options_source: str | None = None
 
 
 class Module(ABC):

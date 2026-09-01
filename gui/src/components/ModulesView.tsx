@@ -162,11 +162,14 @@ function ModuleCard({
 }
 
 /**
- * One input, decided by the module's own schema. This is the whole point of
- * `settings_schema`: a module gains an editable option by declaring it, and no
- * code in this window changes.
+ * One input, decided by a schema rather than written out here. That is the
+ * whole point: a module gains an editable option by declaring it in
+ * `settings_schema`, a widget by declaring it in its manifest, and this
+ * window renders both without a line of code changing.
+ *
+ * Exported because the layout editor renders widget options with it.
  */
-function Field({
+export function Field({
   field,
   value,
   onChange,
@@ -211,12 +214,49 @@ function Field({
     case "select":
       control = (
         <select id={id} value={String(value ?? "")} onChange={(e) => onChange(e.target.value)}>
-          {(field.options ?? []).map((option) => (
+          {(field.options ?? []).map((option, index) => (
             <option key={option} value={option}>
-              {option}
+              {/*
+                * The value doubles as the label unless the schema says
+                * otherwise: a sensor id reads as `hwmon3/k10temp:1`, which is
+                * the right thing to store and the wrong thing to show.
+                */}
+              {field.option_labels?.[index] ??
+                (field.option_label_keys?.[index]
+                  ? t(field.option_label_keys[index], { defaultValue: option })
+                  : option)}
             </option>
           ))}
         </select>
+      );
+      break;
+    case "color":
+      /*
+       * An empty value is not a colour but the absence of one, and a colour
+       * well cannot show that: it would sit on black and look like a choice
+       * nobody made. So the well falls back to a neutral swatch and the cross
+       * next to it puts the field back to empty, which is what "use the
+       * theme's colour" looks like.
+       */
+      control = (
+        <span className="control inline">
+          <input
+            id={id}
+            type="color"
+            value={String(value || "#808080")}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          {value ? (
+            <button
+              className="btn small ghost"
+              type="button"
+              title={t("common.reset")}
+              onClick={() => onChange("")}
+            >
+              ✕
+            </button>
+          ) : null}
+        </span>
       );
       break;
     case "list":

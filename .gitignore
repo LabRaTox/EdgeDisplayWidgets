@@ -18,6 +18,8 @@ htmlcov/
 node_modules/
 
 config.local.yaml
+# Written next to it on every save, see _write_local_config.
+config.local.yaml.bak
 *.log
 
 .DS_Store

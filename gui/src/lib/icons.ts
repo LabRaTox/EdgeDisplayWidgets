@@ -6,10 +6,9 @@
  *   "app:<name>"  a desktop application icon, served by /api/apps/icon/<name>
  *   anything else literal text, in practice an emoji
  *
- * This mirrors frontend/js/lib/icon.js, which does the same job for the
- * kiosk. The two cannot share code (one is a module in the browser served by
- * the backend, the other is bundled into the settings window), so they share
- * the format instead.
+ * The kiosk resolves the same three forms in `Bridge.iconUrl`. The two
+ * cannot share code, one being Python in the kiosk process and the other
+ * bundled into this window, so they share the format instead.
  *
  * The sprite is fetched and injected into this document rather than
  * referenced by URL: `<use href="http://…#id">` only resolves same-origin,

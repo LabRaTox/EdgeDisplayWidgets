@@ -1,0 +1,2 @@
+singleton Style 1.0 Style.qml
+singleton Temperatures 1.0 widgets/Temperatures.qml

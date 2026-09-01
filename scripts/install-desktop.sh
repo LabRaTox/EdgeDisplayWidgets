@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Give the settings window an icon and a menu entry.
+# Give the settings window an icon and a menu entry, and the kiosk window an
+# identity.
 #
 # Why this is needed when running from a checkout: a Wayland task manager
 # identifies a window by its app id — `edgedash` here — and looks for a
@@ -79,6 +80,29 @@ Categories=Settings;
 Terminal=false
 EOF
 log "menu entry written: ${DESKTOP}"
+
+# The kiosk window carries its own app id, `edge-dashboard`, set with
+# setDesktopFileName() in shell/qml_kiosk/main.py. Without a file of that name
+# the desktop portal refuses to register the window ("App info not found") and
+# the window has no icon of its own. NoDisplay keeps it out of the menu: it is
+# a service that systemd starts, not something anyone launches by hand.
+KIOSK_ID="edge-dashboard"
+KIOSK_DESKTOP="${DATA_DIR}/applications/${KIOSK_ID}.desktop"
+cat > "$KIOSK_DESKTOP" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Edge Dashboard
+GenericName=Kiosk window
+Comment=Das Kioskfenster auf dem Xeneon Edge
+Comment[en]=The kiosk window on the Xeneon Edge
+Exec=/usr/bin/python3 -m qml_kiosk.main
+Path=${PROJECT_DIR}
+Icon=${APP_ID}
+StartupWMClass=${KIOSK_ID}
+NoDisplay=true
+Terminal=false
+EOF
+log "kiosk window identity written: ${KIOSK_DESKTOP}"
 
 if [ ! -x "$BINARY" ]; then
     warn "the settings window is not built yet — the entry points at:"

@@ -1,19 +1,20 @@
 # Edge Dashboard configuration
 # =============================
 # This file is the single source of truth for which modules run, how often
-# they poll, and what the frontend renders. Copy to `config.local.yaml`
-# and point EDGE_CONFIG at it to keep machine-specific values out of git.
+# they poll, and what the kiosk shows. Copy to `config.local.yaml`, which is
+# preferred automatically, or point EDGE_CONFIG at a file of your own to keep
+# machine-specific values out of git.
 
 server:
   host: "127.0.0.1"        # bind address; localhost for kiosk-on-same-machine
-  port: 8765               # browser opens http://<host>:<port>
+  port: 8765               # the API and the settings window talk to this
 
 logging:
   level: "INFO"            # TRACE | DEBUG | INFO | WARNING | ERROR | CRITICAL
   json: false              # true => one JSON object per log line (for journald)
 
 # Theme the kiosk renders with. Changed from the settings window.
-default_theme: "cyberpunk" # cyberpunk | clean | steampunk | light
+default_theme: "cyberpunk" # see frontend/css/themes/ for the full list
 
 # Interface language of the kiosk: auto (detect) | en | de
 default_language: "auto"
@@ -40,7 +41,7 @@ modules:
     # correction pass (see backend/modules/media.py). Set one to override.
   weather:
     enabled: true
-    interval: 600          # 10 min — Open-Meteo is rate-friendly but not free
+    interval: 600          # 10 min, Open-Meteo is rate-friendly but not free
     name: "Ingelheim am Rhein"
     lat: 49.9667
     lon: 8.0500
@@ -48,7 +49,7 @@ modules:
     units: "metric"        # metric | imperial
   youtube:
     enabled: true
-    interval: 3600         # 1 h — oEmbed metadata rarely changes
+    interval: 3600         # 1 h, oEmbed metadata rarely changes
     # URL or 11-char video ID per entry; playlists via ?list=…
     entries: []
   disk_usage:
@@ -65,7 +66,7 @@ modules:
     interval: 60           # the action list is static; long interval is fine
     timeout_seconds: 30
     actions:
-      # Shell actions run via argv list — no shell interpreter, no globs.
+      # Shell actions run via argv list, no shell interpreter, no globs.
       - id: lock
         label: "Sperren"
         icon: "🔒"
@@ -83,7 +84,7 @@ modules:
         kind: shell
         command: ["systemctl", "reboot"]
         confirm: true
-      # HTTP example (commented — uncomment + fill in a real URL/token):
+      # HTTP example, commented out; uncomment and fill in a real URL/token:
       # - id: hue_off
       #   label: "Lichter aus"
       #   icon: "💡"
@@ -98,7 +99,7 @@ modules:
     enabled: true
     interval: 30           # cloud APIs don't need to be hammered
     # Govee: API key from the Govee-Home app (Profile → "Apply for API Key").
-    # Free tier ~10 000 req/day — well above our 30 s poll for a dozen devices.
+    # Free tier ~10 000 req/day, well above our 30 s poll for a dozen devices.
     govee:
       api_key: ""
     # Tuya: covers Smart Life / Tuya Smart / Antela / many OEMs.
@@ -114,18 +115,17 @@ modules:
       uid: ""
       region: "eu"
 
-# Page layouts. Frontend turns each into a CSS-Grid container.
+# Page layouts. Each becomes one grid on the kiosk.
 # `grid.columns` / `grid.rows` are CSS-Grid track lists.
 # Each widget gets `col`, `row` (1-indexed) plus optional `colspan`/`rowspan`.
-# `variant` picks one of the display variants a widget declares (`static
-# variants` in its JS file); leave it out for the widget's default look. The
+# `variant` picks one of the display variants a widget declares (`variants` in
+# `widgets/<id>.json`); leave it out for the widget's default look. The
 # Layout-Editor offers exactly the ones the chosen widget supports. Currently
-# the metric widgets know `compact`: number and subtitle only, no chart — for
-# small tiles, and it costs no drawing time at all.
+# the metric widgets know `compact`: number and subtitle only, meant for small
+# tiles, where the chart is never loaded.
 #
-# The legacy `grid.areas` + widget.area format is still accepted; it gets
-# auto-translated into col/row at load time. The Layout-Editor in the
-# Settings sheet always saves the col/row format.
+# The `grid.areas` + widget.area format is also accepted and gets translated
+# into col/row at load time. The Layout-Editor always saves col/row.
 pages:
   - id: main
     title: "Main"

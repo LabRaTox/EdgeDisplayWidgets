@@ -6,7 +6,7 @@
 /** One editable field a module declares (backend/modules/base.py SettingField). */
 export interface SettingField {
   key: string;
-  type: "bool" | "int" | "float" | "text" | "select" | "list";
+  type: "bool" | "int" | "float" | "text" | "select" | "list" | "color";
   label_key: string;
   default: unknown;
   secret: boolean;
@@ -17,6 +17,11 @@ export interface SettingField {
   placeholder_key: string | null;
   help_key: string | null;
   group_key: string | null;
+  /** Display text per option, when the value itself is not readable. */
+  option_labels: string[] | null;
+  /** The same, but as i18n keys, for a list that is fixed in the schema. */
+  option_label_keys: string[] | null;
+  options_source: string | null;
 }
 
 /** Everything under `modules.<name>` — the common keys plus whatever the module adds. */
@@ -129,6 +134,8 @@ export interface WidgetsResponse {
   widgets: string[];
   /** Only widgets that declare variants appear here. */
   variants: Record<string, string[]>;
+  /** Only widgets that declare options appear here. */
+  options: Record<string, SettingField[]>;
 }
 
 /** `/api/autostart` — whether the dashboard starts itself at login. */

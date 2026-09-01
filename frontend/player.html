@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>Edge Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--
+    Wrapper page for the kiosk's video window.
+
+    The embedded player refuses to start when it is opened as a page of its
+    own: it answers with error 153 because it wants the page it is embedded
+    in to have an origin. In the browser version that origin was the
+    dashboard itself. This page restores it, so the video window loads from
+    the backend like everything else and the iframe sits on a real page.
+
+    Query: ?id=<video or playlist id>&kind=video|playlist
+  -->
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    iframe { display: block; width: 100vw; height: 100vh; border: 0; }
+    .missing { color: #888; font: 16px system-ui, sans-serif; padding: 24px; }
+  </style>
+</head>
+<body>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const id = params.get("id") || "";
+    const kind = params.get("kind") || "video";
+    // Ids are alphanumeric with dashes and underscores; anything else is not
+    // put into the URL.
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+      document.body.innerHTML = '<p class="missing">Kein Video angegeben.</p>';
+    } else {
+      const options = "autoplay=1&rel=0&modestbranding=1&playsinline=1";
+      const src = kind === "playlist"
+        ? `https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(id)}&${options}`
+        : `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?${options}`;
+      const frame = document.createElement("iframe");
+      frame.src = src;
+      frame.allow = "autoplay; encrypted-media; fullscreen; picture-in-picture";
+      frame.allowFullscreen = true;
+      document.body.appendChild(frame);
+    }
+  </script>
+</body>
+</html>

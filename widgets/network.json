@@ -1,0 +1,8 @@
+{
+  "modules": [
+    "system"
+  ],
+  "variants": [
+    "compact"
+  ]
+}

@@ -1,21 +1,11 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useDraft } from "../lib/useDraft";
 import { useStore } from "../store";
 import type { Page, WidgetPlacement } from "../types";
+import { Field } from "./ModulesView";
 import { SaveBar } from "./SaveBar";
-
-/**
- * Pages and their widget placement.
- *
- * On the kiosk this used to be an edit mode drawn on top of the live
- * dashboard: you dragged the real widgets around. In a window that is not
- * possible and, for this job, not desirable either — a placeholder grid shows
- * the *structure* without live data fighting for attention, and the preview is
- * locked to the display's 32:9 proportion so a layout that looks balanced here
- * is balanced there.
- */
 
 /** How many columns/rows a CSS grid template describes. */
 function countTracks(template: string): number {
@@ -43,11 +33,20 @@ function countTracks(template: string): number {
   return Math.max(1, tokens);
 }
 
+/**
+ * Pages and their widget placement.
+ *
+ * The grid here is a placeholder, not a live preview: it shows the
+ * *structure*, with no data competing for attention, and it is locked to the
+ * display's 32:9 proportion so a layout that looks balanced here is balanced
+ * on the panel.
+ */
 export function LayoutView() {
   const { t } = useTranslation();
   const settings = useStore((s) => s.settings);
   const widgets = useStore((s) => s.widgets);
   const widgetVariants = useStore((s) => s.widgetVariants);
+  const widgetOptions = useStore((s) => s.widgetOptions);
   const saveSettings = useStore((s) => s.saveSettings);
 
   const { draft, dirty, state, edit, reset, save } = useDraft(
@@ -239,16 +238,24 @@ export function LayoutView() {
           <select
             value=""
             onChange={(e) => {
-              if (!e.target.value) return;
+              /*
+               * Read the value out of the event *here*. `edit` hands the
+               * function below to React as a state updater, which runs on the
+               * next render, and by then a `select` reset to "" would have
+               * taken the id with it: every widget added this way landed in
+               * the config with an empty id. No reset is needed either, since
+               * the element is controlled on `value=""` above.
+               */
+              const id = e.target.value;
+              if (!id) return;
               editPage((p) => ({
                 ...p,
                 widgets: [
                   ...p.widgets,
-                  { id: e.target.value, col: 1, row: 1, colspan: 1, rowspan: 1 },
+                  { id, col: 1, row: 1, colspan: 1, rowspan: 1 },
                 ],
               }));
               setSelected(page.widgets.length);
-              e.target.value = "";
             }}
             style={{ width: 220 }}
           >
@@ -264,7 +271,8 @@ export function LayoutView() {
         <div className="card-body">
           {page.widgets.length === 0 && <div className="hint">{t("modules.list_empty")}</div>}
           {page.widgets.map((widget, index) => (
-            <div className="row" key={index}>
+            <Fragment key={index}>
+            <div className="row">
               <label>
                 <button
                   className="btn small ghost"
@@ -289,9 +297,9 @@ export function LayoutView() {
                   max={rows}
                   onChange={(v) => editWidget(index, (w) => ({ ...w, row: v }))}
                 />
-                {/* Arrows rather than words: spelt out, five labelled fields
-                    plus the variant no longer fit on one line. The meaning is
-                    in the tooltip. */}
+                {/* Arrows rather than words: five labelled fields and the
+                    variant only fit on one line this way. The meaning is in
+                    the tooltip. */}
                 <NumberBox
                   label="↔"
                   title={t("layout.colspan")}
@@ -331,6 +339,28 @@ export function LayoutView() {
                 </button>
               </div>
             </div>
+            {/*
+              * The options the widget itself declares, rendered by the same
+              * component the module settings use. A widget gains an option by
+              * shipping a schema next to it; nothing here has to know about it.
+              * Only shown for the selected tile, because several tiles with
+              * options open at once buries the layout fields they belong to.
+              */}
+            {index === selected &&
+              (widgetOptions[widget.id] ?? []).map((field) => (
+                <Field
+                  key={field.key}
+                  field={field}
+                  value={widget.options?.[field.key] ?? field.default}
+                  onChange={(value) =>
+                    editWidget(index, (w) => ({
+                      ...w,
+                      options: { ...(w.options ?? {}), [field.key]: value },
+                    }))
+                  }
+                />
+              ))}
+            </Fragment>
           ))}
         </div>
       </div>
@@ -361,9 +391,9 @@ export function LayoutView() {
 /**
  * The display variant of one widget.
  *
- * The options come from the widget's own JS file (`static variants`), read by
- * the backend — so this offers exactly what the widget can actually do,
- * rather than a name that has to be remembered correctly.
+ * The options come from the widget's own manifest (`variants` in
+ * `widgets/<id>.json`), read by the backend, so this offers exactly what the
+ * widget can do rather than a name that has to be remembered correctly.
  *
  * A value that is not on the list is kept as an option regardless. Widgets
  * lose and gain variants as they are edited, and dropping an unknown one

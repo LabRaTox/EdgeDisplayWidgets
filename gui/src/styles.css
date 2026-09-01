@@ -699,9 +699,9 @@ textarea:disabled {
 
 /* --- Icons and the icon picker ------------------------------------- */
 
-/* Matches the kiosk (frontend/css/base.css): the sprite's symbols carry
-   stroke="currentColor" fill="none", so an icon takes the colour of the text
-   around it and scales with the font size. */
+/* The sprite's symbols carry stroke="currentColor" fill="none", so an icon
+   takes the colour of the text around it and scales with the font size. The
+   kiosk tints them the same way, in Bridge.iconUrl. */
 .ti-svg {
   width: 1.2em;
   height: 1.2em;
@@ -825,7 +825,6 @@ textarea:disabled {
   --border-color: var(--border);
 }
 
-/* The deck preview shows the tile's icon where it used to show its kind. */
 /* The icon is the tile's face: big, centred, above the label. The kind label
    in the corner is what a tile falls back to when it has no icon. */
 .deck-tile .tile-icon {
