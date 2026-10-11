@@ -130,5 +130,7 @@
   "settings.widget.sensor_focus.color_a": "Farbe erster Sensor",
   "settings.widget.sensor_focus.color_b": "Farbe zweiter Sensor",
   "settings.widget.sensor_focus.color_help": "Gilt im Normalbereich. Ab 70 °C wird weiterhin gewarnt, ab 85 °C rot.",
-  "settings.widget.sensor_focus.show_unit": "Einheit °C anzeigen"
+  "settings.widget.sensor_focus.show_unit": "Einheit °C anzeigen",
+  "kiosk.no_widget": "kein Widget: {id}",
+  "kiosk.tile_without_widget": "Kachel ohne Widget"
 }

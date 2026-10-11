@@ -130,5 +130,7 @@
   "settings.widget.sensor_focus.color_a": "First sensor colour",
   "settings.widget.sensor_focus.color_b": "Second sensor colour",
   "settings.widget.sensor_focus.color_help": "Applies in the normal range. Above 70 °C it still warns, above 85 °C it turns red.",
-  "settings.widget.sensor_focus.show_unit": "Show the °C unit"
+  "settings.widget.sensor_focus.show_unit": "Show the °C unit",
+  "kiosk.no_widget": "no widget: {id}",
+  "kiosk.tile_without_widget": "tile without a widget"
 }

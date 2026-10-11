@@ -1,14 +1,15 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Controls
 
 /*
  * The dashboard window.
  *
- * A page is a GridLayout built from the same `grid.columns` / `grid.rows` the
- * settings window writes, and a widget sits at its `col`/`row` with its
- * `colspan`/`rowspan`. The translation of the CSS track list happens in
- * bridge.py; from here on the layout model is the config's, unchanged.
+ * A page is laid out from the same `grid.columns` / `grid.rows` the settings
+ * window writes, and a widget sits at its `col`/`row` with its
+ * `colspan`/`rowspan`. The tiles are placed by hand rather than by a
+ * GridLayout, because GridLayout shares space by the items' own sizes and
+ * knows neither `fr` ratios nor fixed column widths. The pixel offsets come
+ * from grid.py through `bridge.trackSpans`.
  */
 ApplicationWindow {
     id: win
@@ -76,9 +77,11 @@ ApplicationWindow {
                 Item {
                     id: pageItem
                     required property var modelData
+                    required property int index
                     readonly property var page: modelData
 
-                    GridLayout {
+                    Item {
+                        id: cells
                         anchors.fill: parent
                         /*
                          * The inset sits on each page rather than on the view,
@@ -88,9 +91,29 @@ ApplicationWindow {
                          * outgoing ones.
                          */
                         anchors.margins: win.gap
-                        columns: pageItem.page.columns.length
-                        columnSpacing: win.gap
-                        rowSpacing: win.gap
+
+                        /*
+                         * [start, size] per track. Fixed tracks keep their
+                         * pixels, the rest share what is left by their `fr`:
+                         * `32px 1fr 2fr` is one 32 pixel track and two that
+                         * split the remainder one to two.
+                         */
+                        readonly property var columnSpans: bridge.trackSpans(pageItem.index, "columns", width, win.gap)
+                        readonly property var rowSpans: bridge.trackSpans(pageItem.index, "rows", height, win.gap)
+
+                        /*
+                         * The extent of `count` tracks from `first` (1-based,
+                         * as in the config). A position past the last track
+                         * is pulled back onto it, so a tile placed outside the
+                         * grid still shows up instead of vanishing off-page.
+                         */
+                        function extent(list, first, count) {
+                            if (!list || list.length === 0)
+                                return [0, 0];
+                            var a = Math.max(0, Math.min(first - 1, list.length - 1));
+                            var b = Math.max(a, Math.min(a + Math.max(1, count) - 1, list.length - 1));
+                            return [list[a][0], list[b][0] + list[b][1] - list[a][0]];
+                        }
 
                         Repeater {
                             model: pageItem.page.widgets
@@ -98,20 +121,16 @@ ApplicationWindow {
                             Tile {
                                 id: tile
                                 required property var modelData
-                                readonly property var track: pageItem.page.rows[modelData.row - 1]
                                 readonly property bool compact: modelData.variant === "compact"
+                                readonly property var across: cells.extent(cells.columnSpans, modelData.col, modelData.colspan)
+                                readonly property var down: cells.extent(cells.rowSpans, modelData.row, modelData.rowspan)
 
                                 theme: win.theme
 
-                                Layout.column: modelData.col - 1
-                                Layout.row: modelData.row - 1
-                                Layout.columnSpan: modelData.colspan
-                                Layout.rowSpan: modelData.rowspan
-                                Layout.fillWidth: true
-                                // A row given a pixel size keeps it, the rest share
-                                // what is left: that is `32px 1fr 1fr`.
-                                Layout.fillHeight: !track || track.fixed === 0
-                                Layout.preferredHeight: track && track.fixed > 0 ? track.fixed : -1
+                                x: across[0]
+                                y: down[0]
+                                width: across[1]
+                                height: down[1]
 
                                 Loader {
                                     id: loader
@@ -160,7 +179,7 @@ ApplicationWindow {
                                         anchors.top: parent.top
                                         visible: loader.source == ""
                                         theme: win.theme
-                                        label: tile.modelData.id === "" ? "Kachel ohne Widget" : "kein Widget: " + tile.modelData.id
+                                        label: tile.modelData.id === "" ? bridge.tr("kiosk.tile_without_widget") : bridge.tr("kiosk.no_widget").replace("{id}", tile.modelData.id)
                                     }
 
                                     onLoaded: {
