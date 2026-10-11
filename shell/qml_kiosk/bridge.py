@@ -13,6 +13,7 @@ import pathlib
 import re
 import sys
 
+import grid
 import theme as theme_module
 import yaml
 from PySide6.QtCore import (
@@ -40,29 +41,6 @@ SAFE_ICON = re.compile(r"^[a-z0-9-]+$")
 SAFE_APP_ICON = re.compile(r"^[A-Za-z0-9._+-]+$")
 THEMES_DIR = ROOT / "frontend" / "css" / "themes"
 LOCALES_DIR = ROOT / "frontend" / "locales"
-
-
-def _tracks(template: str) -> list[dict]:
-    """A CSS grid template as stretch factors and fixed sizes.
-
-    `32px 1fr 1fr` becomes one fixed row of 32 pixels and two sharing the
-    rest, which is exactly what GridLayout needs. Covers every page in the
-    real config; anything unrecognised falls back to an equal share.
-    """
-    out = []
-    for token in template.split():
-        px = re.fullmatch(r"(\d+(?:\.\d+)?)px", token)
-        fr = re.fullmatch(r"(\d+(?:\.\d+)?)fr", token)
-        minmax = re.fullmatch(r"minmax\([^,]+,\s*(\d+(?:\.\d+)?)fr\)", token)
-        if px:
-            out.append({"fixed": float(px.group(1)), "stretch": 0.0})
-        elif fr:
-            out.append({"fixed": 0.0, "stretch": float(fr.group(1))})
-        elif minmax:
-            out.append({"fixed": 0.0, "stretch": float(minmax.group(1))})
-        else:
-            out.append({"fixed": 0.0, "stretch": 1.0})
-    return out or [{"fixed": 0.0, "stretch": 1.0}]
 
 
 class Bridge(QObject):
@@ -140,12 +118,12 @@ class Bridge(QObject):
 
         pages = []
         for page in cfg.get("pages", []):
-            grid = page.get("grid") or {}
+            layout = page.get("grid") or {}
             pages.append({
                 "id": page.get("id", ""),
                 "title": page.get("title", page.get("id", "")),
-                "columns": _tracks(grid.get("columns", "1fr")),
-                "rows": _tracks(grid.get("rows", "1fr")),
+                "columns": grid.tracks(layout.get("columns", "1fr")),
+                "rows": grid.tracks(layout.get("rows", "1fr")),
                 "widgets": [
                     {
                         "id": w.get("id", ""),
@@ -170,6 +148,17 @@ class Bridge(QObject):
     @Property("QVariant", notify=pagesChanged)
     def pages(self):
         return self._pages
+
+    @Slot(int, str, float, float, result="QVariant")
+    def trackSpans(self, page: int, axis: str, total: float, gap: float):
+        """Start and size of each column or row of one page, in pixels.
+
+        `axis` is "columns" or "rows". See grid.spans for how the space is
+        shared; the window calls this again whenever its size changes.
+        """
+        if not 0 <= page < len(self._pages) or axis not in ("columns", "rows"):
+            return []
+        return grid.spans(self._pages[page][axis], total, gap)
 
     @Property("QVariant", notify=themeChanged)
     def theme(self):
