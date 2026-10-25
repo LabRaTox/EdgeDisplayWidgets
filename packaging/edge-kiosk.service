@@ -1,0 +1,24 @@
+[Unit]
+Description=Edge Dashboard kiosk window (QML on the Xeneon Edge)
+Documentation=file:///usr/share/doc/edge-dashboard/README.md
+# Separate from the backend on purpose: the settings window still has
+# something to talk to when the kiosk is closed, and a dying window never
+# takes the data collection with it. See systemd/edge-kiosk.service for the
+# memory limits below.
+After=graphical-session.target edge-dashboard.service
+Wants=edge-dashboard.service
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/edge-kiosk
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+MemoryHigh=800M
+MemoryMax=1200M
+MemoryAccounting=true
+
+[Install]
+WantedBy=graphical-session.target

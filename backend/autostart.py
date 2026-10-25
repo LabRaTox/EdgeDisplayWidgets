@@ -31,6 +31,10 @@ from loguru import logger
 ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = ROOT / "systemd"
 UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
+#: Where the package puts its units. Installed that way, there is nothing to
+#: render: the switch only enables or disables what the package brought.
+PACKAGE_UNIT_DIR = Path("/usr/lib/systemd/user")
+IN_CHECKOUT = (ROOT / "pyproject.toml").is_file()
 
 #: Order matters on enable: the backend before the window that talks to it.
 UNITS = ("edge-dashboard.service", "edge-kiosk.service")
@@ -51,7 +55,8 @@ class AutostartStatus:
     #: Can the autostart be switched at all right now?
     supported: bool
     enabled: bool
-    #: Which of the units are installed in ~/.config/systemd/user.
+    #: Which of the units are installed (~/.config/systemd/user, or the
+    #: package's /usr/lib/systemd/user).
     units: list[str]
     #: Filled when ``supported`` is false — text for the settings window.
     reason: str | None = None
@@ -65,9 +70,14 @@ class AutostartStatus:
 # --------------------------------------------------------------------------
 
 
+def _installed() -> list[str]:
+    return [unit for unit in UNITS
+            if (UNIT_DIR / unit).exists() or (not IN_CHECKOUT and (PACKAGE_UNIT_DIR / unit).exists())]
+
+
 def status() -> AutostartStatus:
     """Current state — without changing anything."""
-    installed = [unit for unit in UNITS if (UNIT_DIR / unit).exists()]
+    installed = _installed()
     reason = _unsupported_reason()
     if reason is not None:
         return AutostartStatus(
@@ -95,12 +105,13 @@ def set_enabled(enabled: bool) -> AutostartStatus:
         # Rewritten on every enable. That is idempotent and heals the case
         # where the checkout moved since the last install and the old unit
         # points nowhere.
-        for unit in UNITS:
-            _write_unit(unit)
+        if IN_CHECKOUT:
+            for unit in UNITS:
+                _write_unit(unit)
         _systemctl("daemon-reload")
         result = _systemctl("enable", *UNITS)
     else:
-        present = [unit for unit in UNITS if (UNIT_DIR / unit).exists()]
+        present = _installed()
         if not present:
             # Nothing to switch off — the goal is already reached.
             return status()

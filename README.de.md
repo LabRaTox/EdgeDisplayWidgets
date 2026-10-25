@@ -189,6 +189,39 @@ das Anwendungsmenü.
 
 ## Installation
 
+### Als Paket (Arch, CachyOS)
+
+Die Paketdateien liegen im Repository unter `packaging/aur/`, und an jedem
+Release auf GitHub hängt ein fertig gebautes Paket. Es legt die
+systemd-Units, den Menüeintrag und das Symbol dorthin, wo sie hingehören, und
+hält die Einstellungen in `~/.config/edge-dashboard/`.
+
+Selbst bauen:
+
+```bash
+git clone https://github.com/LabRaTox/EdgeDisplayWidgets.git
+cd EdgeDisplayWidgets/packaging/aur
+makepkg -si
+```
+
+Oder das Paket aus dem
+[neuesten Release](https://github.com/LabRaTox/EdgeDisplayWidgets/releases/latest)
+installieren:
+
+```bash
+sudo pacman -U edge-dashboard-*-x86_64.pkg.tar.zst
+```
+
+Danach starten, jetzt und bei jedem Anmelden, und den Kiosk aus der
+Fensterliste nehmen:
+
+```bash
+systemctl --user enable --now edge-dashboard.service edge-kiosk.service
+edge-dashboard-window-rule
+```
+
+### Aus dem Repository (für die Entwicklung)
+
 ```bash
 git clone https://github.com/LabRaTox/EdgeDisplayWidgets.git
 cd EdgeDisplayWidgets
@@ -315,7 +348,8 @@ Geladen wird in dieser Reihenfolge:
 
 1. die Umgebungsvariable `$EDGE_CONFIG`, ein ausdrücklicher Pfad, nützlich für
    Tests
-2. `config.local.yaml` im Projektverzeichnis, falls vorhanden
+2. `config.local.yaml` im Projektverzeichnis, falls vorhanden; beim Paket
+   stattdessen `~/.config/edge-dashboard/config.yaml`
 3. `config.yaml`, die mitgelieferte Vorlage
 
 **Bearbeitet wird im Einstellungsfenster, nicht in der Datei.** Was dort
@@ -813,6 +847,7 @@ examples/plugins/     Zwei vollständige Store-Plugins: ein Widget und ein Desig
 config.yaml           Eingecheckte Vorlage
 config.local.yaml     Nicht in Git, vom Einstellungsfenster geschrieben
 systemd/              Vorlagen für die beiden Benutzer-Units
+packaging/            Das Arch-Paket: PKGBUILD, Units und Startskripte für /usr
 scripts/
   install.sh          Der Installer, erledigt alles Folgende mit
   install-desktop.sh  Symbol und Menüeintrag des Einstellungsfensters

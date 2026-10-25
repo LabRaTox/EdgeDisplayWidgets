@@ -188,7 +188,37 @@ unchanged and the settings window still opens from the application menu.
 
 ## Installation
 
-### Quick path (recommended)
+### As a package (Arch, CachyOS)
+
+The package files are in the repository under `packaging/aur/`, and every
+release on GitHub carries a built package. It puts the systemd units, the
+menu entry and the icon where they belong and keeps the settings in
+`~/.config/edge-dashboard/`.
+
+Build it yourself:
+
+```bash
+git clone https://github.com/LabRaTox/EdgeDisplayWidgets.git
+cd EdgeDisplayWidgets/packaging/aur
+makepkg -si
+```
+
+Or install the package from the
+[latest release](https://github.com/LabRaTox/EdgeDisplayWidgets/releases/latest):
+
+```bash
+sudo pacman -U edge-dashboard-*-x86_64.pkg.tar.zst
+```
+
+Then start it, now and at every login, and keep the kiosk out of the task
+list:
+
+```bash
+systemctl --user enable --now edge-dashboard.service edge-kiosk.service
+edge-dashboard-window-rule
+```
+
+### From the repository (recommended for development)
 
 ```bash
 git clone https://github.com/LabRaTox/EdgeDisplayWidgets.git
@@ -343,7 +373,8 @@ runs `/usr/bin/python3`, not the virtualenv, for the system PySide6.
 The dashboard loads its config in this order:
 
 1. `$EDGE_CONFIG` environment variable (explicit path, useful for tests).
-2. `config.local.yaml` in the project root, if it exists.
+2. `config.local.yaml` in the project root, if it exists. Installed as a
+   package, `~/.config/edge-dashboard/config.yaml` instead.
 3. `config.yaml` (the committed template).
 
 **Workflow**: edit in the settings window, not in the file. What it saves
@@ -841,6 +872,7 @@ examples/plugins/     Two complete store plugins: a widget and a theme
 config.yaml           Committed template
 config.local.yaml     Gitignored, written by the settings window
 systemd/              User unit templates (backend + kiosk)
+packaging/            The Arch package: PKGBUILD, units and launchers for /usr
 scripts/
   install.sh          The installer, does everything below as well
   install-desktop.sh  Icon and menu entry for the settings window

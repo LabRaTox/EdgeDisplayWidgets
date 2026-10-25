@@ -36,8 +36,16 @@ from .notes import MAX_BODY_LEN, MAX_TITLE_LEN, NotesStore, public_view
 from .tray import SystemTray
 
 ROOT = Path(__file__).resolve().parent.parent
+#: A checkout has its pyproject next to the code. The package installs the
+#: code under /usr/share/edge-dashboard without one, and keeps the settings
+#: in the user's config directory instead of next to the code.
+IN_CHECKOUT = (ROOT / "pyproject.toml").is_file()
 DEFAULT_CONFIG = ROOT / "config.yaml"
-LOCAL_CONFIG = ROOT / "config.local.yaml"
+LOCAL_CONFIG = (
+    ROOT / "config.local.yaml"
+    if IN_CHECKOUT
+    else Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "edge-dashboard" / "config.yaml"
+)
 FRONTEND_DIR = ROOT / "frontend"
 #: One manifest per widget; the file being here is the registration.
 WIDGETS_DIR = ROOT / "widgets"

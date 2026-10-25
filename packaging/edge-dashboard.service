@@ -1,0 +1,21 @@
+[Unit]
+Description=Edge Dashboard backend (FastAPI + WebSocket)
+Documentation=file:///usr/share/doc/edge-dashboard/README.md
+# The unit for the installed package. Its sister systemd/edge-dashboard.service
+# is the template for a checkout; tests/test_packaging.py keeps the two
+# together where it matters for running.
+After=graphical-session.target network-online.target
+Wants=network-online.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/edge-dashboard
+Restart=on-failure
+RestartSec=3
+KillSignal=SIGINT
+TimeoutStopSec=10
+
+[Install]
+WantedBy=graphical-session.target

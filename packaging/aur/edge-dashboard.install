@@ -1,0 +1,53 @@
+# Notes after installing.
+#
+# Only what the package manager cannot do itself: user services cannot be
+# started from a package script (it runs as root and does not know who will
+# log in), and a compositor rule belongs to the user's session.
+
+post_install() {
+    cat <<'NOTE'
+
+  Edge Dashboard is installed. To start it, and at every login:
+
+       systemctl --user enable --now edge-dashboard.service edge-kiosk.service
+
+  Keep the kiosk window out of the task list (KDE, Hyprland, Sway):
+
+       edge-dashboard-window-rule
+
+  The settings window is "EDGE//DASH" in the application menu, and opens
+  from the tray icon as well. Settings are kept in
+  ~/.config/edge-dashboard/config.yaml.
+
+  Coming from a checkout? Copy its config.local.yaml there, and remove the
+  old units, which would win over the package's:
+
+       rm ~/.config/systemd/user/edge-dashboard.service \
+          ~/.config/systemd/user/edge-kiosk.service
+       systemctl --user daemon-reload
+
+NOTE
+}
+
+post_upgrade() {
+    cat <<'NOTE'
+
+  The services still run the old version. Restart them with:
+
+       systemctl --user restart edge-dashboard.service edge-kiosk.service
+
+NOTE
+}
+
+post_remove() {
+    cat <<'NOTE'
+
+  Your settings, notes and plugins stay where they are:
+
+       ~/.config/edge-dashboard/       settings and sign-ins
+       ~/.local/share/edge-dashboard/  notes and installed plugins
+
+  Remove the two folders by hand to get rid of everything.
+
+NOTE
+}

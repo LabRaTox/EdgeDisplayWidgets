@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=EDGE//DASH
+GenericName=Edge Dashboard Settings
+Comment=Einstellungen für das Edge Dashboard
+Comment[en]=Settings for the Edge Dashboard
+Keywords=edge;dashboard;xeneon;kiosk;
+Keywords[de]=edge;dashboard;xeneon;kiosk;einstellungen;
+Exec=edgedash
+Icon=edgedash
+StartupWMClass=edgedash
+StartupNotify=true
+Categories=Settings;
+Terminal=false

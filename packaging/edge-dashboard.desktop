@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Edge Dashboard
+GenericName=Kiosk window
+Comment=Das Kioskfenster auf dem Xeneon Edge
+Comment[en]=The kiosk window on the Xeneon Edge
+Exec=edge-kiosk
+Icon=edgedash
+StartupWMClass=edge-dashboard
+NoDisplay=true
+Terminal=false

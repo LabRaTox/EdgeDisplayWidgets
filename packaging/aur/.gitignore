@@ -1,0 +1,10 @@
+# What makepkg creates while building. Only PKGBUILD, .SRCINFO and the
+# .install file belong in the repo; everything else is made anew.
+src/
+pkg/
+*.tar.gz
+*.pkg.tar.zst
+# The checksum next to the package belongs to the package; it is attached
+# to the GitHub release, not committed.
+*.pkg.tar.zst.sha256
+*.log

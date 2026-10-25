@@ -1,0 +1,130 @@
+# Maintainer: LabRaTox <278214024+LabRaTox@users.noreply.github.com>
+
+pkgname=edge-dashboard
+pkgver=1.6.0
+pkgrel=1
+pkgdesc="Touch dashboard for the Corsair Xeneon Edge: live widgets, plugin store, settings window"
+arch=('x86_64')
+url="https://github.com/LabRaTox/EdgeDisplayWidgets"
+license=('MIT')
+
+# Runtime. Python's side follows pyproject.toml, every package from the
+# official repositories; the Qt side is what the kiosk window imports.
+depends=(
+  'python'
+  'python-fastapi'
+  'uvicorn'
+  # uvicorn[standard]: WebSockets, the fast parser and loop, as in the checkout.
+  'python-websockets'
+  'python-httptools'
+  'python-uvloop'
+  'python-pydantic'
+  'python-yaml'
+  'python-loguru'
+  'python-psutil'
+  'python-nvidia-ml-py'
+  'python-dbus-next'
+  'python-httpx'
+  'python-pillow'
+  # The kiosk window: QML on the system's PySide6, plus the Qt modules it
+  # imports (WebSockets for the data, Multimedia for sounds, WebEngine for
+  # the video player).
+  'pyside6'
+  'qt6-declarative'
+  'qt6-websockets'
+  'qt6-multimedia'
+  'qt6-webengine'
+  # The settings window is Tauri on the system WebView.
+  'webkit2gtk-4.1'
+  'hicolor-icon-theme'
+)
+
+makedepends=(
+  'rust'
+  'nodejs'
+  'npm'
+)
+
+# Without these the dashboard runs; only the widgets that need them say so.
+optdepends=(
+  'lm_sensors: temperatures from more chips (run sensors-detect once)'
+  'nvidia-utils: GPU readings on NVIDIA cards'
+  'joplin-desktop: keep the notes in Joplin (AUR, or the AppImage)'
+  'libnotify: notify-send for quick actions'
+)
+
+install="$pkgname.install"
+
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+# On a new version: the sum belongs to the tag's tarball and can only be
+# computed once the tag is on GitHub. Then `updpkgsums` and
+# `makepkg --printsrcinfo > .SRCINFO`.
+sha256sums=('SKIP')
+
+_srcdir="EdgeDisplayWidgets-$pkgver"
+
+prepare() {
+  cd "$_srcdir/gui"
+  # Apart from build(), so the network access to npm sits in one place and a
+  # rebuild works offline.
+  npm ci
+}
+
+build() {
+  cd "$_srcdir/gui"
+  # --no-bundle: only the binary. Tauri runs `npm run build` for the
+  # frontend first (beforeBuildCommand).
+  npx tauri build --no-bundle
+}
+
+package() {
+  cd "$_srcdir"
+
+  # -- The application -------------------------------------------------------
+  # Backend and kiosk find everything relative to themselves, as in a
+  # checkout: code, frontend files, widget manifests and the config template
+  # side by side. No pyproject.toml here, which is how the code knows it is
+  # installed and keeps the settings in ~/.config/edge-dashboard/.
+  local share="$pkgdir/usr/share/$pkgname"
+  install -d "$share"
+  cp -r backend shell frontend widgets examples "$share/"
+  install -Dm644 config.yaml "$share/config.yaml"
+  find "$share" -name '__pycache__' -prune -exec rm -rf {} +
+  python -m compileall -q -d "/usr/share/$pkgname" "$share/backend" "$share/shell"
+
+  # -- Programs --------------------------------------------------------------
+  install -Dm755 packaging/edge-dashboard.sh "$pkgdir/usr/bin/edge-dashboard"
+  install -Dm755 packaging/edge-kiosk.sh "$pkgdir/usr/bin/edge-kiosk"
+  install -Dm755 scripts/window-rule.sh "$pkgdir/usr/bin/edge-dashboard-window-rule"
+  # The file name counts: GTK takes the window's app id from it, and
+  # StartupWMClass in the .desktop file has to match. The tray looks for
+  # /usr/bin/edgedash as well.
+  install -Dm755 gui/src-tauri/target/release/edgedash "$pkgdir/usr/bin/edgedash"
+
+  # -- systemd user units ----------------------------------------------------
+  install -Dm644 packaging/edge-dashboard.service \
+    "$pkgdir/usr/lib/systemd/user/edge-dashboard.service"
+  install -Dm644 packaging/edge-kiosk.service \
+    "$pkgdir/usr/lib/systemd/user/edge-kiosk.service"
+
+  # -- Desktop ---------------------------------------------------------------
+  install -Dm644 packaging/edgedash.desktop "$pkgdir/usr/share/applications/edgedash.desktop"
+  # The kiosk window's identity: without a file of its name the desktop
+  # portal does not register the window. NoDisplay keeps it out of the menu.
+  install -Dm644 packaging/edge-dashboard.desktop \
+    "$pkgdir/usr/share/applications/edge-dashboard.desktop"
+  local size file
+  for entry in 32x32:32x32.png 64x64:64x64.png 128x128:128x128.png \
+               256x256:128x128@2x.png 512x512:icon.png; do
+    size="${entry%%:*}"
+    file="${entry#*:}"
+    install -Dm644 "gui/src-tauri/icons/$file" \
+      "$pkgdir/usr/share/icons/hicolor/$size/apps/edgedash.png"
+  done
+
+  # -- Papers ----------------------------------------------------------------
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 README.de.md "$pkgdir/usr/share/doc/$pkgname/README.de.md"
+  cp -r docs "$pkgdir/usr/share/doc/$pkgname/docs"
+}

@@ -125,7 +125,13 @@ class Bridge(QObject):
         return self._strings.get(key, fallback or key)
 
     def _load_config(self) -> None:
-        path = ROOT / "config.local.yaml"
+        # The same file the backend writes: next to the code in a checkout,
+        # in the user's config directory when installed as a package.
+        if (ROOT / "pyproject.toml").is_file():
+            path = ROOT / "config.local.yaml"
+        else:
+            config_home = os.environ.get("XDG_CONFIG_HOME") or str(pathlib.Path.home() / ".config")
+            path = pathlib.Path(config_home) / "edge-dashboard" / "config.yaml"
         if not path.is_file():
             path = ROOT / "config.yaml"
         cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
