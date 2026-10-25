@@ -181,3 +181,89 @@ async def test_unparseable_entry_is_skipped(tmp_path: Path, monkeypatch):
     await mod.setup()
     data = await mod.poll()
     assert [e["id"] for e in data["entries"]] == ["dQw4w9WgXcQ"]
+
+
+FEED = (Path(__file__).resolve().parent / "data" / "youtube" / "playlist-feed.xml").read_text()
+
+
+def fake_youtube(monkeypatch, *, oembed_ok: bool = True, feed_ok: bool = True) -> list[str]:
+    """Answers oEmbed and the playlist feed from the fixture; returns the URLs asked for."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        seen.append(url)
+        if "feeds/videos.xml" in url:
+            return httpx.Response(200, text=FEED) if feed_ok else httpx.Response(500)
+        if not oembed_ok:
+            return httpx.Response(404, json={"error": "not found"})
+        return httpx.Response(200, json={"title": "Test Playlist", "author_name": "Someone",
+                                         "thumbnail_url": ""})
+
+    real_client = httpx.AsyncClient
+
+    def patched_client(*args, **kwargs):
+        kwargs.setdefault("transport", httpx.MockTransport(handler))
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr("backend.modules.youtube.httpx.AsyncClient", patched_client)
+    return seen
+
+
+def test_playlist_feed_is_parsed():
+    from backend.modules.youtube import parse_playlist_feed
+
+    items = parse_playlist_feed(FEED)
+    assert [i["id"] for i in items] == ["aaaaaaaaaaa", "bbbbbbbbbbb"]
+    assert items[0] == {"id": "aaaaaaaaaaa", "title": "First video", "author": "Channel A",
+                        "thumbnail": "https://i3.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg"}
+    assert parse_playlist_feed("not xml") == []
+
+
+def test_video_link_with_playlist_starts_at_that_video():
+    from backend.modules.youtube import _start_video
+
+    link = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLtestplaylist0001&index=3"
+    assert _parse_url(link) == ("playlist", "PLtestplaylist0001")
+    assert _start_video(link) == "dQw4w9WgXcQ"
+    assert _start_video("https://www.youtube.com/playlist?list=PLtestplaylist0001") == ""
+    assert _start_video("https://www.youtube.com/watch?v=dQw4w9WgXcQ") == ""
+
+
+async def test_playlist_entry_carries_its_videos(tmp_path: Path, monkeypatch):
+    seen = fake_youtube(monkeypatch)
+    mod = YoutubeModule({
+        "entries": ["https://www.youtube.com/watch?v=bbbbbbbbbbb&list=PLtestplaylist0001"],
+        "cache_path": str(tmp_path / "youtube.json"),
+    })
+    await mod.setup()
+    entry = (await mod.poll())["entries"][0]
+    assert entry["kind"] == "playlist"
+    assert entry["start"] == "bbbbbbbbbbb"
+    assert [i["id"] for i in entry["items"]] == ["aaaaaaaaaaa", "bbbbbbbbbbb"]
+    # No thumbnail from oEmbed: the first video's stands in.
+    assert entry["thumbnail"].endswith("aaaaaaaaaaa/hqdefault.jpg")
+    feeds = [u for u in seen if "feeds/videos.xml" in u]
+    assert len(feeds) == 1
+    await mod.poll()   # the next poll fetches the feed again: playlists change
+    assert len([u for u in seen if "feeds/videos.xml" in u]) == 2
+
+
+async def test_playlist_keeps_its_last_videos_when_the_feed_fails(tmp_path: Path, monkeypatch):
+    cache = str(tmp_path / "youtube.json")
+    fake_youtube(monkeypatch)
+    first = YoutubeModule({"entries": ["PLtestplaylist0001"], "cache_path": cache})
+    await first.setup()
+    fake_youtube(monkeypatch, feed_ok=False)
+    second = YoutubeModule({"entries": ["PLtestplaylist0001"], "cache_path": cache})
+    await second.setup()
+    entry = (await second.poll())["entries"][0]
+    assert len(entry["items"]) == 2
+
+
+async def test_video_entries_have_no_items(tmp_path: Path, monkeypatch):
+    fake_youtube(monkeypatch)
+    mod = YoutubeModule({"entries": ["dQw4w9WgXcQ"], "cache_path": str(tmp_path / "y.json")})
+    await mod.setup()
+    entry = (await mod.poll())["entries"][0]
+    assert "items" not in entry and "start" not in entry

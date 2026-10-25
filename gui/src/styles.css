@@ -437,6 +437,12 @@ textarea:disabled {
   gap: 8px;
 }
 
+/* A row of controls that may take a second line when the column is narrow. */
+.inline.wrap {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+
 .grid-2 {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -604,6 +610,15 @@ textarea:disabled {
   font-size: 12px;
   line-height: 1.2;
   word-break: break-word;
+  /* Two lines at most, as on the display. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  max-width: 100%;
+  /* The icon gives way, the text does not. */
+  flex-shrink: 0;
 }
 
 .deck-tile .tile-kind {
@@ -833,11 +848,23 @@ textarea:disabled {
   justify-content: center;
   font-size: 26px;
   line-height: 1;
+  /* A large icon gives way before the label does, as on the display. */
+  min-height: 0;
+  flex-shrink: 1;
+  overflow: hidden;
 }
 
 .deck-tile .tile-icon .ti-svg {
-  width: 1.1em;
+  width: auto;
   height: 1.1em;
+  /* Shrinks with the room the icon has left, so a large label pushes the
+     icon smaller instead of out of the tile, as on the display. */
+  max-height: 100%;
+  aspect-ratio: 1;
+}
+
+.deck-tile .tile-icon img {
+  max-height: 100%;
 }
 
 /* --- About: sibling projects ---------------------------------------- */
@@ -894,4 +921,969 @@ textarea:disabled {
 
 .linkish:hover {
   color: var(--accent);
+}
+
+/* --------------------------------------------------------------- Widgets */
+
+/* The widget page uses the full width: four cards side by side read better
+   than two with a margin either way. */
+.view.wide {
+  max-width: none;
+}
+
+/* A path field next to its button takes the room that is left. */
+.inline > input.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.page-head h2 {
+  font-size: 20px;
+}
+
+.plugin-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.plugin-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 14px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  /* The border sits on the line below; otherwise the row jumps by two
+     pixels as soon as a tab becomes active. */
+  margin-bottom: -1px;
+}
+
+.plugin-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.plugin-tab-count,
+.category-count {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: var(--bg-raised);
+  color: var(--text-dim);
+}
+
+.plugin-layout {
+  display: grid;
+  /* A fixed column for the menu: the category names differ in length, and
+     an edge that moves when switching would be restless. */
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.plugin-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  position: sticky;
+  top: 0;
+}
+
+.category {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.category:hover {
+  background: var(--bg-raised);
+  color: var(--text);
+}
+
+.category.empty {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.category.empty:hover {
+  background: none;
+  color: var(--text-dim);
+}
+
+.category.active {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.category.active .category-count {
+  background: var(--accent);
+  color: #fff;
+}
+
+.plugin-content {
+  min-width: 0;
+}
+
+.plugin-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+}
+
+.plugin-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  /* The widget's colour is a stripe on the edge rather than a dot by the
+     name, where it could be mistaken for a status light. */
+  border-left: 3px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* A theme card shows the theme's own colours across its top. */
+.card-swatch {
+  height: 30px;
+  pointer-events: none;
+}
+
+.plugin-card.disabled {
+  opacity: 0.55;
+}
+
+.plugin-card.store {
+  border-style: dashed;
+  border-left-color: var(--accent);
+}
+
+.plugin-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Wrap rather than squeeze: with an update button the title line would
+     otherwise run over several lines. */
+  flex-wrap: wrap;
+}
+
+.plugin-title {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Only the name opens the detail page, not the whole card: the card holds
+   switches and buttons, and a click on those should not change the view. */
+.plugin-name {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plugin-name:hover {
+  text-decoration: underline;
+}
+
+/* Built-in themes go by their file name, which is lowercase. */
+.plugin-name.capitalize {
+  text-transform: capitalize;
+}
+
+.plugin-title small {
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.line-break {
+  flex-basis: 100%;
+  height: 0;
+}
+
+.plugin-description {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.plugin-card > .btn.small {
+  align-self: stretch;
+  text-align: left;
+}
+
+.plugin-icon {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 8px;
+  display: block;
+  object-fit: cover;
+  background: var(--bg-sunken);
+}
+
+.plugin-icon.placeholder {
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 17px;
+  color: #fff;
+  /* The symbol sits on the widget's colour, which can be light. */
+  text-shadow: 0 1px 2px #0006;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.status-dot.online {
+  background: var(--ok);
+  box-shadow: 0 0 8px #22c55e88;
+}
+
+.status-dot.offline {
+  background: #52525b;
+}
+
+.dot-placeholder {
+  width: 9px;
+  flex: none;
+}
+
+.switch {
+  position: relative;
+  width: 38px;
+  height: 21px;
+  flex: none;
+}
+
+.switch input {
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+}
+
+.switch span {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #34343d;
+  transition: background 0.15s ease;
+  pointer-events: none;
+}
+
+.switch span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #d4d4dc;
+  transition: transform 0.15s ease;
+}
+
+.switch input:checked + span {
+  background: var(--accent);
+}
+
+.switch input:checked + span::after {
+  transform: translateX(17px);
+}
+
+.badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.tag-store {
+  padding: 1px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  color: var(--accent);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.update-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-size: 13px;
+}
+
+.update-bar > span:first-child {
+  flex: 1 1 320px;
+}
+
+.empty-note {
+  margin: 8px 0;
+  color: var(--text-dim);
+}
+
+.error-note {
+  border-left: 3px solid var(--danger);
+  padding-left: 12px;
+  color: var(--danger);
+  font-size: 13px;
+  margin: 0;
+}
+
+.error-text {
+  color: var(--danger);
+  font-size: 12px;
+  margin: 0;
+}
+
+.store-warnings {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.store-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The device code is read off the screen and typed elsewhere, so it is
+   spaced like the code GitHub shows. */
+.store-code {
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-family: ui-monospace, monospace;
+  font-size: 16px;
+  letter-spacing: 0.16em;
+}
+
+/* ------------------------------------------------------------ Submitting */
+
+.modal-body h4 {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  border: 2px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  cursor: pointer;
+  text-align: center;
+}
+
+.drop-zone:hover,
+.drop-zone.over {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.store-receipt {
+  border-left: 3px solid var(--accent);
+  background: var(--bg-sunken);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+
+.store-receipt.good {
+  border-left-color: var(--ok);
+}
+
+.store-receipt p {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.submit-grid {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.submit-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.submit-entry {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.submit-entry:hover {
+  border-color: var(--border-strong);
+}
+
+.submit-entry.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.submit-entry-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.submit-entry-name .hint {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.submit-entry-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+.submit-detail {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  min-height: 160px;
+}
+
+.store-mine-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.store-mine-head .hint {
+  margin: 0;
+}
+
+.store-versions {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+}
+
+.store-versions th {
+  text-align: left;
+  font-weight: 500;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.store-versions td {
+  padding: 6px 8px 6px 0;
+  vertical-align: top;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.store-versions td.hint {
+  margin: 0;
+}
+
+.store-versions tbody + tbody tr:first-child td {
+  border-top: 1px solid var(--border);
+}
+
+.store-version-button {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.store-version-note td {
+  padding-top: 0;
+  white-space: pre-wrap;
+}
+
+.state-tag {
+  padding: 1px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border-strong);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.state-tag.approved { border-color: var(--ok); color: var(--ok); }
+.state-tag.pending { border-color: var(--accent); color: var(--accent); }
+.state-tag.rejected,
+.state-tag.blocked { border-color: var(--danger); color: var(--danger); }
+.state-tag.withdrawn { color: var(--text-dim); }
+
+@media (max-width: 900px) {
+  .submit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.code {
+  font-family: ui-monospace, monospace;
+}
+
+.module-block + .module-block {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.module-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.module-block-head h3 {
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .plugin-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .plugin-categories {
+    flex-direction: row;
+    flex-wrap: wrap;
+    position: static;
+  }
+}
+
+/* ----------------------------------------------------------------- Modal */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #000000bb;
+  display: grid;
+  place-items: center;
+  z-index: 50;
+  padding: 24px;
+}
+
+.modal {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 100%;
+  min-height: 0;
+  box-shadow: 0 24px 60px #000000aa;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.modal-head h2 {
+  font-size: 15px;
+}
+
+.modal-body {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-right: 4px;
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+/* ----------------------------------------------------------- Detail page */
+
+.plugin-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  /* Bounded rather than filling the window: a screenshot at display width,
+     the facts column and the gap between them. Without it, picture and
+     facts would stand at opposite edges of a wide window. */
+  max-width: 1020px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.detail-back {
+  align-self: flex-start;
+}
+
+.detail-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.detail-head h2 {
+  margin: 2px 0;
+}
+
+.detail-head h2.capitalize {
+  text-transform: capitalize;
+}
+
+.detail-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  object-fit: contain;
+  flex: none;
+}
+
+.detail-icon.placeholder {
+  display: grid;
+  place-items: center;
+  background: var(--bg-sunken);
+  font-size: 30px;
+  font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.detail-swatch {
+  width: 120px;
+  height: 64px;
+  flex: none;
+  pointer-events: none;
+}
+
+.detail-head-buttons {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.detail-category,
+.detail-author {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.detail-columns {
+  display: grid;
+  /* The facts need little room but a fixed amount: a moving column would
+     put the values somewhere else for every plugin. */
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 20px;
+  align-items: start;
+}
+
+.detail-main h3,
+.detail-facts h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.detail-text {
+  color: var(--text-dim);
+  line-height: 1.55;
+  margin: 0 0 16px;
+  white-space: pre-line;
+}
+
+.detail-picture-large {
+  /* Screenshots come in every aspect ratio. Bound the height so a tall one
+     does not fill the page, and leave the width to the picture. */
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 420px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.detail-picture-row {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+
+.detail-picture-small {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.detail-picture-small.active {
+  border-color: var(--accent);
+}
+
+.detail-picture-small img {
+  width: 96px;
+  height: 60px;
+  object-fit: cover;
+  display: block;
+}
+
+.detail-pictures {
+  margin-bottom: 16px;
+}
+
+.detail-facts {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.detail-facts dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 13px;
+}
+
+.detail-row + .detail-row {
+  border-top: 1px solid var(--border);
+}
+
+.detail-row dt {
+  color: var(--text-dim);
+}
+
+.detail-row dd {
+  margin: 0;
+  text-align: right;
+}
+
+.detail-versions {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.detail-versions li {
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+@media (max-width: 900px) {
+  .detail-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------------------------------------------------------------- Rating */
+
+.rating {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.rating h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+.rating-buttons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn.thumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn.thumb.active {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.btn.thumb.down.active {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.rating-write {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rating-write textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  background: var(--bg-sunken);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+}
+
+.rating-own {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-sunken);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 13px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rating-own small,
+.rating-list small {
+  width: 100%;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
+.rating-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rating-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+/* The tile editor is half a window wide. The label column the other views
+   use (up to 260 px) leaves its controls too little room, so here it is
+   narrower and the colour and size rows fit beside it. */
+.editor-split .row {
+  grid-template-columns: minmax(96px, 140px) 1fr;
+}
+
+/* A button that is only an icon, such as the arrow that opens a tile's
+   options in the layout editor. */
+.btn.icon-only {
+  padding: 4px 6px;
+  line-height: 0;
+}
+
+.btn.icon-only .ti-svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* A tile's own options in the layout editor: indented under its row, with a
+   line that says which tile they belong to. */
+.tile-options {
+  margin: 0 0 8px 24px;
+  padding-left: 16px;
+  border-left: 2px solid var(--accent);
 }

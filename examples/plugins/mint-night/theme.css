@@ -1,0 +1,30 @@
+/* Mint night: deep green, mint accent, no decoration. */
+:root {
+  --bg: #07130f;
+  --fg: #e3f7ef;
+  --fg-muted: #7fa597;
+  --accent: #3dffb0;
+  --accent-2: #ffb86b;
+  --ok: #3dffb0;
+  --warn: #ffd166;
+  --bad: #ff6b6b;
+  --card-bg: rgba(61, 255, 176, 0.04);
+  --card-border: rgba(61, 255, 176, 0.14);
+  --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", monospace;
+  --font-display: "Inter", system-ui, sans-serif;
+  --gap: 12px;
+}
+
+.widget {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.widget h3 {
+  color: var(--fg-muted);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+}

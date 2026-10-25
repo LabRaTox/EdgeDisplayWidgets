@@ -141,3 +141,16 @@ def test_color_is_a_known_field_type(tmp_path: Path):
         {"key": "tint", "type": "color", "label_key": "l", "default": ""},
     ]}))
     assert fields and fields[0]["type"] == "color"
+
+
+def test_module_choices_come_from_the_last_answer():
+    """Any module can offer the values of a select through `choices`."""
+    from backend.main import _module_choices
+
+    class Hub:
+        def snapshot(self):
+            return {"ai": {"data": {"choices": [{"value": "claude", "label": "Claude"},
+                                                {"value": "codex"}, {"label": "no value"}]}}}
+
+    assert _module_choices(Hub(), "ai") == (["", "claude", "codex"], ["", "Claude", "codex"])
+    assert _module_choices(Hub(), "missing") == ([""], [""])

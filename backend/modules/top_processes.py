@@ -6,7 +6,7 @@ existing process on setup and re-prime newcomers each poll, so the widget
 shows realistic numbers from the first frame onwards.
 
 Per-process percentages are reported as a fraction of the *whole system*
-(0–100 across all cores), matching the system CPU widget. A single
+(0 to 100 across all cores), matching the system CPU widget. A single
 core-saturating process therefore reads as `100 / cpu_count`%.
 """
 

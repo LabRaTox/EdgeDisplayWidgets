@@ -1,15 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { openExternal } from "../api/client";
 import i18n, { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, setLanguage } from "../i18n";
 import type { Language } from "../i18n";
 import { useStore } from "../store";
 import type { View } from "../types";
 import { Wordmark } from "./Wordmark";
 
+/** Questions, bugs and wishes go to the project's issue tracker. */
+const ISSUES_URL = "https://github.com/LabRaTox/EdgeDisplayWidgets/issues";
+/** The community: questions, ideas, showing off a layout. */
+const DISCORD_URL = "https://discord.gg/2ckNnCZ4wq";
+
 const VIEWS: { id: View; labelKey: string }[] = [
   { id: "theme", labelKey: "nav.theme" },
-  { id: "modules", labelKey: "nav.modules" },
+  { id: "widgets", labelKey: "nav.widgets" },
   { id: "weather", labelKey: "nav.weather" },
   { id: "youtube", labelKey: "nav.youtube" },
   { id: "actions", labelKey: "nav.actions" },
@@ -151,15 +157,35 @@ export function TopBar() {
 
           <Menu label={t("menu.help")}>
             {(close) => (
-              <button
-                type="button"
-                onClick={() => {
-                  setView("about");
-                  close();
-                }}
-              >
-                {t("menu.about")}
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    close();
+                    void openExternal(ISSUES_URL);
+                  }}
+                >
+                  {t("menu.report_issue")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    close();
+                    void openExternal(DISCORD_URL);
+                  }}
+                >
+                  {t("menu.discord")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("about");
+                    close();
+                  }}
+                >
+                  {t("menu.about")}
+                </button>
+              </>
             )}
           </Menu>
         </nav>

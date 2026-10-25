@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A playlist feed as YouTube serves it, cut to three entries. -->
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+ <id>yt:playlist:PLtestplaylist0001</id>
+ <yt:playlistId>PLtestplaylist0001</yt:playlistId>
+ <title>Test Playlist</title>
+ <author><name>Someone</name></author>
+ <entry>
+  <id>yt:video:aaaaaaaaaaa</id>
+  <yt:videoId>aaaaaaaaaaa</yt:videoId>
+  <title>First video</title>
+  <author><name>Channel A</name></author>
+  <media:group>
+   <media:title>First video</media:title>
+   <media:thumbnail url="https://i3.ytimg.com/vi/aaaaaaaaaaa/hqdefault.jpg" width="480" height="360"/>
+  </media:group>
+ </entry>
+ <entry>
+  <id>yt:video:bbbbbbbbbbb</id>
+  <yt:videoId>bbbbbbbbbbb</yt:videoId>
+  <title>Second video</title>
+  <author><name>Channel B</name></author>
+  <media:group>
+   <media:thumbnail url="https://i3.ytimg.com/vi/bbbbbbbbbbb/hqdefault.jpg" width="480" height="360"/>
+  </media:group>
+ </entry>
+ <entry>
+  <id>yt:video:not-an-id</id>
+  <yt:videoId>not-an-id</yt:videoId>
+  <title>Broken entry, skipped</title>
+ </entry>
+</feed>

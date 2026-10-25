@@ -145,6 +145,27 @@ class AppConfig(BaseModel):
     modules: dict[str, ModuleConfig] = Field(default_factory=dict)
     pages: list[PageConfig] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _rename_nvidia_to_gpu(cls, data: Any) -> Any:
+        """`nvidia` became `gpu`, which reads AMD cards as well.
+
+        A config written before keeps working: its `nvidia` block is taken
+        over as `gpu`, and the next save writes it under the new name. When
+        both are there, `gpu` wins and the old block is dropped.
+        """
+        if isinstance(data, dict) and isinstance(data.get("modules"), dict):
+            modules = dict(data["modules"])
+            old = modules.pop("nvidia", None)
+            if old is not None and "gpu" not in modules:
+                block = dict(old) if isinstance(old, dict) else {}
+                # `device_index` counted NVML devices; the tile now picks a
+                # card by its PCI address instead.
+                block.pop("device_index", None)
+                modules["gpu"] = block
+            data = {**data, "modules": modules}
+        return data
+
     @model_validator(mode="after")
     def _check_unique_page_ids(self) -> AppConfig:
         ids = [p.id for p in self.pages]

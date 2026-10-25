@@ -1,3 +1,14 @@
 {
+  "name": {
+    "de": "Pomodoro",
+    "en": "Pomodoro"
+  },
+  "summary": {
+    "de": "Arbeits- und Pausenzeiten im Wechsel.",
+    "en": "Work and break periods in turn."
+  },
+  "category": "time",
+  "accent": "#ef4444",
+  "symbol": "ti:hourglass",
   "modules": []
 }

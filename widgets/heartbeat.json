@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "Herzschlag",
+    "en": "Heartbeat"
+  },
+  "summary": {
+    "de": "Zeigt, dass das Dashboard läuft und Daten ankommen.",
+    "en": "Shows that the dashboard is running and data is arriving."
+  },
+  "category": "system",
+  "accent": "#f43f5e",
+  "symbol": "ti:heartbeat",
   "modules": [
     "heartbeat"
   ]

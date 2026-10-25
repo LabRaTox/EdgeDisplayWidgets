@@ -1,0 +1,261 @@
+{
+  "name": {
+    "de": "Weltuhr",
+    "en": "World clock"
+  },
+  "summary": {
+    "de": "Bis zu sechs Zeitzonen nebeneinander, mit Abstand zur Ortszeit.",
+    "en": "Up to six time zones side by side, with the difference to local time."
+  },
+  "description": {
+    "de": "Bis zu sechs Zeitzonen auf einer Kachel, jede mit ihrer Stadt und dem Abstand zur Ortszeit, etwa „+6 h · morgen“. Dieselben Zifferblätter und Farbschemata wie die Uhr, analog oder digital. Breite Kacheln zeigen alle Zonen in einer Reihe, schmalere in zwei.",
+    "en": "Up to six time zones on one tile, each with its city and the difference to local time, such as \"+6 h · tomorrow\". The same faces and colour schemes as the clock, analog or digital. Wide tiles show all zones in one row, narrower ones in two."
+  },
+  "category": "time",
+  "accent": "#2dd4bf",
+  "symbol": "ti:world",
+  "modules": [
+    "timezones"
+  ],
+  "options": [
+    {
+      "key": "zone_1",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.zone_1",
+      "default": "America/New_York",
+      "options_source": "timezones"
+    },
+    {
+      "key": "zone_2",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.zone_2",
+      "default": "Europe/London",
+      "options_source": "timezones"
+    },
+    {
+      "key": "zone_3",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.zone_3",
+      "default": "Asia/Tokyo",
+      "options_source": "timezones"
+    },
+    {
+      "key": "zone_4",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.zone_4",
+      "default": "",
+      "options_source": "timezones"
+    },
+    {
+      "key": "zone_5",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.zone_5",
+      "default": "",
+      "options_source": "timezones"
+    },
+    {
+      "key": "zone_6",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.zone_6",
+      "default": "",
+      "options_source": "timezones"
+    },
+    {
+      "key": "show_city",
+      "type": "bool",
+      "label_key": "settings.widget.world_clock.show_city",
+      "default": true
+    },
+    {
+      "key": "show_difference",
+      "type": "bool",
+      "label_key": "settings.widget.world_clock.show_difference",
+      "default": true
+    },
+    {
+      "key": "display",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.display",
+      "default": "digital",
+      "options": [
+        "analog",
+        "digital"
+      ],
+      "option_label_keys": [
+        "settings.widget.world_clock.display.analog",
+        "settings.widget.world_clock.display.digital"
+      ]
+    },
+    {
+      "key": "face_analog",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.face",
+      "default": "classic",
+      "options": [
+        "classic",
+        "numbers",
+        "roman",
+        "minimal",
+        "dots",
+        "railway",
+        "bauhaus",
+        "ring",
+        "modern",
+        "chrono",
+        "hands"
+      ],
+      "option_label_keys": [
+        "settings.widget.world_clock.analog.classic",
+        "settings.widget.world_clock.analog.numbers",
+        "settings.widget.world_clock.analog.roman",
+        "settings.widget.world_clock.analog.minimal",
+        "settings.widget.world_clock.analog.dots",
+        "settings.widget.world_clock.analog.railway",
+        "settings.widget.world_clock.analog.bauhaus",
+        "settings.widget.world_clock.analog.ring",
+        "settings.widget.world_clock.analog.modern",
+        "settings.widget.world_clock.analog.chrono",
+        "settings.widget.world_clock.analog.hands"
+      ],
+      "depends_on": {
+        "display": "analog"
+      }
+    },
+    {
+      "key": "face_digital",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.face",
+      "default": "classic",
+      "options": [
+        "classic",
+        "light",
+        "mono",
+        "serif",
+        "segment",
+        "matrix",
+        "stacked",
+        "flip",
+        "binary",
+        "dayarc",
+        "words"
+      ],
+      "option_label_keys": [
+        "settings.widget.world_clock.digital.classic",
+        "settings.widget.world_clock.digital.light",
+        "settings.widget.world_clock.digital.mono",
+        "settings.widget.world_clock.digital.serif",
+        "settings.widget.world_clock.digital.segment",
+        "settings.widget.world_clock.digital.matrix",
+        "settings.widget.world_clock.digital.stacked",
+        "settings.widget.world_clock.digital.flip",
+        "settings.widget.world_clock.digital.binary",
+        "settings.widget.world_clock.digital.dayarc",
+        "settings.widget.world_clock.digital.words"
+      ],
+      "depends_on": {
+        "display": "digital"
+      }
+    },
+    {
+      "key": "scheme",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.scheme",
+      "default": "theme",
+      "options": [
+        "theme",
+        "night",
+        "light",
+        "ocean",
+        "forest",
+        "amber",
+        "red",
+        "violet",
+        "teal",
+        "none"
+      ],
+      "option_label_keys": [
+        "settings.widget.world_clock.scheme.theme",
+        "settings.widget.world_clock.scheme.night",
+        "settings.widget.world_clock.scheme.light",
+        "settings.widget.world_clock.scheme.ocean",
+        "settings.widget.world_clock.scheme.forest",
+        "settings.widget.world_clock.scheme.amber",
+        "settings.widget.world_clock.scheme.red",
+        "settings.widget.world_clock.scheme.violet",
+        "settings.widget.world_clock.scheme.teal",
+        "settings.widget.world_clock.scheme.none"
+      ]
+    },
+    {
+      "key": "hour_format",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.hour_format",
+      "default": "24",
+      "options": [
+        "24",
+        "12"
+      ],
+      "option_label_keys": [
+        "settings.widget.world_clock.hour_format.24",
+        "settings.widget.world_clock.hour_format.12"
+      ]
+    },
+    {
+      "key": "seconds",
+      "type": "bool",
+      "label_key": "settings.widget.world_clock.seconds",
+      "default": false
+    },
+    {
+      "key": "date",
+      "type": "select",
+      "label_key": "settings.widget.world_clock.date",
+      "default": "none",
+      "options": [
+        "none",
+        "date",
+        "weekday",
+        "both"
+      ],
+      "option_label_keys": [
+        "settings.widget.world_clock.date.none",
+        "settings.widget.world_clock.date.date",
+        "settings.widget.world_clock.date.weekday",
+        "settings.widget.world_clock.date.both"
+      ]
+    },
+    {
+      "key": "custom_colors",
+      "type": "bool",
+      "label_key": "settings.widget.world_clock.custom_colors",
+      "default": false
+    },
+    {
+      "key": "color_face",
+      "type": "color",
+      "label_key": "settings.widget.world_clock.color_face",
+      "default": "",
+      "depends_on": {
+        "custom_colors": true
+      }
+    },
+    {
+      "key": "color_text",
+      "type": "color",
+      "label_key": "settings.widget.world_clock.color_text",
+      "default": "",
+      "depends_on": {
+        "custom_colors": true
+      }
+    },
+    {
+      "key": "color_accent",
+      "type": "color",
+      "label_key": "settings.widget.world_clock.color_accent",
+      "default": "",
+      "depends_on": {
+        "custom_colors": true
+      }
+    }
+  ]
+}

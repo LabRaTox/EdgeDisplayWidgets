@@ -7,6 +7,11 @@ import ".."
  * opens the video in a player window that runs as its own process and is
  * gone again once it is closed.
  *
+ * A playlist opens like a folder: back, play, and its videos, each of which
+ * plays the playlist from that video on. The module lists at most fifteen
+ * videos per playlist; playing it still plays all of it. A playlist whose
+ * videos could not be fetched plays at once, as it did before.
+ *
  * Anything playing over MPRIS is paused for the duration and picked up
  * again afterwards.
  */
@@ -25,10 +30,24 @@ Item {
      * player wants to sit on a page that has an origin, and the backend
      * serving the page is that origin.
      */
-    function embedUrl(kind, id) {
+    function embedUrl(kind, id, start) {
         return bridge.api + "/player.html?kind=" + encodeURIComponent(kind)
              + "&id=" + encodeURIComponent(id)
+             + (start ? "&start=" + encodeURIComponent(start) : "")
     }
+
+    /* The playlist that is open, by id; "" is the top level. */
+    property string openList: ""
+    /* The entries from the last payload, to rebuild the grid from. */
+    property var list: []
+
+    function findList(id) {
+        for (var i = 0; i < list.length; i++)
+            if (list[i].kind === "playlist" && list[i].id === id) return list[i]
+        return null
+    }
+
+    readonly property var openEntry: openList !== "" ? findList(openList) : null
 
     /* The entries as a string, to tell a real change from an identical poll:
        without it the grid was thrown away and rebuilt on every payload, which
@@ -37,31 +56,86 @@ Item {
 
     function receive(module, data) {
         payload = data
-        var list = (data && data.entries) || []
+        var incoming = (data && data.entries) || []
         var next = []
-        for (var k = 0; k < list.length; k++) next.push(list[k].kind + ":" + list[k].id)
+        for (var k = 0; k < incoming.length; k++) {
+            var e = incoming[k]
+            var items = (e.items || []).map(function (it) { return it.id }).join(",")
+            next.push(e.kind + ":" + e.id + ":" + (e.start || "") + "(" + items + ")")
+        }
         next = next.join("|")
         if (next === key) return
         key = next
+        list = incoming
+        // A playlist that has left the config cannot stay open.
+        if (openList !== "" && !findList(openList)) openList = ""
+        rebuild()
+    }
 
+    function thumbFor(e) {
+        return e.thumbnail ? String(e.thumbnail)
+             : (e.kind === "video" ? "https://i.ytimg.com/vi/" + e.id + "/hqdefault.jpg" : "")
+    }
+
+    /*
+     * One model for both levels. `action` says what a tap does: "back" and
+     * "play" inside an open playlist, "video" for one of its videos, "open"
+     * for a playlist that has videos to show, "watch" for everything else.
+     */
+    function rebuild() {
         entries.clear()
+        var open = openEntry
+        if (open) {
+            entries.append({ "action": "back", "kind": "", "videoId": "", "author": "",
+                             "title": bridge.tr("widget.youtube.back"), "thumb": "" })
+            entries.append({ "action": "play", "kind": "", "videoId": "", "author": "",
+                             "title": bridge.tr("widget.youtube.play_all"),
+                             "thumb": thumbFor(open) })
+            var items = open.items || []
+            for (var j = 0; j < items.length; j++) {
+                entries.append({ "action": "video", "kind": "video",
+                                 "videoId": String(items[j].id),
+                                 "title": String(items[j].title || items[j].id),
+                                 "author": String(items[j].author || ""),
+                                 "thumb": String(items[j].thumbnail || "") })
+            }
+            return
+        }
         for (var i = 0; i < list.length; i++) {
             var e = list[i]
+            var opens = e.kind === "playlist" && (e.items || []).length > 0
             entries.append({
+                "action": opens ? "open" : "watch",
                 "kind": String(e.kind || ""),
                 "videoId": String(e.id || ""),
                 "title": String(e.title || e.id || ""),
                 "author": String(e.author || ""),
-                "thumb": e.thumbnail ? String(e.thumbnail)
-                       : (e.kind === "video"
-                          ? "https://i.ytimg.com/vi/" + e.id + "/hqdefault.jpg" : "")
+                "thumb": thumbFor(e)
             })
         }
     }
 
+    function tapped(action, kind, id) {
+        if (action === "back") {
+            openList = ""
+            rebuild()
+        } else if (action === "open") {
+            openList = id
+            rebuild()
+            grid.positionViewAtBeginning()
+        } else if (action === "play") {
+            open("playlist", openList, openEntry ? openEntry.start : "")
+        } else if (action === "video") {
+            open("playlist", openList, id)
+        } else {
+            var entry = kind === "playlist" ? findList(id) : null
+            open(kind, id, entry ? entry.start : "")
+        }
+    }
+
     /* Pause whatever is playing, then hand the video to the player. */
-    function open(kind, id) {
-        var url = embedUrl(kind, id)
+    function open(kind, id, start) {
+        var url = embedUrl(kind, id, start)
         var xhr = new XMLHttpRequest()
         xhr.open("GET", bridge.api + "/api/snapshot")
         xhr.onreadystatechange = function () {
@@ -101,7 +175,7 @@ Item {
 
         Heading {
             theme: root.theme
-            label: "YouTube"
+            label: root.openEntry ? root.openEntry.title : "YouTube"
             Layout.bottomMargin: Style.headingBottom
         }
 
@@ -184,10 +258,12 @@ Item {
                                 asynchronous: true
                                 cache: true
                             }
-                            Text {                      // shown when there is none
+                            Text {                      // shown when there is none, or to play
                                 anchors.centerIn: parent
-                                visible: model.thumb.length === 0
-                                text: "▶"
+                                visible: model.thumb.length === 0 || model.action === "play"
+                                text: model.action === "back" ? "‹" : "▶"
+                                style: Text.Outline
+                                styleColor: "#000000"
                                 color: root.theme ? root.theme["fg-muted"] : "#888888"
                                 font.pixelSize: 24
                             }
@@ -215,7 +291,7 @@ Item {
                                 Layout.fillWidth: true
                             }
                             Rectangle {                 // the playlist badge
-                                visible: model.kind === "playlist"
+                                visible: model.kind === "playlist" && root.openList === ""
                                 radius: 3
                                 color: root.theme ? root.theme["accent"] : "#00e0ff"
                                 implicitWidth: badge.implicitWidth + 8
@@ -247,7 +323,7 @@ Item {
                     MouseArea {
                         id: press
                         anchors.fill: parent
-                        onClicked: root.open(model.kind, model.videoId)
+                        onClicked: root.tapped(model.action, model.kind, model.videoId)
                     }
                 }
             }

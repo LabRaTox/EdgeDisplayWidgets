@@ -26,8 +26,9 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
+from PySide6.QtGui import QFontDatabase
 from PySide6.QtWebSockets import QWebSocket
-from views import view_path
+from views import plugin_layout, view_path, view_version
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -58,6 +59,8 @@ class Bridge(QObject):
         #: Last payload per module, so a widget mounting later is not blank.
         self._cache: dict = {}
         self._strings: dict = {}
+        #: Font files of installed themes already handed to Qt.
+        self._fonts: set[str] = set()
         self._theme: dict = {}
         self._online = False
         self._retry_ms = 500
@@ -97,6 +100,23 @@ class Bridge(QObject):
             self._strings = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             self._strings = {}
+        # Installed widgets add their own keys underneath; they cannot
+        # reword the dashboard's (see `plugin_layout.Plugin.locale`).
+        self._strings = {**plugin_layout.locale(path.stem), **self._strings}
+
+    def _register_fonts(self, theme_name: str) -> None:
+        """Hand an installed theme's fonts to Qt, once each.
+
+        The vendored fonts are registered at startup in `main.py`. An
+        installed theme can arrive while the window runs, so its fonts are
+        added when the theme is chosen, before its colours are read.
+        """
+        for path in theme_module.font_files(theme_name):
+            if str(path) in self._fonts:
+                continue
+            self._fonts.add(str(path))
+            if QFontDatabase.addApplicationFont(str(path)) < 0:
+                print(f"edge-kiosk: could not load font {path.name}", file=sys.stderr)
 
     @Slot(str, result=str)
     @Slot(str, str, result=str)
@@ -111,6 +131,7 @@ class Bridge(QObject):
         cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         self._port = (cfg.get("server") or {}).get("port", 8765)
         name = cfg.get("default_theme", "clean")
+        self._register_fonts(name)
         self._theme = theme_module.load(name, THEMES_DIR)
         self._metrics = theme_module.metrics(name, THEMES_DIR)
         self._effects = theme_module.effects(name, THEMES_DIR, self._theme)
@@ -198,7 +219,13 @@ class Bridge(QObject):
         loader failing with a missing file.
         """
         path = view_path(widget_id)
-        return QUrl.fromLocalFile(str(path)).toString() if path else ""
+        if not path:
+            return ""
+        url = QUrl.fromLocalFile(str(path))
+        version = view_version(widget_id)
+        if version:
+            url.setQuery(f"v={version}")
+        return url.toString()
 
     @Slot(str, str, result=str)
     def iconUrl(self, icon: str, colour: str) -> str:

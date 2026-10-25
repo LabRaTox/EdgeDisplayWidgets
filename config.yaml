@@ -29,7 +29,7 @@ modules:
   system:
     enabled: true
     interval: 1.0
-  nvidia:
+  gpu:                     # NVIDIA via nvml, AMD via the amdgpu driver
     enabled: true
     interval: 1.0
   sensors:
@@ -61,6 +61,16 @@ modules:
     enabled: true
     interval: 3
     limit: 5               # how many rows to show
+  timezones:               # offsets of every time zone, for the clock and the world clock
+    enabled: true
+    interval: 60
+  notes:
+    enabled: true
+    interval: 5            # how often a change elsewhere (Joplin, the file) is looked for
+    storage: local         # local | joplin (the Joplin desktop app with its Web Clipper service on)
+    joplin_token: ""       # optional; empty: "Connect to Joplin" on the tile asks for one
+    joplin_notebook: "Edge Dash"   # the notebook that holds the quick notes
+    joplin_port: 0         # 0: find Joplin on 41184..41194
   quick_actions:
     enabled: true
     interval: 60           # the action list is static; long interval is fine

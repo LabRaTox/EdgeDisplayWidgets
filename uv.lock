@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 
 [[package]]
@@ -74,7 +74,7 @@ wheels = [
 
 [[package]]
 name = "edge-dashboard"
-version = "1.0.0"
+version = "1.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "dbus-next" },

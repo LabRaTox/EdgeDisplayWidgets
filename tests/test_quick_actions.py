@@ -7,6 +7,7 @@ import sys
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from backend.modules.base import clear_registry, register_module
 from backend.modules.quick_actions import QuickAction, QuickActionsModule
@@ -24,19 +25,19 @@ def _reset_registry():
 
 
 def test_shell_action_requires_command():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         QuickAction.model_validate({"id": "x", "kind": "shell"})
 
 
 def test_shell_command_must_be_list_of_strings():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         QuickAction.model_validate({"id": "x", "kind": "shell", "command": "echo hi"})
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         QuickAction.model_validate({"id": "x", "kind": "shell", "command": ["echo", 1]})
 
 
 def test_http_action_requires_url():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         QuickAction.model_validate({"id": "x", "kind": "http"})
 
 
@@ -68,6 +69,8 @@ def test_public_view_strips_secrets():
         "page": 0,
         "x": None,
         "y": None,
+        "label_size": None,
+        "icon_size": None,
     }
 
 
@@ -91,6 +94,7 @@ async def test_poll_returns_only_public_fields():
         assert set(a.keys()) == {
             "id", "label", "icon", "kind", "confirm",
             "color", "text_color", "w", "h", "page", "x", "y",
+            "label_size", "icon_size",
         }
 
 
@@ -272,12 +276,12 @@ def test_folder_recursive_public_view():
 
 
 def test_folder_rejects_command():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         QuickAction.model_validate({"id": "f", "kind": "folder", "command": ["x"]})
 
 
 def test_tiles_only_on_folders():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         QuickAction.model_validate({
             "id": "s", "kind": "shell", "command": ["true"],
             "tiles": [{"id": "n", "kind": "shell", "command": ["true"]}],
@@ -361,7 +365,7 @@ async def test_run_reprobes_status():
 
 
 def test_invalid_status_regex_rejected():
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         QuickAction.model_validate({
             "id": "p", "kind": "shell", "command": ["true"],
             "status": {"kind": "shell", "command": ["true"], "match": "("},
@@ -381,3 +385,40 @@ async def test_detach_returns_immediately():
     result = await asyncio.wait_for(mod.run("app"), timeout=2.0)
     assert result["ok"] is True
     assert result["detached"] is True
+
+
+
+async def test_tile_sizes_are_per_action():
+    """Label and icon size belong to one action; others keep the defaults."""
+    out = await QuickActionsModule({"actions": [
+        {"id": "big", "kind": "shell", "command": ["true"], "label_size": 24, "icon_size": 64},
+        {"id": "plain", "kind": "shell", "command": ["true"]},
+    ]}).poll()
+    big, plain = out["actions"]
+    assert (big["label_size"], big["icon_size"]) == (24, 64)
+    assert (plain["label_size"], plain["icon_size"]) == (None, None)
+    assert "label_size" not in out and "icon_size" not in out
+
+
+@pytest.mark.parametrize("field,value", [("label_size", 9), ("label_size", 49),
+                                         ("icon_size", 15), ("icon_size", 129)])
+def test_tile_sizes_out_of_range_are_refused(field, value):
+    with pytest.raises(ValidationError):
+        QuickAction.model_validate({"id": "a", "kind": "shell", "command": ["true"], field: value})
+
+
+def test_tile_sizes_survive_the_config_api(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from backend import main as main_mod
+
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text("modules:\n  quick_actions: { enabled: true, actions: [] }\npages: []\n")
+    monkeypatch.setattr(main_mod, "LOCAL_CONFIG", tmp_path / "config.local.yaml")
+    action = {"id": "a", "kind": "shell", "command": ["true"], "label_size": 22, "icon_size": 70}
+    with TestClient(main_mod.create_app(cfg)) as client:
+        assert client.post("/api/quick_actions/config", json={"actions": [action]}).status_code == 200
+        stored = client.get("/api/quick_actions/config").json()["actions"][0]
+        assert (stored["label_size"], stored["icon_size"]) == (22, 70)
+        too_big = dict(action, icon_size=500)
+        assert client.post("/api/quick_actions/config", json={"actions": [too_big]}).status_code == 400

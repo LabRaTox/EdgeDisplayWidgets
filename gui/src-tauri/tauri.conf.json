@@ -3,7 +3,7 @@
   "productName": "EdgeDash",
   "mainBinaryName": "edgedash",
   "identifier": "app.labratox.edgedashboard",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",

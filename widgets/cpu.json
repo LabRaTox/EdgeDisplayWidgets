@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "CPU",
+    "en": "CPU"
+  },
+  "summary": {
+    "de": "Prozessorlast mit Verlauf, Takt und Temperatur, auf Wunsch je Kern.",
+    "en": "Processor load with history, clock speed and temperature, per core if you like."
+  },
+  "category": "monitoring",
+  "accent": "#22c55e",
+  "symbol": "ti:cpu",
   "modules": [
     "system",
     "sensors"

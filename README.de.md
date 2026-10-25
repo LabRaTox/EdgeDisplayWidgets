@@ -2,12 +2,14 @@
 
 *[English version](README.md)*
 
+[![Discord](https://img.shields.io/badge/Discord-Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/2ckNnCZ4wq)
+
 ![Das Edge Dashboard auf dem Corsair Xeneon Edge: Netzwerk, Uhr, Wetter, CPU, GPU und RAM](docs/screenshots/kiosk-main.png)
 
 Dashboard für das **Corsair Xeneon Edge 14,5"** (2560x720), das zweite
 Touchdisplay unter dem Monitor. Läuft unter Linux, entwickelt und im
 Dauerbetrieb auf [CachyOS](https://cachyos.org/) (Arch Linux) mit KDE Plasma
-und NVIDIA-Grafik. Es besteht aus drei Teilen: einem lokalen FastAPI-Server,
+und NVIDIA- oder AMD-Grafik. Es besteht aus drei Teilen: einem lokalen FastAPI-Server,
 einem Kioskfenster in QML, das die Anzeige füllt, und
 **EDGE//DASH**, einer eigenen Anwendung für die Einstellungen.
 
@@ -15,17 +17,27 @@ einem Kioskfenster in QML, das die Anzeige füllt, und
   einzelne Sensoren als Kurve oder Ring, Datenträger, Prozessliste, Uhr,
   Wetter (Open-Meteo), Mediensteuerung über MPRIS, YouTube-Kacheln, smarte
   Lampen (Govee und Tuya), Quick Actions, Pomodoro und Notizen.
+- **Plugins aus dem Store**: weitere Widgets und Designs kommen mit einem
+  Klick aus dem Plugin-Store, darunter Desktop-Benachrichtigungen, Discord,
+  ein RSS-Reader, eine Diashow, eine Zeichenfläche und die Mondphase. Updates
+  melden sich von selbst, und eigene Widgets lassen sich im selben Fenster
+  einreichen.
+- **Notizen, lokal oder in Joplin**: Ordner, Ordnerfarben, Suche, Anheften und
+  Checklisten zum Abhaken per Fingertipp. Gespeichert in einer Datei auf
+  diesem PC oder in der Joplin-Desktop-App; was am PC in Joplin geändert wird,
+  steht nach wenigen Sekunden auf dem Display.
 - **Seiten und Wischen**: Widgets werden in CSS-Grid-Layouts über mehrere
   Seiten verteilt, auf dem Touchscreen wischt man waagerecht zwischen ihnen.
-- **Einstellungsfenster**: Design, Moduloptionen, Wetter, YouTube, das
-  Quick-Action-Deck und das Seitenlayout werden in einer Desktop-Anwendung
+- **Einstellungsfenster**: Design, Plugins und ihre Einstellungen, Wetter,
+  YouTube, das Quick-Action-Deck und das Seitenlayout werden in einer
+  Desktop-Anwendung
   bearbeitet, nicht auf dem schmalen Display. Sie sitzt im Systemabschnitt der
   Leiste und im Anwendungsmenü.
 - **Widget-Varianten**: ein Widget kann mehrere Darstellungen anbieten. Die
   Messwert-Widgets kennen `compact` für kleine Kacheln, das nur die Zahl und
   ihre Unterzeile zeigt.
 - **Designs**: cyberpunk, clean, steampunk, light, toxic, nightclub,
-  industrial. Eine CSS-Datei ablegen genügt für ein weiteres.
+  industrial. Weitere kommen aus dem Store oder aus einer eigenen CSS-Datei.
 - **Zwei Sprachen**: Deutsch und Englisch. Die Sprache der Anzeige steht in
   der Konfiguration, das Fenster hat seine eigene unter `Sprache`.
 - **Ohne Neustart**: was das Einstellungsfenster speichert, landet in
@@ -33,8 +45,7 @@ einem Kioskfenster in QML, das die Anzeige füllt, und
   zieht nach, ohne dass etwas neu geladen wird.
 
 Anleitungen zum Erweitern: [Ein Widget schreiben](docs/widgets.de.md) und
-[Ein Theme schreiben](docs/themes.de.md). Warum einiges so ist, wie es ist,
-steht in [Warum es so aussieht](docs/entscheidungen.md).
+[Ein Theme schreiben](docs/themes.de.md).
 
 ## Bedienung am Display
 
@@ -46,8 +57,9 @@ Touchscreen bleibt, wofür ein Finger taugt:
 | Waagerecht wischen (oder klicken und ziehen) | Seite wechseln |
 | Auf einen Seitenpunkt unten tippen | direkt zu dieser Seite |
 | Auf eine Quick-Action-Kachel tippen | Aktion ausführen |
+| In eine Kachel tippen | was das Widget anbietet: eine Notiz öffnen, einen Checklistenpunkt abhaken, einem Discord-Kanal beitreten, zum nächsten Bild springen |
 
-Alles andere, also Designs, Moduloptionen, das Deck und das Seitenlayout,
+Alles andere, also Designs, Plugins und ihre Einstellungen, das Deck und das Seitenlayout,
 steckt im Einstellungsfenster. Diese Trennung ist Absicht: eine Argumentliste
 oder ein Grid-Template mit dem Finger auf einem 2560x720-Streifen zu
 bearbeiten war der unangenehmste Teil des alten Aufbaus.
@@ -79,6 +91,10 @@ im Backend (`backend/modules/<x>.py`, Unterklasse von `Module`, mit
 (`widgets/<x>.json`), das es dem Layout-Editor bekannt macht. Die Daten
 fließen vom Backend über den Hub und den WebSocket zu allen passenden
 Widgets. Ein neues Widget braucht keine Änderung am Gerüst.
+
+Widgets aus dem Store folgen demselben Muster, mit allen drei Teilen in einem
+Ordner unter `~/.local/share/edge-dashboard/plugins/<id>/`. Das Backend lädt
+ihre Module neben den eingebauten, der Kiosk findet ihre Anzeige dort.
 
 Ein Modul liefert seine Daten auf einem Takt (`interval`), von sich aus, wenn
 die Quelle sich meldet (`await self.emit(...)`, etwa bei MPRIS-Änderungen),
@@ -115,13 +131,15 @@ sudo pacman -S nodejs npm rust webkit2gtk-4.1
 
 | Modul | Braucht | Arch-Paket | Anmerkung |
 |---|---|---|---|
-| `nvidia` | NVIDIA-Treiber mit nvml | `nvidia`, `nvidia-utils` | Ohne GPU meldet es das und stört nicht weiter. |
+| `gpu` | NVIDIA: Treiber mit nvml. AMD: der Kerneltreiber `amdgpu` | `nvidia-utils` für NVIDIA, für AMD nichts | Liest alle Karten beider Hersteller, auch integrierte Grafik. Ohne Karte meldet es das und stört nicht weiter. |
 | `sensors` | gefülltes `/sys/class/hwmon` | `lm_sensors` | Einmal `sudo sensors-detect` laufen lassen. AMD-CPUs brauchen ein geladenes `k10temp`. |
 | `media` | D-Bus-Sitzungsbus und ein MPRIS-Player | vorinstalliert | Funktioniert mit Spotify, MPV, VLC und Browsern mit MPRIS-Erweiterung. |
 | `weather` | Internet | | Nutzt die kostenlose Open-Meteo-API ohne Schlüssel. |
 | `youtube` | Internet | | Holt oEmbed-Daten, kein API-Schlüssel nötig. |
 | `smart_lights` | Govee- oder Tuya-Konto | | Die Schlüssel werden je Anbieter eingetragen. |
 | `quick_actions` | hängt von der Aktion ab | `libnotify` für `notify-send` und so weiter | Jede Aktion bringt ihren eigenen Befehl mit. |
+| `timezones` | die IANA-Zeitzonendatenbank | `tzdata` (vorinstalliert) | Gelesen aus `/usr/share/zoneinfo`, aktualisiert mit dem System. |
+| `notes` | lokal nichts; für Joplin die Desktop-App mit eingeschaltetem Web-Clipper-Dienst | `joplin-desktop` (AUR) oder das AppImage | Der Speicher wird in den Plugin-Einstellungen gewählt. Einmal über die Kachel verbinden und in Joplin bestätigen. |
 
 ## Desktop-Umgebungen
 
@@ -281,7 +299,7 @@ gerade die Anfrage beantwortet.
 ```bash
 uv sync                                # Umgebung anlegen
 uv run python -m backend.main          # API auf http://127.0.0.1:8765
-uv run pytest                          # rund 200 Tests, sollten alle grün sein
+uv run pytest                          # rund 350 Tests, sollten alle grün sein
 ```
 
 Für den Dienstbetrieb beide Units aus `systemd/` nach
@@ -329,12 +347,14 @@ Jeder Schlüssel unter `modules:` entspricht dem `name` einer `Module`-Klasse.
 Gemeinsam haben alle `enabled` und `interval`, alles Weitere reicht das
 Backend an das Modul durch.
 
-> Im Einstellungsfenster zeigt der Bereich **Module** für jedes Feld eine
-> Eingabe, das ein Modul deklariert: an oder aus, das Intervall und was das
-> Modul selbst anbietet, etwa die API-Schlüssel der Lampen, `min_size_gb` und
-> Einhängepunkte der Datenträger, die Zeilenzahl der Prozessliste oder die
-> Zeitgrenzen der Quick Actions. Geheimnisse werden maskiert und nur
-> überschrieben, wenn ein neuer Wert eingegeben wird. Das YAML unten erklärt,
+> Im Einstellungsfenster schaltet unter **Plugins** der Schalter auf der
+> Karte eines Widgets dessen Module an und aus, und **Plugin-Einstellungen**
+> zeigt für jedes Feld, das diese Module deklarieren, eine Eingabe: das
+> Intervall und was das Modul selbst anbietet, etwa die API-Schlüssel der
+> Lampen, `min_size_gb` und Einhängepunkte der Datenträger, die Zeilenzahl der
+> Prozessliste, die Zeitgrenzen der Quick Actions oder den Speicherort der
+> Notizen. Geheimnisse werden maskiert und nur überschrieben, wenn ein neuer
+> Wert eingegeben wird. Das YAML unten erklärt,
 > was die Felder bedeuten, es ist kein Ort, an dem man normalerweise
 > schreibt.
 
@@ -348,7 +368,7 @@ modules:
     enabled: true
     interval: 1.0
 
-  nvidia:                  # GPU-Werte über nvml
+  gpu:                     # GPU-Werte, NVIDIA über nvml, AMD über amdgpu
     enabled: true
     interval: 1.0
 
@@ -357,8 +377,7 @@ modules:
     interval: 2.0
 
   media:                   # MPRIS-Steuerung für Spotify, Browser, MPV
-    enabled: true
-    interval: 0.5
+    enabled: true          # ohne Intervall: meldet sich bei Änderungen am Player
 
   weather:
     enabled: true
@@ -387,7 +406,26 @@ modules:
     enabled: true
     interval: 3
     limit: 6               # Anzahl der Zeilen
+
+  notes:
+    enabled: true
+    interval: 5            # wie oft nach Änderungen von außen gesehen wird
+    storage: local         # local | joplin
+    joplin_token: ""       # freiwillig; leer: "Mit Joplin verbinden" in der Kachel fragt danach
+    joplin_notebook: "Edge Dash"   # das Joplin-Notizbuch für Schnellnotizen
+    joplin_port: 0         # 0: Joplin auf den Ports 41184 bis 41194 suchen
 ```
+
+**Notizen in Joplin.** Die Joplin-Desktop-App stellt eine lokale API bereit,
+sobald ihr Web-Clipper-Dienst eingeschaltet ist (Einstellungen → Web Clipper).
+Mit `storage: joplin` liegt alles dort: Notizbücher werden zu Ordnern,
+Unter-Notizbücher erscheinen als „Eltern › Kind“, Checklisten bleiben Markdown
+(`- [ ]`) und lassen sich auf dem Display abhaken, Schnellnotizen landen im
+Notizbuch aus `joplin_notebook`. Für die Verbindung braucht es einen Token,
+entweder in den Plugin-Einstellungen eingetragen oder über **Mit Joplin
+verbinden** in der Kachel angefordert und in Joplin bestätigt. Anheften kennt
+Joplin nicht, welche Notizen angeheftet sind, merkt sich Edge Dash auf diesem
+Rechner.
 
 ### Quick Actions
 
@@ -510,6 +548,8 @@ Zu den Feldern:
 - `detach` (nur bei `shell`): startet und vergisst, in einer eigenen Sitzung.
   Für alles, was länger läuft als die Zeitgrenze, also für Programme mit
   Fenster.
+- `label_size` und `icon_size`: Schriftgröße (10 bis 48) und Symbolgröße
+  (16 bis 128) nur dieser Kachel, in Pixeln; ohne Angabe gilt die des Decks.
 
 ### Smarte Lampen
 
@@ -590,15 +630,51 @@ Ausdehnung für jedes Widget.
 
 ![Pomodoro, Datenträger und Sensoren auf der zweiten Seite](docs/screenshots/kiosk-tools.png)
 
+## Plugins und Store
+
+![Die Plugins-Seite im Einstellungsfenster: eingebaute und Store-Widgets nach Kategorien](docs/screenshots/settings-plugins.png)
+
+**Plugins** im Einstellungsfenster zeigt alle Widgets und Designs an einer
+Stelle: die eingebauten, die installierten und das Angebot des
+[Plugin-Stores](https://streamdeckstore.labratox.de).
+
+- **Installieren**: ein Klick auf **Installieren** lädt das Archiv, prüft die
+  SHA-256-Prüfsumme gegen den Store, entpackt es nach
+  `~/.local/share/edge-dashboard/plugins/<id>/` und schaltet seine Module ein.
+  Die Dienste laufen dabei weiter: das Backend startet nur seine Module neu,
+  die Kacheln sind also einen Moment ohne neue Daten, und der Kiosk liest die
+  Konfiguration neu ein. Auf dem Display erscheint das Widget, sobald es unter
+  **Layout** platziert ist.
+- **Updates**: eine Leiste oben nennt, wofür es eine neue Version gibt,
+  **Alle aktualisieren** holt sie. **Nach neuen Plugins sehen** schaut auf der
+  Platte und im Store neu nach.
+- **Einstellungen**: der Schalter auf einer Karte schaltet die Module des
+  Widgets an und aus, **Plugin-Einstellungen** öffnet seine Optionen. Die
+  Detailseite zeigt Beschreibung, Screenshots, Versionen und Bewertung.
+- **Designs**: im Reiter **Designs**; ein installiertes Design wird danach
+  unter **Design** ausgewählt.
+- **Aus einer Datei installieren**: **Plugins installieren** nimmt ein
+  ZIP-Archiv oder einen Ordner mit `manifest.json`, etwa um ein eigenes
+  Widget vor dem Einreichen zu testen.
+- **Einreichen**: **Im Store anmelden** (über GitHub) und **Plugin
+  einreichen** laden ein Archiv hoch. Eingereichtes wird geprüft, bevor es im
+  Store steht; das Fenster zeigt deine Einreichungen und ihren Stand.
+
+Wie ein Store-Widget innen aussieht und wie man eins baut, steht in
+[Ein Widget für den Store](docs/widgets.de.md#ein-widget-für-den-store).
+
 ## Die Widgets
+
+Eingebaut. Der Store bringt weitere, siehe [Plugins und Store](#plugins-und-store).
 
 | Widget | Modul | Was es zeigt |
 |---|---|---|
 | `heartbeat` | `heartbeat` | Verbindung und Laufzeit |
-| `clock` | keins | Uhrzeit und Datum in der eingestellten Sprache |
+| `clock` | `timezones` | Ortszeit oder eine andere Zone, analog oder digital in 22 Zifferblättern, Datum, Countdown mit Gong |
+| `world_clock` | `timezones` | Bis zu sechs Zeitzonen nebeneinander, mit Abstand zur Ortszeit |
 | `cpu` | `system`, `sensors` | Auslastung je Kern mit Kurve, dazu die Temperatur |
 | `ram` | `system`, `sensors` | Arbeitsspeicher mit Kurve, dazu die Temperatur |
-| `gpu` | `nvidia` | Auslastung, Speicher, Temperatur, Leistungsaufnahme |
+| `gpu` | `gpu` | Auslastung, Speicher, Temperatur, Leistungsaufnahme einer NVIDIA- oder AMD-Karte |
 | `network` | `system` | Durchsatz hoch und runter mit zwei Kurven |
 | `sensors` | `sensors` | Alle Temperaturen aus hwmon als Tabelle |
 | `sensor_focus` | `sensors` | Ein oder zwei gewählte Sensoren als Kurve oder Ring |
@@ -610,7 +686,7 @@ Ausdehnung für jedes Widget.
 | `smart_lights` | `smart_lights` | Lampen von Govee und Tuya schalten und dimmen |
 | `quick_actions` | `quick_actions` | Das Kachelraster mit Befehlen, HTTP und Programmen |
 | `pomodoro` | keins | Pomodoro-Uhr und Stoppuhr |
-| `notes` | über REST | Kurze Notizen, auf dem Display tippbar |
+| `notes` | `notes`, dazu REST | Notizen mit Ordnern, Ordnerfarben, Suche, Anheften und Checklisten, lokal oder in Joplin |
 
 ## Die Anzeige einrichten
 
@@ -646,9 +722,6 @@ Die Gruppe `[edge-dashboard-kiosk]` in `~/.config/kwinrulesrc` hält das
 Fenster aus der Fensterliste heraus. Sie enthält keine Geometrie und wird von
 `scripts/window-rule.sh` geschrieben.
 
-Warum das Fenster QML ist und kein Browser, steht in
-[Warum es so aussieht](docs/entscheidungen.md).
-
 ## Erweitern
 
 Wie man ein Widget baut, steht ausführlich in
@@ -659,7 +732,7 @@ Ein Widget besteht aus drei Teilen:
 
 * eine Quelle im Backend (`backend/modules/<name>.py`, Unterklasse von
   `Module` mit `@register_module`, mindestens `poll()`). Entfällt bei Widgets
-  ohne eigene Daten, etwa Uhr und Pomodoro.
+  ohne eigene Daten, etwa beim Pomodoro.
 * eine Anzeige in `shell/qml_kiosk/qml/widgets/<Name>.qml`. Sie wird über
   ihren Namen gefunden: `disk_usage` wird zu `DiskUsage.qml`.
 * ein Manifest `widgets/<name>.json`. Erst dadurch kennt der Layout-Editor
@@ -668,6 +741,10 @@ Ein Widget besteht aus drei Teilen:
 
 Danach das Modul in `config.yaml` eintragen und das Widget auf einer Seite
 platzieren.
+
+Ein Widget für den Store hat dieselben drei Teile in einem Ordner und wird
+installiert statt eingecheckt, siehe
+[Ein Widget für den Store](docs/widgets.de.md#ein-widget-für-den-store).
 
 Ein Design ist eine CSS-Datei in `frontend/css/themes/`. Sie taucht von selbst
 im Einstellungsfenster auf, weil das Backend das Verzeichnis ausliest.
@@ -695,7 +772,7 @@ keine Liste.
 ```bash
 uv sync                              # Umgebung anlegen
 uv run python -m backend.main        # Server starten
-uv run pytest                        # rund 200 Tests
+uv run pytest                        # rund 350 Tests
 uv run ruff check                    # Linter
 uv run ruff format                   # Formatierer
 ```
@@ -707,7 +784,11 @@ backend/
   main.py             FastAPI, Lebenszyklus, Routen
   hub.py              Modul-Takt, WebSocket-Verteilung, Neuladen im Betrieb
   config.py           Pydantic-Schema, die einzige Wahrheit über die Struktur
-  notes.py            Ablage für das Notiz-Widget
+  notes.py            Die Notizdatei (Ordner, Anheften)
+  joplin.py           Joplin als Speicher der Notizen, über seine lokale API
+  plugins.py          Installiert, lädt und entfernt Store-Plugins
+  plugin_layout.py    Wo installierte Plugins liegen und was ihr Manifest sagt
+  store.py            Der Store-Client: Katalog, Anmeldung, Upload
   tray.py             Symbol in der Leiste, über D-Bus
   autostart.py        Der Autostart-Schalter, schreibt und aktiviert die Units
   brand.py            Das App-Symbol, einmal gezeichnet für Leiste und Fenster
@@ -721,12 +802,14 @@ frontend/             Was Kiosk und Einstellungsfenster von der Platte lesen
 shell/
   qml_kiosk/
     qml/widgets/      Je Datei ein Widget, das ist die Anzeige
+    qml/EdgeDash/     Die Bausteine, die installierte Widgets importieren
     views.py          Findet die QML-Datei zu einer Widget-id
     theme.py          Liest die Designs aus den CSS-Dateien
     bridge.py         WebSocket, Konfiguration, Texte, Symbole
 gui/
   src/                EDGE//DASH, das Einstellungsfenster, React
   src-tauri/          Dessen Rahmen, Tauri 2
+examples/plugins/     Zwei vollständige Store-Plugins: ein Widget und ein Design
 config.yaml           Eingecheckte Vorlage
 config.local.yaml     Nicht in Git, vom Einstellungsfenster geschrieben
 systemd/              Vorlagen für die beiden Benutzer-Units
@@ -740,6 +823,13 @@ docs/
   themes.de.md        Anleitung: ein Theme schreiben
 tests/                pytest, asyncio im Automatikmodus
 ```
+
+## Hilfe und Community
+
+Fragen, Ideen und Layouts zum Herzeigen gehören auf den
+[Discord-Server](https://discord.gg/2ckNnCZ4wq). Fehler und Wünsche am besten
+als [GitHub-Issue](https://github.com/LabRaTox/EdgeDisplayWidgets/issues).
+Beides steht auch im Einstellungsfenster unter **Hilfe**.
 
 ## Lizenz
 

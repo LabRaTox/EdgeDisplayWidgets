@@ -417,6 +417,13 @@ seine Werte vom Server erfragen, statt sie fest zu nennen:
 setzt lesbare Beschriftungen dazu. Der Wert landet unverändert in `options`
 des Widgets.
 
+Ein Feld kann von anderen abhängen: `"depends_on": {"display": "analog"}`
+zeigt es nur, solange `display` auf `analog` steht, und eine Liste
+(`{"scheme": ["night", "light"]}`) erlaubt mehrere Werte. Die Uhr nutzt das,
+damit nur die Zifferblätter der gewählten Anzeige erscheinen. Ein
+ausgeblendetes Feld behält seinen Wert, es gilt nur nicht. Bei
+Moduleinstellungen geht das genauso.
+
 Gespeichert wird dabei die id eines Messwerts, etwa `k10temp@0000:00:18.3:1`.
 Sie nennt den Chip und die Adresse, an der er sitzt, also den PCI-Steckplatz
 oder die i2c-Adresse. Damit zeigt eine Kachel nach einem Neustart weiter auf
@@ -573,6 +580,143 @@ journalctl --user -u edge-dashboard -u edge-kiosk -f
 Der Port steht unter `server.port`, Standard 8765. Der Snapshot zeigt, was
 der Hub zuletzt gesendet hat. Steht dort ein Wert, ist das Modul in Ordnung
 und die Anzeige der Ort, wo es klemmt.
+
+## Ein Widget für den Store
+
+Widgets lassen sich auch über den Plugin-Store verteilen, denselben, aus dem
+DECK//SWITCH seine Plugins bezieht. Ein Store-Widget liegt nicht im
+Repository, sondern in einem eigenen Ordner, und bringt alle drei Teile
+selbst mit. Ein vollständiges Beispiel steht in
+`examples/plugins/moon-phase/`.
+
+```text
+moon-phase/
+  manifest.json
+  Widget.qml        die Anzeige
+  module.py         optional, das Backend-Modul
+  locales/de.json   optional, die Texte
+  locales/en.json
+```
+
+Das Manifest ist das aus [Das Manifest](#das-manifest), ergänzt um das, was
+der Store braucht:
+
+```json
+{
+  "app": "edgedash",
+  "type": "widget",
+  "id": "moon-phase",
+  "version": "1.0.0",
+  "min_app_version": "1.0.0",
+  "name": { "de": "Mondphase", "en": "Moon phase" },
+  "summary": { "de": "…", "en": "…" },
+  "license": "MIT",
+  "view": "Widget.qml",
+  "module": "module.py",
+  "modules": ["moon-phase"],
+  "variants": ["compact"]
+}
+```
+
+* **`app`** muss `edgedash` sein. Ohne diese Angabe hält der Store das
+  Archiv für ein DECK//SWITCH-Plugin und lehnt `type: widget` ab.
+* **`id`** ist zugleich die Widget-id im Layout: drei bis vierzig Zeichen,
+  Kleinbuchstaben, Ziffern, Bindestriche. Die Namen der eingebauten Widgets
+  sind im Store reserviert, auch in der Schreibweise mit Bindestrich
+  (`disk-usage`).
+* **`view`** nennt die QML-Datei, ohne Angabe `Widget.qml`. **`module`** ist
+  optional; fehlt es, ist das Widget eine reine Anzeige wie die Uhr.
+* **`min_app_version`** vergleicht Edge Dash mit der eigenen Version und
+  installiert nichts, was eine neuere braucht.
+
+Drei Unterschiede zu einem eingebauten Widget:
+
+* **Die Anzeige importiert `EdgeDash` statt `".."`.** Der Ordner liegt nicht
+  neben den gemeinsamen Bausteinen. `import EdgeDash` liefert `Heading`,
+  `Chart`, `CoreBars`, `Confirm`, `MetricWidget`, `Style` und
+  `Temperatures`, aus denselben Dateien wie für die eingebauten Anzeigen.
+* **Das Modul importiert absolut:** `from backend.modules.base import Module,
+  SettingField, register_module`. Es darf nur die Namen anmelden, die unter
+  `modules` stehen, und keinen, den es schon gibt. Ein Widget kann das
+  eingebaute Wetter-Modul also nicht ersetzen.
+* **Die Texte stehen im Ordner**, unter `locales/<sprache>.json`. Übernommen
+  werden nur Schlüssel im eigenen Namensraum: `widget.<id>.…`,
+  `settings.widget.<id>.…` und `settings.mod.<modul>.…` für die eigenen
+  Module. Alles andere wird verworfen, ein Widget kann also keine Texte des
+  Dashboards umschreiben.
+
+### Befehle vom Widget an sein Modul
+
+Ein Store-Widget hat keine eigenen Routen. Muss ein Fingertipp im Backend
+etwas auslösen (Kanal betreten, stummschalten), schickt die Anzeige das an
+ihr Modul:
+
+```qml
+var xhr = new XMLHttpRequest()
+xhr.open("POST", bridge.api + "/api/modules/discord/command/join")
+xhr.setRequestHeader("Content-Type", "application/json")
+xhr.send(JSON.stringify({ channel_id: id }))
+```
+
+Das Modul antwortet in `command()`:
+
+```python
+async def command(self, action: str, args: dict) -> dict:
+    if action == "join":
+        ...
+        return {"ok": True}
+    raise NotImplementedError
+```
+
+Der Body kommt als `args` an, die Antwort geht unverändert an die Anzeige
+zurück. `{"ok": False, "error": ...}` kommt mit Status 400 zurück. Eine
+Aktion, die das Modul nicht kennt, oder ein Modul ohne `command()` ergibt
+404. Der neue Zustand muss nicht in der Antwort stehen: Das Modul schickt
+ihn mit `emit()` wie jede andere Änderung, und jede Kachel bekommt ihn.
+
+### Installieren und Einreichen
+
+Beides geht im Einstellungsfenster unter **Plugins**, im Reiter **Widgets**. Dort stehen eingebaute, installierte und im Store verfügbare Widgets in einer Liste. Der Schalter einer Karte schaltet die Module des Widgets, „Plugin-Einstellungen“ öffnet deren Einstellungen. Beim Installieren lädt
+das Backend das Archiv, prüft die Prüfsumme aus dem Katalog, bevor es das
+Archiv öffnet, und entpackt nach `~/.local/share/edge-dashboard/plugins/<id>/`.
+Pfade aus dem Ordner heraus und Links werden nicht entpackt. Danach lädt es
+das Modul, schaltet es in der Konfiguration ein und schickt dem Kiosk die
+neue Konfiguration. Ein Neustart ist weder für die Installation noch für
+ein Update nötig: Der Kiosk hängt die Prüfsumme an die Adresse der Anzeige,
+und eine neue Adresse geht am QML-Cache vorbei. Das gilt für die Datei, die
+`view` nennt. Lädt sie weitere QML-Dateien aus dem eigenen Ordner, sieht der
+Kiosk deren neue Fassung erst nach einem Neustart.
+
+Ein installiertes Modul läuft im Backend mit deinen Rechten, genau wie ein
+DECK//SWITCH-Plugin. Der Store sieht jede Einreichung durch, Python über den
+Syntaxbaum, QML und JavaScript per Textsuche, und eine Einreichung von
+jemandem, der nicht als vertrauenswürdig markiert ist, geht durch die
+Moderation. Was die Durchsicht findet (Adressen, Netz, Programmstarts, Code
+zur Laufzeit), zeigt das Fenster vor dem Installieren an, und ein Widget mit
+Funden braucht einen zweiten Klick.
+
+Zum Einreichen meldest du dich unter **Plugins → Im Store anmelden** mit
+GitHub an und öffnest **Plugin einreichen**. Dort ziehst du das Archiv in das
+Feld oder klickst hinein und wählst es aus. ZIP, TAR und tar.gz gehen, mit
+dem Plugin-Ordner als oberster Ebene oder den Dateien direkt in der Wurzel.
+Das Archiv geht unverändert an den Store. Was der Store dazu sagt und was
+seine Durchsicht gefunden hat, steht danach oben im Dialog. Darunter stehen
+deine Einreichungen mit allen Fassungen und ihrem Stand. Was noch wartet
+oder abgelehnt wurde, lässt sich dort löschen, Freigegebenes zurückziehen.
+Eine Versionsnummer, die es schon gibt, nimmt der Store nicht an.
+
+**Ausprobieren ohne Store:** **Plugins installieren** nimmt eine ZIP-Datei oder einen Ordner an und installiert ihn nach denselben Regeln, nur ohne Prüfsumme des Stores. So lässt sich ein eigenes Widget testen, bevor du es einreichst.
+
+Vor dem Einreichen lohnt sich ein Durchlauf ohne Store:
+
+```bash
+/usr/lib/qt6/bin/qmllint -I shell/qml_kiosk/qml examples/plugins/moon-phase/Widget.qml
+uv run pytest tests/test_plugins.py
+```
+
+Wer die Adresse des Stores ändern will, etwa für einen eigenen, setzt
+`EDGE_STORE_URL` für das Backend. `EDGE_PLUGINS_DIR` verlegt den
+Plugin-Ordner, das nutzen die Tests.
 
 ## Vom Wunsch zum Widget: ein Kalender
 

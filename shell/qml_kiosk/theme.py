@@ -20,6 +20,8 @@ from __future__ import annotations
 import pathlib
 import re
 
+from views import plugin_layout
+
 #: The root font size the stylesheets were written against. Every `rem` is
 #: relative to this, so it is the conversion factor for every size taken from
 #: there.
@@ -177,8 +179,8 @@ def _first_colour(value: str) -> str:
 
 def metrics(name: str, themes_dir: pathlib.Path) -> dict:
     """Sizes and weights of one theme: what is not a colour."""
-    path = themes_dir / f"{name}.css"
-    if not path.is_file():
+    path = theme_file(name, themes_dir)
+    if path is None:
         return dict(BASE_METRICS)
     return _metrics(path.read_text(encoding="utf-8", errors="replace"))
 
@@ -186,8 +188,8 @@ def metrics(name: str, themes_dir: pathlib.Path) -> dict:
 def load(name: str, themes_dir: pathlib.Path) -> dict:
     """Colour and font values of one theme, ready for QML."""
     values = dict(BASE)
-    path = themes_dir / f"{name}.css"
-    if path.is_file():
+    path = theme_file(name, themes_dir)
+    if path is not None:
         text = path.read_text(encoding="utf-8", errors="replace")
         for block in _ROOT.findall(text):
             for key, value in _VAR.findall(block):
@@ -206,7 +208,34 @@ def load(name: str, themes_dir: pathlib.Path) -> dict:
 
 
 def available(themes_dir: pathlib.Path) -> list[str]:
-    return sorted(p.stem for p in themes_dir.glob("*.css"))
+    """Built-in themes first, then the installed ones."""
+    builtin = sorted(p.stem for p in themes_dir.glob("*.css"))
+    return builtin + [p.id for p in plugin_layout.installed("theme") if p.id not in builtin]
+
+
+#: A theme name from the config, before it becomes part of a path.
+SAFE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,39}$")
+
+
+def theme_file(name: str, themes_dir: pathlib.Path) -> pathlib.Path | None:
+    """The stylesheet of one theme: a built-in one, or an installed one.
+
+    Built-in themes are looked up first, so an installed theme cannot take
+    over a built-in name (the store reserves them anyway).
+    """
+    if not SAFE_NAME.match(name or ""):
+        return None
+    path = themes_dir / f"{name}.css"
+    if path.is_file():
+        return path
+    plugin = plugin_layout.load(name)
+    return plugin.css_file if plugin is not None else None
+
+
+def font_files(name: str) -> list[pathlib.Path]:
+    """The fonts an installed theme brings, for the window to register."""
+    plugin = plugin_layout.load(name) if SAFE_NAME.match(name or "") else None
+    return plugin.font_files if plugin is not None else []
 
 
 _COLOUR = re.compile(r"(rgba?\([^)]*\)|#[0-9a-fA-F]{3,8}|var\(--[a-z0-9-]+\))")
@@ -264,8 +293,8 @@ def _shadow(part: str, colours: dict) -> dict:
 def effects(name: str, themes_dir: pathlib.Path, colours: dict | None = None) -> dict:
     """The decoration a theme puts on top: glow, scanlines, the cut corner."""
     out = dict(NO_EFFECTS)
-    path = themes_dir / f"{name}.css"
-    if not path.is_file():
+    path = theme_file(name, themes_dir)
+    if path is None:
         return out
     colours = colours or {}
     text = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8", errors="replace"), flags=re.S)

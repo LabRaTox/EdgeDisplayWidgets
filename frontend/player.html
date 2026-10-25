@@ -13,7 +13,9 @@
     dashboard itself. This page restores it, so the video window loads from
     the backend like everything else and the iframe sits on a real page.
 
-    Query: ?id=<video or playlist id>&kind=video|playlist
+    Query: ?id=<video or playlist id>&kind=video|playlist[&start=<video id>]
+
+    `start` plays a playlist from that video on instead of from its first.
   -->
   <style>
     html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
@@ -26,15 +28,19 @@
     const params = new URLSearchParams(location.search);
     const id = params.get("id") || "";
     const kind = params.get("kind") || "video";
+    const start = params.get("start") || "";
     // Ids are alphanumeric with dashes and underscores; anything else is not
     // put into the URL.
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) {
       document.body.innerHTML = '<p class="missing">Kein Video angegeben.</p>';
     } else {
       const options = "autoplay=1&rel=0&modestbranding=1&playsinline=1";
-      const src = kind === "playlist"
-        ? `https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(id)}&${options}`
-        : `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?${options}`;
+      const startsAt = kind === "playlist" && /^[A-Za-z0-9_-]{11}$/.test(start);
+      const src = startsAt
+        ? `https://www.youtube-nocookie.com/embed/${encodeURIComponent(start)}?list=${encodeURIComponent(id)}&${options}`
+        : kind === "playlist"
+          ? `https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(id)}&${options}`
+          : `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?${options}`;
       const frame = document.createElement("iframe");
       frame.src = src;
       frame.allow = "autoplay; encrypted-media; fullscreen; picture-in-picture";

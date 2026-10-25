@@ -1,3 +1,20 @@
 {
-  "modules": []
+  "name": {
+    "de": "Notizen",
+    "en": "Notes"
+  },
+  "summary": {
+    "de": "Notizen mit Ordnern, Ordnerfarben, Suche, Anheften und Checklisten, lokal oder in Joplin.",
+    "en": "Notes with folders, folder colours, search, pinning and checklists, locally or in Joplin."
+  },
+  "description": {
+    "de": "Notizen direkt auf dem Display schreiben, sortieren und wiederfinden. Die Kachel zeigt Ordner, Notizliste und die geöffnete Notiz nebeneinander. Mit der Suche findest du jede Notiz über Titel oder Text.\n\nOrdner: „Alle Notizen“, „Schnellnotizen“ und beliebig viele eigene. Das Plus neben „Auf diesem PC“ legt einen Ordner an, langes Drücken benennt ihn um oder löscht ihn. Die Notizen eines gelöschten Ordners bleiben erhalten. „Angeheftet“ und „Heute“ sammeln automatisch, was angeheftet oder heute geändert wurde.\n\nJeder Ordner bekommt über die Palette eine eigene Farbe. Öffnest du ihn, färbt sich die ganze Kachel ein.\n\nIn der Notiz: anheften, löschen, Schrift in drei Größen, Checklisten mit ☐ und ☑ zum Abhaken per Fingertipp. Über „…“ verschiebst du eine Notiz in einen anderen Ordner.\n\nSpeichern geht von selbst, kurz nach dem Tippen. Wahlweise in einer Datei auf diesem PC oder in Joplin. Für Joplin muss die Desktop-App mit eingeschaltetem Web-Clipper-Dienst laufen. Notizbücher werden zu Ordnern, Checklisten bleiben Markdown, und Änderungen aus Joplin stehen nach wenigen Sekunden auf dem Display. Verbunden wird einmal über die Kachel, mit Bestätigung in Joplin.\n\nAuf schmalen Kacheln fällt zuerst die Ordnerspalte weg. Noch schmaler wechselt die Kachel zwischen Liste und Notiz.",
+    "en": "Write, sort and find notes right on the display. The tile shows folders, the note list and the open note side by side. Search finds any note by title or text.\n\nFolders: \"All notes\", \"Quick notes\" and as many of your own as you like. The plus next to \"On this PC\" adds a folder, a long press renames or deletes it. Notes in a deleted folder are kept. \"Pinned\" and \"Today\" collect on their own what is pinned or was changed today.\n\nEach folder gets its own colour from the palette. Opening it colours the whole tile.\n\nIn a note: pin, delete, three text sizes, and checklists with ☐ and ☑ that tick with a tap. \"…\" moves a note to another folder.\n\nNotes save themselves shortly after typing, either to a file on this PC or to Joplin. Joplin needs its desktop app running with the Web Clipper service on. Notebooks become folders, checklists stay Markdown, and changes made in Joplin show on the display a few seconds later. Connecting happens once from the tile, with a confirmation in Joplin.\n\nOn narrow tiles the folder column goes first. Narrower still, the tile switches between list and note."
+  },
+  "category": "productivity",
+  "accent": "#facc15",
+  "symbol": "ti:notes",
+  "modules": [
+    "notes"
+  ]
 }

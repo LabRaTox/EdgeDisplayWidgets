@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "Schnellaktionen",
+    "en": "Quick actions"
+  },
+  "summary": {
+    "de": "Tasten für Programme, Befehle und Webhooks, mit Ordnern und Status.",
+    "en": "Buttons for programs, commands and webhooks, with folders and status."
+  },
+  "category": "productivity",
+  "accent": "#8b5cf6",
+  "symbol": "ti:bolt",
   "modules": [
     "quick_actions"
   ]

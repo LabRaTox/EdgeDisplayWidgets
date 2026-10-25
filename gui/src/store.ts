@@ -16,7 +16,9 @@ import type {
   QuickActionsConfig,
   SettingField,
   Settings,
+  ThemeMeta,
   View,
+  WidgetMeta,
 } from "./types";
 
 interface StoreState {
@@ -31,8 +33,12 @@ interface StoreState {
   settings: Settings | null;
   schemas: Record<string, SettingField[]>;
   themes: string[];
+  /** Per theme: name and origin, for labelling installed ones. */
+  themeMeta: Record<string, ThemeMeta>;
   widgets: string[];
   widgetOptions: Record<string, SettingField[]>;
+  /** Per widget: name, summary, category and modules, for the widget page. */
+  widgetMeta: Record<string, WidgetMeta>;
   /** Per widget: the display variants it offers, if any. */
   widgetVariants: Record<string, string[]>;
   quickActions: QuickActionsConfig | null;
@@ -49,6 +55,12 @@ interface StoreState {
   /** Post a partial settings object and adopt the result. */
   saveSettings: (patch: Record<string, unknown>) => Promise<void>;
   saveQuickActions: (config: QuickActionsConfig) => Promise<void>;
+  /**
+   * Fetch the widget list and its options again. Some option lists only the
+   * module knows (the providers an AI-usage module reports), and they are
+   * empty until the module has answered once.
+   */
+  refreshWidgets: () => Promise<void>;
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -61,8 +73,10 @@ export const useStore = create<StoreState>((set, get) => ({
   settings: null,
   schemas: {},
   themes: [],
+  themeMeta: {},
   widgets: [],
   widgetOptions: {},
+  widgetMeta: {},
   widgetVariants: {},
   quickActions: null,
   error: null,
@@ -89,9 +103,11 @@ export const useStore = create<StoreState>((set, get) => ({
         settings,
         schemas: schemas.modules,
         themes: themes.themes,
+        themeMeta: themes.meta ?? {},
         widgets: widgets.widgets,
         widgetVariants: widgets.variants ?? {},
         widgetOptions: widgets.options ?? {},
+        widgetMeta: widgets.meta ?? {},
         quickActions,
       });
     } catch (err) {
@@ -140,6 +156,20 @@ export const useStore = create<StoreState>((set, get) => ({
   async saveSettings(patch) {
     const response = await api.saveSettings(patch);
     set({ settings: response.settings, online: true });
+  },
+
+  async refreshWidgets() {
+    try {
+      const widgets = await api.widgets();
+      set({
+        widgets: widgets.widgets,
+        widgetVariants: widgets.variants ?? {},
+        widgetOptions: widgets.options ?? {},
+        widgetMeta: widgets.meta ?? {},
+      });
+    } catch {
+      // Not fatal: the editor keeps the lists it has.
+    }
   },
 
   async saveQuickActions(config) {

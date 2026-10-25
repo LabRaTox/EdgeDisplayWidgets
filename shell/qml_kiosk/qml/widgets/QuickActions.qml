@@ -50,6 +50,7 @@ Item {
         for (var i = 0; i < (tiles || []).length; i++) {
             var a = tiles[i]
             var pos = a.page + "/" + a.x + "/" + a.y + "/" + a.w + "/" + a.h
+                      + "/" + a.label_size + "/" + a.icon_size
             out.push(a.kind === "folder"
                 ? "F:" + a.id + ":" + a.label + ":" + a.icon + ":" + a.color + ":"
                   + a.text_color + ":" + pos + ":" + a.back_x + "/" + a.back_y
@@ -178,7 +179,8 @@ Item {
             deck.append({ "isBack": true, "cellX": back.x, "cellY": back.y, "cellW": 1, "cellH": 1,
                           "actionId": "", "label": bridge.tr("widget.quick_actions.back"),
                           "icon": "ti:arrow-back-up", "colour": "", "textColour": "",
-                          "isFolder": false, "needsConfirm": false, "state": "" })
+                          "isFolder": false, "needsConfirm": false, "state": "",
+                          "labelSize": 16, "iconSize": 38 })
         for (var i = 0; i < result.placements.length; i++) {
             var pl = result.placements[i]
             if (pl.page !== page) continue
@@ -193,6 +195,9 @@ Item {
                 "textColour": safeColour(t.text_color),
                 "isFolder": t.kind === "folder",
                 "needsConfirm": t.confirm === true,
+                // Set per action; without a setting the size every tile has.
+                "labelSize": t.label_size || 16,
+                "iconSize": t.icon_size || 38,
                 "state": t.has_status && (t.state === "on" || t.state === "off") ? t.state : ""
             })
         }
@@ -286,6 +291,8 @@ Item {
                     model: deck
                     delegate: Tile {
                         theme: root.theme
+                        labelSize: model.labelSize
+                        iconSize: model.iconSize
                         x: model.cellX * (root.cell + root.gap)
                         y: model.cellY * (root.cell + root.gap)
                         width: model.cellW * root.cell + (model.cellW - 1) * root.gap
@@ -380,6 +387,8 @@ Item {
     component Tile: Rectangle {
         id: tile
         property var theme
+        property int labelSize: 16
+        property int iconSize: 38
         property string label: ""
         property string icon: ""
         property string colour: ""
@@ -488,35 +497,55 @@ Item {
 
             Item {                                  // One tile-icon
                 Layout.alignment: Qt.AlignHCenter
-                implicitWidth: 38                   // 1.9rem
-                implicitHeight: 38
+                // The set size, but never more than the tile has left beside
+                // its label: a large icon on a dense grid would otherwise push
+                // the text out at the bottom. 16 and 6 are the margins and the
+                // spacing of the column this sits in.
+                readonly property int size: Math.max(12, Math.min(
+                    tile.iconSize, tile.width - 12,
+                    tile.height - 16 - (tileLabel.text !== "" ? 6 + tileLabel.implicitHeight : 0)))
+                implicitWidth: size
+                implicitHeight: size
                 Image {
                     id: glyph
                     anchors.fill: parent
                     source: bridge.iconUrl(tile.icon, tile.fg)
-                    sourceSize.width: 38
-                    sourceSize.height: 38
+                    sourceSize.width: parent.size
+                    sourceSize.height: parent.size
                     fillMode: Image.PreserveAspectFit
-                    visible: source != ""
+                    visible: source.toString() !== ""
                 }
                 Text {                              // emoji or plain text
                     anchors.centerIn: parent
                     visible: !glyph.visible
                     text: tile.icon !== "" ? tile.icon : (tile.isFolder ? "▸" : "•")
                     color: tile.fg
-                    font.pixelSize: 38
+                    font.pixelSize: parent.size
                 }
             }
 
             Text {                                  // One tile-label
+                id: tileLabel
                 text: tile.label
                 color: tile.fg
-                font.pixelSize: 16                  // 0.8rem
+                font.pixelSize: tile.labelSize
                 font.family: tile.theme ? tile.theme["font-ui"] : "sans-serif"
                 lineHeight: 1.15
                 horizontalAlignment: Text.AlignHCenter
-                wrapMode: Text.Wrap
-                maximumLineCount: 2
+                // At word boundaries only: "Termin|al" helps nobody. A word too long
+                // for the tile is cut with an ellipsis instead.
+                wrapMode: Text.WordWrap
+                // A second line only while the icon above keeps a usable size:
+                // with large text on a small tile, one line and a visible icon
+                // say more than two lines under a dot.
+                maximumLineCount: tile.height - 22 - 2 * labelMetrics.height * lineHeight
+                                  >= Math.min(tile.iconSize, 24) ? 2 : 1
+                // The real height of one line in this font, not a guess from
+                // the pixel size: fonts carry ascent and descent on top.
+                FontMetrics {
+                    id: labelMetrics
+                    font: tileLabel.font
+                }
                 elide: Text.ElideRight
                 Layout.fillWidth: true
             }

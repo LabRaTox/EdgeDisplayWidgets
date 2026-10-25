@@ -2,12 +2,14 @@
 
 *[Deutsche Fassung](README.de.md)*
 
+[![Discord](https://img.shields.io/badge/Discord-Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/2ckNnCZ4wq)
+
 ![The Edge Dashboard on a Corsair Xeneon Edge: network, clock, weather, CPU, GPU and RAM widgets](docs/screenshots/kiosk-main.png)
 
 Dashboard for the **Corsair Xeneon Edge 14.5"** (2560x720), the second touch
 display that sits under the monitors. It runs on Linux, developed and used
 daily on [CachyOS](https://cachyos.org/) (Arch Linux) with KDE Plasma and an
-NVIDIA GPU. Three parts: a local FastAPI server, a kiosk window in QML that
+NVIDIA or AMD GPU. Three parts: a local FastAPI server, a kiosk window in QML that
 fills the display, and **EDGE//DASH**, a separate desktop application for the
 settings.
 
@@ -15,16 +17,25 @@ settings.
   sensors as a curve or a dial, disk usage, top processes, clock, weather
   (Open-Meteo), media controls (MPRIS), YouTube tiles, smart lights
   (Govee + Tuya), quick actions, pomodoro, notes.
+- **Plugins from a store**: more widgets and themes install from the plugin
+  store with one click, among them desktop notifications, Discord, an RSS
+  reader, a slideshow, a doodle pad and the moon phase. Updates show up on
+  their own, and your own widgets can be submitted from the same window.
+- **Notes, locally or in Joplin**: folders, folder colours, search, pinning
+  and checklists that tick with a tap. Stored in a file on this PC or in the
+  Joplin desktop app, where changes made on the PC appear on the display a few
+  seconds later.
 - **Pages + swipe navigation**: arrange widgets in CSS-Grid layouts across
   multiple pages; horizontal swipe between them on the touchscreen.
-- **Settings window**: themes, module options, weather, YouTube, the quick
-  action deck and the page layout, edited in a desktop application rather than
-  on the touch strip. It lives in the tray and in the application menu.
+- **Settings window**: themes, plugins and their settings, weather, YouTube,
+  the quick action deck and the page layout, edited in a desktop application
+  rather than on the touch strip. It lives in the tray and in the application
+  menu.
 - **Widget variants**: a widget can offer more than one look. The metric
   widgets know `compact`, which drops the chart for small tiles and costs no
   drawing time at all.
 - **Themes**: cyberpunk, clean, steampunk, light, toxic, nightclub,
-  industrial. Drop a CSS file to add more.
+  industrial. More come from the store, or from a CSS file of your own.
 - **i18n**: English / German out of the box; the display's language is a
   config value, the window has its own under `Language`.
 - **Hot-reload**: what the settings window saves is written to
@@ -32,8 +43,7 @@ settings.
   along without a restart or a reload.
 
 Guides for extending it: [Writing a widget](docs/widgets.md) and
-[Writing a theme](docs/themes.md). Why some of it is the way it is:
-[Why it looks the way it does](docs/decisions.md).
+[Writing a theme](docs/themes.md).
 
 ## Touch gestures
 
@@ -45,8 +55,9 @@ touchscreen is what a finger is good at:
 | Horizontal swipe (or click + drag) | Switch between pages |
 | Tap on a page indicator dot (bottom centre) | Jump to that page |
 | Tap a quick-action tile | Run it |
+| Tap inside a tile | Whatever the widget offers: open a note, tick a checklist item, join a Discord channel, skip to the next picture |
 
-Everything else, meaning themes, module options, the action deck and the page layout,
+Everything else, meaning themes, plugins and their settings, the action deck and the page layout,
 lives in the settings window (`gui/`, see [Settings window](#settings-window)).
 That is a deliberate split: editing an argv list or a grid template with a
 finger on a 2560×720 strip was the worst part of the old design.
@@ -76,6 +87,11 @@ producer (`backend/modules/<x>.py` subclassing `Module`, decorated with
 + one manifest (`widgets/<x>.json`) that makes it known to the layout editor.
 Data flows backend → hub → WebSocket → all matching widget instances. Adding
 a widget requires no changes to the core scaffolding.
+
+Widgets from the store follow the same pattern, with all three parts in one
+folder under `~/.local/share/edge-dashboard/plugins/<id>/`. The backend loads
+their modules next to the built-in ones, and the kiosk finds their views
+there.
 
 A module produces its data on a clock (`interval`), by pushing when its source
 signals it (`await self.emit(...)`, as MPRIS property changes and systemd unit
@@ -116,13 +132,15 @@ sudo pacman -S nodejs npm rust webkit2gtk-4.1
 
 | Module | Needs | Arch package | Notes |
 |--------|-------|--------------|-------|
-| `nvidia` | NVIDIA driver + nvml | `nvidia`, `nvidia-utils` | Falls back to "no GPU detected" if absent, safe to leave enabled. |
+| `gpu` | NVIDIA: driver + nvml. AMD: the kernel's `amdgpu` driver | `nvidia-utils` for NVIDIA, nothing for AMD | Reads every card of both makers, integrated graphics included. Falls back to "no graphics card detected", safe to leave enabled. |
 | `sensors` | `/sys/class/hwmon` populated | `lm_sensors` | Run `sudo sensors-detect` once. AMD CPUs need `k10temp` autoloaded. |
 | `media` | D-Bus session bus + an MPRIS player | (preinstalled) | Works with Spotify, MPV, browsers via the [MPRIS extension](https://github.com/F-Hauri/Plasma-Browser-Integration), VLC, etc. |
-| `weather` | internet access | — | Uses Open-Meteo's free, key-less API. |
-| `youtube` | internet access | — | Fetches oEmbed metadata; no API key needed. |
-| `smart_lights` | Govee and/or Tuya account | — | API keys configured per provider (see below). |
+| `weather` | internet access |  | Uses Open-Meteo's free, key-less API. |
+| `youtube` | internet access |  | Fetches oEmbed metadata; no API key needed. |
+| `smart_lights` | Govee and/or Tuya account |  | API keys configured per provider (see below). |
 | `quick_actions` | varies per action | `libnotify` for `notify-send`, etc. | Each action declares its own `command`. |
+| `timezones` | the IANA zone database | `tzdata` (preinstalled) | Read from `/usr/share/zoneinfo`, updated with the system. |
+| `notes` | nothing for local notes; for Joplin, its desktop app with the Web Clipper service on | `joplin-desktop` (AUR) or the AppImage | Storage is chosen in the plugin settings. Connect once from the tile and confirm in Joplin. |
 
 ### Desktop environments
 
@@ -311,7 +329,7 @@ answering the request.
 ```bash
 uv sync                                # install deps into ./.venv
 uv run python -m backend.main          # API on http://127.0.0.1:8765
-uv run pytest                          # ~200 tests, should pass clean
+uv run pytest                          # ~350 tests, should pass clean
 ```
 
 To run as a service without the installer, copy both units from `systemd/`
@@ -356,12 +374,14 @@ Each key under `modules:` matches a `Module` subclass's `name`. Common
 fields: `enabled` (bool) and `interval` (seconds between polls). Module-
 specific keys are forwarded to the module.
 
-> **Edit in the settings window, not in the file.** Its **Module** view
-> renders an input for every field a module declares: enabled and interval,
+> **Edit in the settings window, not in the file.** Under **Plugins**, the
+> switch on a widget's card turns its modules on and off, and **Plugin
+> settings** opens an input for every field those modules declare: interval
 > plus whatever is module-specific (smart-light API keys, disk `min_size_gb`
-> and mountpoints, the `top_processes` limit, quick-action timeouts). Secrets
-> are masked and only overwritten when a new value is typed. The YAML below is
-> the reference for what those fields mean, not a place you normally edit.
+> and mountpoints, the `top_processes` limit, quick-action timeouts, where the
+> notes are stored). Secrets are masked and only overwritten when a new value
+> is typed. The YAML below is the reference for what those fields mean, not a
+> place you normally edit.
 > A module declares them through `settings_schema` (see `SettingField` in
 > `backend/modules/base.py`), and declaring one there is all it takes for the
 > window to show it.
@@ -376,7 +396,7 @@ modules:
     enabled: true
     interval: 1.0
 
-  nvidia:                  # nvml-based GPU stats
+  gpu:                     # GPU stats, NVIDIA via nvml, AMD via amdgpu
     enabled: true
     interval: 1.0
 
@@ -385,8 +405,7 @@ modules:
     interval: 2.0
 
   media:                   # MPRIS player control (Spotify, browsers, MPV, …)
-    enabled: true
-    interval: 0.5
+    enabled: true          # no interval: it pushes on player signals
 
   weather:
     enabled: true
@@ -415,7 +434,24 @@ modules:
     enabled: true
     interval: 3
     limit: 6               # number of rows shown
+
+  notes:
+    enabled: true
+    interval: 5            # how often a change elsewhere is looked for
+    storage: local         # local | joplin
+    joplin_token: ""       # optional; empty: "Connect to Joplin" on the tile asks for one
+    joplin_notebook: "Edge Dash"   # the Joplin notebook for quick notes
+    joplin_port: 0         # 0: find Joplin on ports 41184 to 41194
 ```
+
+**Notes in Joplin.** Joplin's desktop app serves a local API once its Web
+Clipper service is on (Options → Web Clipper). With `storage: joplin` the
+notes widget keeps everything there: notebooks become folders, sub-notebooks
+show as "Parent › Child", checklists stay Markdown (`- [ ]`) and tick on the
+display, and quick notes go into the notebook named by `joplin_notebook`.
+Connecting needs a token, either typed into the plugin settings or requested
+from the tile with **Connect to Joplin** and a confirmation in Joplin. Pinning
+is not a Joplin feature, so which notes are pinned is kept on this machine.
 
 ### Quick actions
 
@@ -534,6 +570,8 @@ Field notes:
   `unknown`. Only the derived `state` is sent to the frontend.
 - `detach` (shell): launch fire-and-forget in a new session; use it for
   GUI programs that outlive the request.
+- `label_size` / `icon_size`: text size (10..48) and icon size (16..128) of
+  this one tile, in pixels; leave them out for the deck's default.
 
 ### Smart lights
 
@@ -615,16 +653,51 @@ column/row/span numbers for every widget beside it.
 
 ![Pomodoro, disks and sensors on the second page](docs/screenshots/kiosk-tools.png)
 
+## Plugins and the store
+
+![The plugins page of the settings window: built-in and store widgets with categories](docs/screenshots/settings-plugins.png)
+
+**Plugins** in the settings window lists every widget and theme in one place:
+the built-in ones, the installed ones, and what the
+[plugin store](https://streamdeckstore.labratox.de) offers.
+
+- **Installing**: a click on **Install** downloads the archive, checks its
+  SHA-256 against the store, unpacks it into
+  `~/.local/share/edge-dashboard/plugins/<id>/` and switches its modules on.
+  The services keep running: the backend only restarts its modules, so the
+  tiles go without new data for a moment, and the kiosk re-reads the config.
+  The display shows the new widget as soon as it is placed under **Layout**.
+- **Updates**: a bar at the top names what has a newer version, and **Update
+  all** fetches them. **Check for new plugins** looks again, on disk and in
+  the store.
+- **Settings**: the switch on a card turns the widget's modules on and off,
+  **Plugin settings** opens its options. A plugin's detail page shows its
+  description, screenshots, version history and rating.
+- **Themes**: under the **Designs** tab; an installed theme is then picked
+  under **Theme**.
+- **Installing from a file**: **Install plugins** takes a zip archive or a
+  folder with a `manifest.json`, for trying your own widget before submitting
+  it.
+- **Submitting**: **Sign in to the store** (GitHub, device flow) and
+  **Submit a plugin** upload an archive. Submissions are reviewed before they
+  are listed; the window shows what you submitted and its status.
+
+What a store widget looks like inside, and how to build one, is in
+[A widget for the store](docs/widgets.md#a-widget-for-the-store).
+
 ## Available widgets
+
+Built in. The store adds more, see [Plugins and the store](#plugins-and-the-store).
 
 | Widget | Backend module | Description |
 |--------|----------------|-------------|
 | `heartbeat` | `heartbeat` | Connection status + uptime |
-| `clock` | none | Time + locale-formatted date |
+| `clock` | `timezones` | Local time or another zone, analog or digital in 22 faces, date, countdown with a gong |
+| `world_clock` | `timezones` | Up to six time zones side by side, with the difference to local time |
 | `cpu` | `system`, `sensors` | Per-core CPU usage, curve, and the temperature |
 | `ram` | `system`, `sensors` | Memory usage, curve, and the temperature |
 | `network` | `system` | RX/TX rate + dual sparkline |
-| `gpu` | `nvidia` | NVIDIA usage + VRAM + temp + power |
+| `gpu` | `gpu` | NVIDIA or AMD usage + VRAM + temp + power |
 | `sensors` | `sensors` | Every hwmon temperature as a table |
 | `sensor_focus` | `sensors` | One or two picked sensors, as a curve or dials |
 | `disk_usage` | `disk_usage` | Per-mountpoint fill bars |
@@ -635,7 +708,7 @@ column/row/span numbers for every widget beside it.
 | `quick_actions` | `quick_actions` | Stream-Deck tile grid: shell, HTTP and app-launch tiles, folders, live status |
 | `smart_lights` | `smart_lights` | Govee + Tuya unified control |
 | `pomodoro` | none | Pomodoro timer + stopwatch |
-| `notes` | (REST `/api/notes`) | Tabbed plain-text notepad |
+| `notes` | `notes` (plus REST `/api/notes`) | Notes with folders, folder colours, search, pinning and checklists, locally or in Joplin |
 
 ## Kiosk display setup
 
@@ -671,9 +744,6 @@ The `[edge-dashboard-kiosk]` group in `~/.config/kwinrulesrc` keeps the window
 out of the task list. It carries no geometry and is written by
 `scripts/window-rule.sh`.
 
-Why the window is QML and not a browser is in
-[Why it looks the way it does](docs/decisions.md).
-
 ## Adding a widget
 
 The full walkthrough is in [Writing a widget](docs/widgets.md). In short:
@@ -695,7 +765,11 @@ The registry pattern means new widgets need **zero changes** to the core:
    place the widget on a page (or do it in the settings window's Layout view).
 
 Widgets without a backend producer work too: leave `moduleNames` empty and
-`modules` out of the manifest. The clock, the pomodoro and the notes do that.
+`modules` out of the manifest. The pomodoro does that.
+
+A widget for the store keeps the same three parts in one folder and is
+installed instead of committed; see
+[A widget for the store](docs/widgets.md#a-widget-for-the-store).
 
 ## Themes
 
@@ -727,7 +801,7 @@ file named by the config value and needs no list.
 ```bash
 uv sync                              # set up .venv
 uv run python -m backend.main        # dev server with auto-restart via uvicorn flags
-uv run pytest                        # ~200 tests
+uv run pytest                        # ~350 tests
 uv run ruff check                    # lint
 uv run ruff format                   # format
 ```
@@ -739,7 +813,11 @@ backend/
   main.py             FastAPI app, lifespan, routes
   hub.py              Module runner, WebSocket fanout, hot-reload
   config.py           Pydantic schema (single source of truth)
-  notes.py            REST store for the notes widget
+  notes.py            The notes file (folders, pinning)
+  joplin.py           Joplin as the notes store, over its local API
+  plugins.py          Installs, loads and removes store plugins
+  plugin_layout.py    Where installed plugins live and what their manifest says
+  store.py            The plugin store client: catalog, sign-in, upload
   tray.py             Tray icon (StatusNotifierItem over D-Bus)
   autostart.py        The autostart switch, writes and enables the units
   brand.py            The app icon, drawn once for the tray and the window
@@ -753,11 +831,13 @@ frontend/             What the kiosk and settings window read off disk
 shell/
   qml_kiosk/          The kiosk window (QML, system Python)
     qml/widgets/      One file per widget; this is the view
+    qml/EdgeDash/     The building blocks installed widgets import
     theme.py          Reads the themes out of the CSS files
     bridge.py         WebSocket, config, strings, icons
 gui/
   src/                EDGE//DASH, the settings window (React)
   src-tauri/          Its window frame (Tauri 2)
+examples/plugins/     Two complete store plugins: a widget and a theme
 config.yaml           Committed template
 config.local.yaml     Gitignored, written by the settings window
 systemd/              User unit templates (backend + kiosk)
@@ -771,6 +851,13 @@ docs/
   themes.md           Guide: writing a theme
 tests/                pytest, asyncio mode auto
 ```
+
+## Help and community
+
+Questions, ideas and layouts to show off go to the
+[Discord server](https://discord.gg/2ckNnCZ4wq). Bugs and feature requests
+are best filed as [GitHub issues](https://github.com/LabRaTox/EdgeDisplayWidgets/issues).
+Both are also under **Help** in the settings window.
 
 ## License
 

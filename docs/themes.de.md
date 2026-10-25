@@ -98,6 +98,46 @@ man gehen kann.
 Bleibt eine Änderung wirkungslos, hilft die Liste oben: nur ein Teil einer
 Stilvorlage kommt auf der Anzeige an.
 
+## Ein Theme für den Store
+
+Ein Theme lässt sich über den Plugin-Store verteilen wie ein Widget. Es liegt
+dann in einem eigenen Ordner und bringt sein Stylesheet mit, optional die
+Schriften, die es nennt. Ein Beispiel steht in `examples/plugins/mint-night/`.
+
+```text
+mint-night/
+  manifest.json
+  theme.css       dasselbe Format wie die Dateien in frontend/css/themes/
+  fonts/*.ttf     optional, auch .otf und .woff2
+```
+
+```json
+{
+  "app": "edgedash",
+  "type": "theme",
+  "id": "mint-night",
+  "version": "1.0.0",
+  "name": { "de": "Mintnacht", "en": "Mint night" },
+  "summary": { "de": "…", "en": "…" },
+  "license": "MIT",
+  "css": "theme.css"
+}
+```
+
+* **`type: theme`** unterscheidet es von einem Widget. Ein Theme bringt kein
+  Modul mit; der Store lehnt eines mit `module` ab, und Edge Dash installiert
+  es nicht.
+* **`id`** ist der Name, unter dem das Theme in der Konfiguration steht
+  (`default_theme: mint-night`). Die Namen der mitgelieferten Themes sind im
+  Store reserviert.
+* **`css`** nennt das Stylesheet, ohne Angabe `theme.css`.
+
+Installiert und entfernt wird unter **Plugins → Designs**, ausgewählt unter
+**Design**. Wird das aktive Theme entfernt, wechselt die Anzeige zu `clean`.
+Schriften aus `fonts/` meldet der Kiosk an, sobald das Theme gewählt wird.
+Für den Kiosk gelten dieselben Regeln wie oben: Er liest die Variablen und
+die Regeln aus der Liste, alles andere im Stylesheet bleibt ohne Wirkung.
+
 ---
 
 [Ein Widget schreiben](widgets.de.md) · [Warum es so aussieht](entscheidungen.md) · [README](../README.de.md) · [English](themes.md)

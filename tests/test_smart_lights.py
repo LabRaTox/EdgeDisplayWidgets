@@ -247,7 +247,7 @@ async def test_tuya_token_then_control(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_tuya_brightness_scaled():
-    """Tuya expects bright_value_v2 in 10..1000 (percent × 10)."""
+    """Tuya expects bright_value_v2 in 10..1000 (percent times 10)."""
     seen: dict = {}
 
     async def fake_signed(self, client, method, path, body=None):

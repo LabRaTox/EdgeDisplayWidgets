@@ -1,0 +1,30 @@
+{
+  "app": "edgedash",
+  "type": "widget",
+  "id": "moon-phase",
+  "version": "1.0.0",
+  "min_app_version": "1.0.0",
+  "name": { "de": "Mondphase", "en": "Moon phase" },
+  "summary": {
+    "de": "Wie voll der Mond gerade ist, einmal pro Stunde berechnet.",
+    "en": "How full the moon is right now, worked out once an hour."
+  },
+  "author": "LabRaTox",
+  "license": "MIT",
+  "support": "https://github.com/LabRaTox/EdgeDisplayWidgets",
+  "category": "time",
+  "accent": "#a78bfa",
+  "symbol": "ti:moon",
+  "view": "Widget.qml",
+  "module": "module.py",
+  "modules": ["moon-phase"],
+  "variants": ["compact"],
+  "options": [
+    {
+      "key": "show_days",
+      "type": "bool",
+      "label_key": "settings.widget.moon-phase.show_days",
+      "default": true
+    }
+  ]
+}

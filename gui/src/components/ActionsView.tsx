@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { DragEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { CSSProperties, DragEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
@@ -19,6 +19,58 @@ import { SaveBar } from "./SaveBar";
  * the fields get room, and the parts the touch editor could not show at all
  * (status probes, HTTP headers) are editable for the first time.
  */
+/**
+ * The preview draws tiles at three quarters of their size on the display:
+ * text 12 px where the display has 16, the icon about 29 px where it has
+ * 38 (see `.deck-tile` in styles.css). A tile's own sizes are scaled by the
+ * same factor, so the preview shows the proportions the display will have,
+ * while typing and before saving.
+ */
+const PREVIEW_SCALE = 0.75;
+const DEFAULT_LABEL_SIZE = 16;
+const DEFAULT_ICON_SIZE = 38;
+
+/**
+ * The label's size, and how many lines it may take.
+ *
+ * The display allows a second line only while the icon above keeps at least
+ * 24 px (see QuickActions.qml). The rule is worked out here in display
+ * pixels, as the kiosk does it, so a long label shows the same way in both:
+ * the tile height scaled back up, 22 px of margins and spacing, and a line
+ * as high as the kiosk measures it. That height comes from the font, about
+ * 1.35 times its size for the sans fonts the themes use, times the label's
+ * line spacing of 1.15.
+ */
+function previewLabelStyle(tile: QuickAction, tileHeight: number): CSSProperties {
+  const labelSize = tile.label_size ?? DEFAULT_LABEL_SIZE;
+  const iconSize = tile.icon_size ?? DEFAULT_ICON_SIZE;
+  const displayHeight = tileHeight / PREVIEW_SCALE;
+  const room = displayHeight - 22 - 2 * labelSize * 1.35 * 1.15;
+  const lines = tileHeight === 0 || room >= Math.min(iconSize, 24) ? 2 : 1;
+  return {
+    ...(tile.label_size == null ? {} : { fontSize: `${labelSize * PREVIEW_SCALE}px` }),
+    WebkitLineClamp: lines,
+    lineClamp: lines,
+  };
+}
+
+/**
+ * A size as it is being typed: a whole number capped at `max`, or null for an
+ * empty field. The lower bound is left to the field's blur handler, because
+ * clamping it here turned the first digit of "24" into the minimum.
+ */
+function typedSize(raw: string, max: number): number | null {
+  if (raw === "") return null;
+  const value = Math.round(Number(raw));
+  return Number.isFinite(value) ? Math.min(Math.max(value, 0), max) : null;
+}
+
+function previewIconStyle(tile: QuickAction): CSSProperties | undefined {
+  if (tile.icon_size == null) return undefined;
+  // The glyph is 1.1em of the span's font size (`.tile-icon .ti-svg`).
+  return { fontSize: `${(tile.icon_size * PREVIEW_SCALE) / 1.1}px` };
+}
+
 export function ActionsView() {
   const { t } = useTranslation();
   const upstream = useStore((s) => s.quickActions);
@@ -31,6 +83,18 @@ export function ActionsView() {
   /** Cell the pointer is currently over while dragging, for the drop hint. */
   const [dropCell, setDropCell] = useState<string | null>(null);
   const [runState, setRunState] = useState<string | null>(null);
+  // The height of one preview cell, measured: the deck scales with the
+  // window, and the label rule above depends on how tall a tile is.
+  const deckRef = useRef<HTMLDivElement>(null);
+  const [deckHeight, setDeckHeight] = useState(0);
+  useEffect(() => {
+    const deck = deckRef.current;
+    if (!deck) return;
+    const observer = new ResizeObserver(() => setDeckHeight(deck.clientHeight));
+    observer.observe(deck);
+    return () => observer.disconnect();
+    // Again once the config has loaded: before that, there is no deck yet.
+  }, [draft === null]);
 
   if (!draft) {
     return (
@@ -74,6 +138,10 @@ export function ActionsView() {
   const selected = tiles.find((tile) => tile.id === selectedId) ?? null;
   const columns = Math.min(Math.max(draft.columns, 1), 8);
   const rows = Math.min(Math.max(draft.rows, 1), 8);
+  // A tile's height in the preview, from the measured deck: `span` rows plus
+  // the gaps between them. Zero until measured, which allows two lines.
+  const cellHeight = deckHeight ? (deckHeight - (rows - 1) * 8) / rows : 0;
+  const tileHeight = (span: number) => (cellHeight ? span * cellHeight + (span - 1) * 8 : 0);
 
   /** Every id in the tree — new tiles must not collide with any of them. */
   const allIds = (tiles: QuickAction[]): string[] =>
@@ -209,6 +277,7 @@ export function ActionsView() {
           </header>
 
           <div
+            ref={deckRef}
             className="deck"
             style={{
               gridTemplateColumns: `repeat(${columns}, 1fr)`,
@@ -299,7 +368,7 @@ export function ActionsView() {
                   {...dropProps}
                 >
                   {tile.icon ? (
-                    <span className="tile-icon">
+                    <span className="tile-icon" style={previewIconStyle(tile)}>
                       <Icon icon={tile.icon} />
                     </span>
                   ) : (
@@ -307,7 +376,12 @@ export function ActionsView() {
                       {tile.kind === "folder" ? "▤" : tile.kind}
                     </span>
                   )}
-                  <span className="tile-label">{tile.label || tile.id}</span>
+                  <span
+                    className="tile-label"
+                    style={previewLabelStyle(tile, tileHeight(entry?.h ?? 1))}
+                  >
+                    {tile.label || tile.id}
+                  </span>
                 </div>
               );
             })}
@@ -588,6 +662,58 @@ function TileEditor({
             >
               {t("common.reset")}
             </button>
+          </div>
+        </div>
+
+        <div className="row">
+          <label>{t("actions.size")}</label>
+          {/* Sizes on the display, for this tile only; empty is the size every
+              tile has. The preview scales them by PREVIEW_SCALE. Typed values
+              are only capped while typing, so "24" can be entered digit by
+              digit; the lower bound is applied when the field is left. */}
+          <div className="control">
+            {/* Each field with its word, and the row may wrap: the editor
+                column is narrow, and three controls with two-word labels
+                side by side ran out of it. */}
+            <div className="inline wrap">
+              <label className="inline">
+                <input
+                  type="number"
+                  min={10}
+                  max={48}
+                  value={tile.label_size ?? ""}
+                  placeholder={String(DEFAULT_LABEL_SIZE)}
+                  style={{ width: 72 }}
+                  onChange={(e) => onPatch({ label_size: typedSize(e.target.value, 48) })}
+                  onBlur={() => {
+                    if (tile.label_size != null && tile.label_size < 10) onPatch({ label_size: 10 });
+                  }}
+                />
+                <span className="muted">{t("actions.label_size")}</span>
+              </label>
+              <label className="inline">
+                <input
+                  type="number"
+                  min={16}
+                  max={128}
+                  value={tile.icon_size ?? ""}
+                  placeholder={String(DEFAULT_ICON_SIZE)}
+                  style={{ width: 72 }}
+                  onChange={(e) => onPatch({ icon_size: typedSize(e.target.value, 128) })}
+                  onBlur={() => {
+                    if (tile.icon_size != null && tile.icon_size < 16) onPatch({ icon_size: 16 });
+                  }}
+                />
+                <span className="muted">{t("actions.icon_size")}</span>
+              </label>
+              <button
+                className="btn small ghost"
+                type="button"
+                onClick={() => onPatch({ label_size: null, icon_size: null })}
+              >
+                {t("common.reset")}
+              </button>
+            </div>
           </div>
         </div>
 

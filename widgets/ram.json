@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "RAM",
+    "en": "RAM"
+  },
+  "summary": {
+    "de": "Arbeitsspeicher mit Verlauf und Temperatur der Module.",
+    "en": "Memory with history and module temperature."
+  },
+  "category": "monitoring",
+  "accent": "#3b82f6",
+  "symbol": "ti:device-sd-card",
   "modules": [
     "system",
     "sensors"

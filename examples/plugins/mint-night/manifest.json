@@ -1,0 +1,17 @@
+{
+  "app": "edgedash",
+  "type": "theme",
+  "id": "mint-night",
+  "version": "1.0.0",
+  "min_app_version": "1.0.0",
+  "name": { "de": "Mintnacht", "en": "Mint night" },
+  "summary": {
+    "de": "Tiefes Grün mit Minze als Akzent, ruhig und ohne Effekte.",
+    "en": "Deep green with mint as the accent, calm and without effects."
+  },
+  "author": "LabRaTox",
+  "license": "MIT",
+  "support": "https://github.com/LabRaTox/EdgeDisplayWidgets",
+  "category": "dark",
+  "css": "theme.css"
+}

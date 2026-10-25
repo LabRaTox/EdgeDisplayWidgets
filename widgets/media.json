@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "Medien",
+    "en": "Media"
+  },
+  "summary": {
+    "de": "Was gerade läuft, mit Cover und Steuerung, aus jedem MPRIS-Player.",
+    "en": "What is playing, with cover and controls, from any MPRIS player."
+  },
+  "category": "media",
+  "accent": "#1db954",
+  "symbol": "ti:player-play",
   "modules": [
     "media"
   ]

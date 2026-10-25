@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib
 import json
 import pkgutil
@@ -12,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from loguru import logger
 
 from . import modules as modules_pkg
+from . import plugins
 from .modules.base import Module, get_registry
 
 if TYPE_CHECKING:
@@ -43,7 +45,12 @@ class Hub:
     # ----------------------------------------------------------------- discovery
     @staticmethod
     def discover() -> None:
-        """Import every backend.modules.<x> so @register_module decorators run."""
+        """Import every backend.modules.<x> so @register_module decorators run.
+
+        Then the modules of installed widgets. Built-ins go first, so a
+        widget that tries to register a built-in name fails instead of
+        replacing it.
+        """
         for info in pkgutil.iter_modules(modules_pkg.__path__):
             if info.name.startswith("_") or info.name == "base":
                 continue
@@ -52,6 +59,7 @@ class Hub:
                 importlib.import_module(full)
             except Exception as exc:
                 logger.exception(f"failed to import module '{full}': {exc}")
+        plugins.load_all()
 
     def _instantiate(self) -> None:
         registry = get_registry()
@@ -115,10 +123,8 @@ class Hub:
             clients = list(self._clients)
             self._clients.clear()
         for ws in clients:
-            try:
+            with contextlib.suppress(Exception):
                 await ws.close()
-            except Exception:
-                pass
         logger.info("hub stopped")
 
     # ----------------------------------------------------------------- polling

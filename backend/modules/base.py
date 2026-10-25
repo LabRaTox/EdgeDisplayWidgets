@@ -54,6 +54,10 @@ class SettingField(BaseModel):
     # Filled in by the server before the schema is handed out. "sensors" means
     # the readings the sensors module currently reports.
     options_source: str | None = None
+    # Shown only while other fields of the same block have these values:
+    # `{"display": "analog"}`, or a list of allowed values per field. A field
+    # that is hidden keeps what it holds; it just does not apply.
+    depends_on: dict[str, Any] | None = None
 
 
 class Module(ABC):
@@ -69,6 +73,7 @@ class Module(ABC):
       - call ``await self.emit(data)`` to push outside the poll interval
       - set ``settings_schema`` (editable config fields exposed in the UI)
       - override ``setup()`` / ``teardown()`` for resource lifecycle
+      - override ``command()`` to take actions from its widget
     """
 
     name: ClassVar[str] = ""
@@ -117,6 +122,17 @@ class Module(ABC):
         """Release resources acquired in ``setup``."""
         return None
 
+    async def command(self, action: str, args: dict[str, Any]) -> dict[str, Any]:
+        """Do something the widget asked for, from a tap on the display.
+
+        Reached through ``POST /api/modules/<name>/command/<action>`` with
+        ``args`` as the JSON body. The answer goes back to the widget as it
+        is; ``{"ok": False, "error": ...}`` is the way to report a failure.
+        A module without commands keeps this default, and the endpoint
+        answers 404.
+        """
+        raise NotImplementedError
+
     @abstractmethod
     async def poll(self) -> dict[str, Any]:
         """Return current data as a JSON-serialisable dict."""
@@ -141,6 +157,16 @@ def register_module(cls: type[Module]) -> type[Module]:
     _REGISTRY[name] = cls
     logger.debug(f"registered module: {name} -> {cls.__name__}")
     return cls
+
+
+def unregister_module(name: str) -> None:
+    """Drop a module from the registry.
+
+    Only installed widgets need this: removing or updating one must take its
+    class out again, or the next import of the new version would collide with
+    the old one under the same name.
+    """
+    _REGISTRY.pop(name, None)
 
 
 def get_registry() -> dict[str, type[Module]]:

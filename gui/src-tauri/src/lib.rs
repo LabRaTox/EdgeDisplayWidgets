@@ -6,7 +6,80 @@
 //! browser tab against the same backend — useful while developing, and the
 //! reason the kiosk needs no part of this.
 
-use tauri::Manager;
+use std::collections::HashSet;
+use std::io::Read;
+use std::path::PathBuf;
+use std::sync::Mutex;
+
+use tauri::{DragDropEvent, Manager};
+
+/// Largest file that can be dropped into the window. Plugin archives are
+/// small; the limit only keeps a video dragged in by mistake from ending up
+/// in memory whole. The same 64 MB the store accepts.
+const MAX_DROPPED: u64 = 64 * 1024 * 1024;
+
+/// Paths that were really dropped into the window just now.
+///
+/// Only these may be read by the page. Without the list, any script in the
+/// window could ask for any file of the user.
+#[derive(Default)]
+struct Dropped(Mutex<HashSet<PathBuf>>);
+
+fn remember_dropped(app: &tauri::AppHandle, event: &DragDropEvent) {
+    if let DragDropEvent::Drop { paths, .. } = event {
+        if let Some(state) = app.try_state::<Dropped>() {
+            if let Ok(mut list) = state.0.lock() {
+                list.clear();
+                list.extend(paths.iter().cloned());
+            }
+        }
+    }
+}
+
+/// Read a file that was dragged from the file manager into the window.
+///
+/// WebKitGTK does not hand a dropped file to the page, only its path as
+/// `text/uri-list` (measured with Dolphin under Plasma 6, the same as in
+/// DECK//SWITCH). The page cannot open a `file://` path itself, so the window
+/// reads the file and returns its bytes. Only paths from the last drop, only
+/// regular files up to `MAX_DROPPED`.
+///
+/// Errors come back as a code (`not-dropped`, `not-a-file`, `too-large`,
+/// `io:…`); the page puts them into words in its own language.
+#[tauri::command]
+fn read_dropped_file(
+    path: String,
+    dropped: tauri::State<'_, Dropped>,
+) -> Result<tauri::ipc::Response, String> {
+    let path = PathBuf::from(&path);
+    let allowed = dropped
+        .0
+        .lock()
+        .map(|mut list| list.remove(&path))
+        .unwrap_or(false);
+    if !allowed {
+        return Err("not-dropped".into());
+    }
+    // Checked before opening: a named pipe would make `open` hang.
+    let info = std::fs::metadata(&path).map_err(|e| format!("io:{e}"))?;
+    if !info.is_file() {
+        return Err("not-a-file".into());
+    }
+    if info.len() > MAX_DROPPED {
+        return Err("too-large".into());
+    }
+    let file = std::fs::File::open(&path).map_err(|e| format!("io:{e}"))?;
+    // Read with a ceiling: the size from a moment ago may have changed, and
+    // some files report none at all.
+    let mut data = Vec::new();
+    file.take(MAX_DROPPED + 1)
+        .read_to_end(&mut data)
+        .map_err(|e| format!("io:{e}"))?;
+    if data.len() as u64 > MAX_DROPPED {
+        return Err("too-large".into());
+    }
+    Ok(tauri::ipc::Response::new(data))
+}
 
 /// Units the dashboard consists of, in the order they should come up.
 const UNITS: [&str; 2] = ["edge-dashboard.service", "edge-kiosk.service"];
@@ -65,6 +138,19 @@ fn open_url(url: String) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(Dropped::default())
+        // Whether a drop is reported on the window or on the webview depends
+        // on how the window is built. Both remember the paths.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::DragDrop(drop) = event {
+                remember_dropped(window.app_handle(), drop);
+            }
+        })
+        .on_webview_event(|webview, event| {
+            if let tauri::WebviewEvent::DragDrop(drop) = event {
+                remember_dropped(webview.app_handle(), drop);
+            }
+        })
         // Single instance, because the tray icon is the normal way in: every
         // click on it runs this binary, and without this each click would
         // stack up another window. The second process hands its argv to the
@@ -89,7 +175,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![start_dashboard, open_url])
+        .invoke_handler(tauri::generate_handler![start_dashboard, open_url, read_dropped_file])
         .run(tauri::generate_context!())
         .expect("could not start the settings window");
 }

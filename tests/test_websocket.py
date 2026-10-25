@@ -58,16 +58,15 @@ def test_api_config_lists_active_modules(app):
 
 
 def test_websocket_replays_snapshot_to_new_client(app):
-    with TestClient(app) as client:
-        # Hub started on TestClient enter; heartbeat polls every 50ms.
-        # On WS connect the hub replays the cached snapshot, so we should
-        # see a heartbeat frame promptly without waiting a full interval.
-        with client.websocket_connect("/ws") as ws:
-            msg = ws.receive_json()
-            assert msg["module"] == "heartbeat"
-            assert msg["data"]["seq"] >= 1
-            assert msg["data"]["uptime"] >= 0.0
-            assert "ts" in msg
+    # Hub started on TestClient enter; heartbeat polls every 50ms.
+    # On WS connect the hub replays the cached snapshot, so we should
+    # see a heartbeat frame promptly without waiting a full interval.
+    with TestClient(app) as client, client.websocket_connect("/ws") as ws:
+        msg = ws.receive_json()
+        assert msg["module"] == "heartbeat"
+        assert msg["data"]["seq"] >= 1
+        assert msg["data"]["uptime"] >= 0.0
+        assert "ts" in msg
 
 
 def test_websocket_streams_subsequent_polls(app):

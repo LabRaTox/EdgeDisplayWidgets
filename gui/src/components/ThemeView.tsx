@@ -4,7 +4,8 @@ import { useTranslation } from "react-i18next";
 import { API_BASE } from "../api/client";
 import { useDraft } from "../lib/useDraft";
 import { useStore } from "../store";
-import type { Settings } from "../types";
+import { pick } from "../lib/localized";
+import type { Localized, Settings } from "../types";
 import { SaveBar } from "./SaveBar";
 
 /** Language choices for the *kiosk*; the window's own language is in the menu. */
@@ -19,6 +20,7 @@ export function ThemeView() {
   const { t } = useTranslation();
   const settings = useStore((s) => s.settings);
   const themes = useStore((s) => s.themes);
+  const themeMeta = useStore((s) => s.themeMeta);
   const saveSettings = useStore((s) => s.saveSettings);
 
   // Memoised because it is built here rather than taken from the store: an
@@ -55,7 +57,7 @@ export function ThemeView() {
               onClick={() => edit((d) => ({ ...d, default_theme: name }))}
             >
               <ThemeSwatch name={name} />
-              {name}
+              {themeLabel(name, themeMeta[name]?.name)}
             </button>
           ))}
         </div>
@@ -100,7 +102,15 @@ export function ThemeView() {
  * actual stylesheet into an isolated frame. Guessing at colours would drift
  * from the themes the moment someone edits one; this cannot.
  */
-function ThemeSwatch({ name }: { name: string }) {
+/**
+ * What a theme is called. Built-in ones go by their file name, installed ones
+ * by the name in their manifest, in the window's language where it has one.
+ */
+export function themeLabel(id: string, name: Localized | undefined): string {
+  return pick(name, id);
+}
+
+export function ThemeSwatch({ name, className = "theme-swatch" }: { name: string; className?: string }) {
   const href = `${API_BASE}/css/themes/${encodeURIComponent(name)}.css`;
   const html = `<!doctype html><link rel="stylesheet" href="${href}">
     <style>
@@ -114,7 +124,7 @@ function ThemeSwatch({ name }: { name: string }) {
     <i class="c"></i><i class="a"></i><i class="b"></i><i class="c"></i>`;
   return (
     <iframe
-      className="theme-swatch"
+      className={className}
       title={name}
       srcDoc={html}
       tabIndex={-1}

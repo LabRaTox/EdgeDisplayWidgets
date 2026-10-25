@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "Top-Prozesse",
+    "en": "Top processes"
+  },
+  "summary": {
+    "de": "Die Prozesse, die gerade am meisten CPU oder Speicher brauchen.",
+    "en": "The processes using the most CPU or memory right now."
+  },
+  "category": "monitoring",
+  "accent": "#14b8a6",
+  "symbol": "ti:list-details",
   "modules": [
     "top_processes"
   ]

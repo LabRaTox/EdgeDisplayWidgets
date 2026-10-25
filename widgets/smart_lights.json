@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "Licht",
+    "en": "Lights"
+  },
+  "summary": {
+    "de": "Lampen von Govee und Tuya schalten, dimmen und einfärben.",
+    "en": "Switch, dim and colour Govee and Tuya lights."
+  },
+  "category": "smarthome",
+  "accent": "#eab308",
+  "symbol": "ti:bulb",
   "modules": [
     "smart_lights"
   ]

@@ -77,7 +77,7 @@ class StatusProbe(BaseModel):
             try:
                 re.compile(self.match)
             except re.error as exc:
-                raise ValueError(f"status probe `match` is not a valid regex: {exc}")
+                raise ValueError(f"status probe `match` is not a valid regex: {exc}") from exc
         return self
 
 
@@ -108,6 +108,11 @@ class QuickAction(BaseModel):
     page: int = Field(default=0, ge=0, le=64)
     x: int | None = Field(default=None, ge=0, le=16)
     y: int | None = Field(default=None, ge=0, le=64)
+    # Label and icon size of this one tile, in pixels on the display. None is
+    # the size every tile has without a setting (16 and 38). The largest
+    # values still fit a tile on the 720-pixel display with three rows.
+    label_size: int | None = Field(default=None, ge=10, le=48)
+    icon_size: int | None = Field(default=None, ge=16, le=128)
 
     # folder-only: where the auto-generated "back" tile sits within this
     # folder's sub-deck (reserved on every page so it's always reachable).
@@ -185,6 +190,8 @@ class QuickAction(BaseModel):
             "page": self.page,
             "x": self.x,
             "y": self.y,
+            "label_size": self.label_size,
+            "icon_size": self.icon_size,
         }
         if self.status is not None:
             view["has_status"] = True
@@ -239,7 +246,7 @@ class QuickActionsModule(Module):
         self.timeout_seconds: float = float(config.get("timeout_seconds", 30.0))
         self.status_timeout: float = float(config.get("status_timeout_seconds", 8.0))
         self.output_limit: int = int(config.get("output_limit", 2000))
-        # Fixed deck grid: the widget places tiles on a `columns`×`rows` page
+        # Fixed deck grid: the widget places tiles on a `columns` by `rows` page
         # and paginates the overflow. Shared by every folder level.
         self.columns: int = min(max(int(config.get("columns", 4)), 1), 8)
         self.rows: int = min(max(int(config.get("rows", 3)), 1), 8)

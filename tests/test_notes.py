@@ -50,7 +50,7 @@ def test_list_starts_empty(app):
     with TestClient(app) as client:
         r = client.get("/api/notes")
         assert r.status_code == 200
-        assert r.json() == {"notes": []}
+        assert r.json() == {"notes": [], "folders": [], "storage": "local"}
 
 
 def test_create_then_list(app):
@@ -142,3 +142,56 @@ def test_corrupt_file_treated_as_empty(tmp_path: Path):
     # Recovery: a write should produce a valid file again.
     store.upsert(title="recovered", body="")
     assert len(store.list()) == 1
+
+
+def test_old_file_without_folders_loads(tmp_path: Path):
+    p = tmp_path / "notes.json"
+    p.write_text('{"notes": [{"id": "a", "title": "t", "body": "b", "updated_at": 5}]}', encoding="utf-8")
+    store = NotesStore(path=p)
+    note = store.list()[0]
+    assert note.folder == "" and note.pinned is False
+    assert store.folders() == []
+    # Updating fills in the creation time from the old timestamp.
+    assert store.upsert(title="t2", body="b", note_id="a").created_at == 5
+
+
+def test_folder_and_pin_kept_unless_given(tmp_path: Path):
+    store = NotesStore(path=tmp_path / "notes.json")
+    work = store.add_folder("  Arbeit ")
+    assert work.name == "Arbeit"
+    note = store.upsert(title="x", body="", folder=work.id, pinned=True)
+    again = store.upsert(title="y", body="z", note_id=note.id)
+    assert again.folder == work.id and again.pinned is True
+    moved = store.upsert(title="y", body="z", note_id=note.id, folder="quick", pinned=False)
+    assert moved.folder == "quick" and moved.pinned is False
+    with pytest.raises(ValueError, match="unknown folder"):
+        store.upsert(title="y", body="z", note_id=note.id, folder="nope")
+
+
+def test_deleting_a_folder_keeps_its_notes(tmp_path: Path):
+    store = NotesStore(path=tmp_path / "notes.json")
+    folder = store.add_folder("Privat")
+    note = store.upsert(title="x", body="", folder=folder.id)
+    assert store.delete_folder(folder.id)
+    assert store.folders() == []
+    assert store.list()[0].id == note.id and store.list()[0].folder == ""
+    assert not store.delete_folder(folder.id)
+
+
+def test_folder_routes(app):
+    with TestClient(app) as client:
+        r = client.post("/api/notes/folders", json={"name": "Arbeit"})
+        assert r.status_code == 200
+        folder = r.json()
+        assert client.post("/api/notes/folders", json={"name": " "}).status_code == 400
+        r = client.post(f"/api/notes/folders/{folder['id']}", json={"name": "Job"})
+        assert r.json()["name"] == "Job"
+        note = client.post("/api/notes", json={"title": "a", "body": "", "folder": folder["id"],
+                                               "pinned": True}).json()
+        assert note["folder"] == folder["id"] and note["pinned"] is True
+        data = client.get("/api/notes").json()
+        assert data["folders"] == [{"id": folder["id"], "name": "Job"}]
+        assert client.post("/api/notes", json={"title": "a", "folder": "nope"}).status_code == 400
+        assert client.delete(f"/api/notes/folders/{folder['id']}").status_code == 200
+        assert client.delete(f"/api/notes/folders/{folder['id']}").status_code == 404
+        assert client.get("/api/notes").json()["notes"][0]["folder"] == ""

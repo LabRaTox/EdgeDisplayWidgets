@@ -1,0 +1,15 @@
+# The building blocks for widgets installed from the store.
+#
+# A built-in view sits next to these files and writes `import ".."`. An
+# installed one lives in its own folder under ~/.local/share and cannot, so it
+# writes `import EdgeDash` instead. The window puts the qml directory on the
+# import path, which is where Qt finds this file. Every entry points at the
+# same file the built-in views use, so there is one Heading and not two.
+module EdgeDash
+Heading 1.0 ../Heading.qml
+Chart 1.0 ../Chart.qml
+CoreBars 1.0 ../CoreBars.qml
+Confirm 1.0 ../Confirm.qml
+MetricWidget 1.0 ../widgets/MetricWidget.qml
+singleton Style 1.0 ../Style.qml
+singleton Temperatures 1.0 ../widgets/Temperatures.qml

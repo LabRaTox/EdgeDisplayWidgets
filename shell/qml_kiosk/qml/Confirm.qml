@@ -21,8 +21,8 @@ Item {
     Behavior on opacity { NumberAnimation { duration: 160 } }
 
     function ask(text, label, isDanger, done) {
-        message = text
-        okLabel = label || bridge.tr("common.confirm")
+        dialog.message = text
+        dialog.okLabel = label || bridge.tr("common.confirm")
         danger = isDanger === true
         callback = done
         opacity = 1
@@ -45,8 +45,8 @@ Item {
     // The panel
     Rectangle {
         anchors.centerIn: parent
-        width: Math.min(480, Math.max(280, message.implicitWidth + 48))
-        height: 22 + message.height + 18 + actions.height + 22
+        width: Math.min(480, Math.max(280, messageText.implicitWidth + 48))
+        height: 22 + messageText.height + 18 + actions.height + 22
         radius: 8
         color: dialog.theme ? dialog.theme["card-bg"] : "#1a1a1a"
         border.width: 1
@@ -55,7 +55,7 @@ Item {
         Behavior on scale { NumberAnimation { duration: 160 } }
 
         Text {
-            id: message
+            id: messageText   // not "message": an id hides the property of that name
             anchors { left: parent.left; right: parent.right; top: parent.top
                       leftMargin: 24; rightMargin: 24; topMargin: 22 }
             text: dialog.message

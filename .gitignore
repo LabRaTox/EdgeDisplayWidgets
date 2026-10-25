@@ -27,3 +27,6 @@ config.local.yaml.bak
 .idea/
 
 .claude/settings.local.json
+
+# Store plugins: kept and versioned on their own, shipped through the store.
+plugin-sources/

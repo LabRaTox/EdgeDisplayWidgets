@@ -1,10 +1,12 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { pick } from "../lib/localized";
 import { useDraft } from "../lib/useDraft";
 import { useStore } from "../store";
 import type { Page, WidgetPlacement } from "../types";
-import { Field } from "./ModulesView";
+import { Field, applies } from "./Field";
+import { Icon } from "./Icon";
 import { SaveBar } from "./SaveBar";
 
 /** How many columns/rows a CSS grid template describes. */
@@ -45,15 +47,50 @@ export function LayoutView() {
   const { t } = useTranslation();
   const settings = useStore((s) => s.settings);
   const widgets = useStore((s) => s.widgets);
+  const widgetMeta = useStore((s) => s.widgetMeta);
+  // The name a person knows the widget by; the id stays in the config. A
+  // widget that is not installed (any more) has no name and shows its id.
+  const nameOf = (id: string) => pick(widgetMeta[id]?.name, id);
   const widgetVariants = useStore((s) => s.widgetVariants);
   const widgetOptions = useStore((s) => s.widgetOptions);
   const saveSettings = useStore((s) => s.saveSettings);
+  const refreshWidgets = useStore((s) => s.refreshWidgets);
+
+  // Fresh lists each time the editor opens: a widget installed since the
+  // window started, or a module that has answered since, brings new options.
+  useEffect(() => {
+    void refreshWidgets();
+  }, [refreshWidgets]);
 
   const { draft, dirty, state, edit, reset, save } = useDraft(
     settings ? settings.pages : null,
   );
   const [pageIndex, setPageIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
+
+  // The selected tile's id, and whether one of its lists still waits for its
+  // module. Right after installing, the module has not answered yet; asking
+  // again every few seconds fills the list as soon as it has, instead of
+  // leaving an empty select until the window is reopened.
+  const selectedId =
+    draft && selected !== null
+      ? draft[Math.min(pageIndex, draft.length - 1)]?.widgets[selected]?.id ?? null
+      : null;
+  const waiting =
+    selectedId !== null &&
+    (widgetOptions[selectedId] ?? []).some(
+      (field) => field.options_source && (field.options ?? []).length <= 1,
+    );
+  useEffect(() => {
+    if (!waiting) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      tries += 1;
+      void refreshWidgets();
+      if (tries >= 20) window.clearInterval(timer);
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [waiting, refreshWidgets]);
 
   if (!draft) return null;
   const page = draft[Math.min(pageIndex, draft.length - 1)];
@@ -223,7 +260,7 @@ export function LayoutView() {
                 onClick={() => setSelected(index)}
                 title={outside ? t("layout.out_of_grid") : undefined}
               >
-                {widget.id}
+                {nameOf(widget.id)}
                 {widget.variant ? ` · ${widget.variant}` : ""}
               </div>
             );
@@ -260,11 +297,13 @@ export function LayoutView() {
             style={{ width: 220 }}
           >
             <option value="">+ {t("layout.add_widget")}</option>
-            {widgets.map((id) => (
-              <option key={id} value={id}>
-                {id}
-              </option>
-            ))}
+            {[...widgets]
+              .sort((a, b) => nameOf(a).localeCompare(nameOf(b)))
+              .map((id) => (
+                <option key={id} value={id}>
+                  {nameOf(id)}
+                </option>
+              ))}
           </select>
         </header>
 
@@ -273,14 +312,28 @@ export function LayoutView() {
           {page.widgets.map((widget, index) => (
             <Fragment key={index}>
             <div className="row">
-              <label>
+              <label className="inline">
                 <button
                   className="btn small ghost"
                   type="button"
                   onClick={() => setSelected(index)}
+                  title={widget.id}
                 >
-                  {widget.id}
+                  {nameOf(widget.id)}
                 </button>
+                {/* Only tiles whose widget has options get the arrow; it says
+                    that there is more, and opens or closes it. */}
+                {(widgetOptions[widget.id] ?? []).length > 0 && (
+                  <button
+                    className="btn small ghost icon-only"
+                    type="button"
+                    aria-expanded={index === selected}
+                    title={t(index === selected ? "layout.options_hide" : "layout.options_show")}
+                    onClick={() => setSelected(index === selected ? null : index)}
+                  >
+                    <Icon icon={index === selected ? "ti:chevron-down" : "ti:chevron-right"} />
+                  </button>
+                )}
               </label>
               <div className="control inline" style={{ flexWrap: "wrap" }}>
                 <NumberBox
@@ -346,20 +399,25 @@ export function LayoutView() {
               * Only shown for the selected tile, because several tiles with
               * options open at once buries the layout fields they belong to.
               */}
-            {index === selected &&
-              (widgetOptions[widget.id] ?? []).map((field) => (
-                <Field
-                  key={field.key}
-                  field={field}
-                  value={widget.options?.[field.key] ?? field.default}
-                  onChange={(value) =>
-                    editWidget(index, (w) => ({
-                      ...w,
-                      options: { ...(w.options ?? {}), [field.key]: value },
-                    }))
-                  }
-                />
-              ))}
+            {index === selected && (widgetOptions[widget.id] ?? []).length > 0 && (
+              <div className="tile-options">
+                {(widgetOptions[widget.id] ?? [])
+                  .filter((field, _, all) => applies(field, all, (key) => widget.options?.[key]))
+                  .map((field) => (
+                    <Field
+                      key={field.key}
+                      field={field}
+                      value={widget.options?.[field.key] ?? field.default}
+                      onChange={(value) =>
+                        editWidget(index, (w) => ({
+                          ...w,
+                          options: { ...(w.options ?? {}), [field.key]: value },
+                        }))
+                      }
+                    />
+                  ))}
+              </div>
+            )}
             </Fragment>
           ))}
         </div>

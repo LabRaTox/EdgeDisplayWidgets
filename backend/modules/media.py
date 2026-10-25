@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import hashlib
 import time
 import urllib.parse
@@ -322,18 +323,12 @@ class MediaModule(Module):
 
     async def _refresh_player(self, player: _Player) -> None:
         iface = player.player_iface
-        try:
+        with contextlib.suppress(Exception):
             player.metadata = _unwrap(await iface.get_metadata())
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             player.playback_status = await iface.get_playback_status()
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             player.rate = float(await iface.get_rate())
-        except Exception:
-            pass
         try:
             player.position_us = int(await iface.get_position())
             player.position_ts = time.time()
@@ -346,20 +341,14 @@ class MediaModule(Module):
             ("can_prev", "get_can_go_previous"),
             ("can_seek", "get_can_seek"),
         ):
-            try:
+            with contextlib.suppress(Exception):
                 setattr(player, attr, bool(await getattr(iface, getter)()))
-            except Exception:
-                pass
         # Shuffle / LoopStatus are optional in the MPRIS spec — many players
         # omit them. Failing reads stay at their defaults.
-        try:
+        with contextlib.suppress(Exception):
             player.shuffle = bool(await iface.get_shuffle())
-        except Exception:
-            pass
-        try:
+        with contextlib.suppress(Exception):
             player.loop_status = str(await iface.get_loop_status())
-        except Exception:
-            pass
         if player.playback_status in ("Playing", "Paused"):
             player.last_active_ts = time.time()
 
@@ -373,10 +362,8 @@ class MediaModule(Module):
             elif k == "Metadata":
                 player.metadata = v if isinstance(v, dict) else {}
             elif k == "Rate":
-                try:
+                with contextlib.suppress(Exception):
                     player.rate = float(v)
-                except Exception:
-                    pass
             elif k == "Position":
                 try:
                     player.position_us = int(v)
@@ -499,11 +486,11 @@ class MediaModule(Module):
         }
 
     # ----------------------------------------------------------- actions
-    ACTIONS = {
+    ACTIONS = frozenset({
         "play", "pause", "play_pause", "stop",
         "next", "prev", "seek", "set_position",
         "shuffle", "loop",
-    }
+    })
     LOOP_VALUES = ("None", "Track", "Playlist")
 
     async def action(self, name: str, **kwargs: Any) -> bool:
@@ -577,8 +564,6 @@ class MediaModule(Module):
         except Exception:
             pass
         if self._bus is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._bus.disconnect()
-            except Exception:
-                pass
             self._bus = None

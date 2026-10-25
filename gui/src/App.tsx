@@ -5,11 +5,11 @@ import { AboutView } from "./components/AboutView";
 import { ActionsView } from "./components/ActionsView";
 import { Banner } from "./components/Banner";
 import { LayoutView } from "./components/LayoutView";
-import { ModulesView } from "./components/ModulesView";
 import { SystemView } from "./components/SystemView";
 import { ThemeView } from "./components/ThemeView";
 import { TopBar } from "./components/TopBar";
 import { WeatherView } from "./components/WeatherView";
+import { WidgetsView } from "./components/WidgetsView";
 import { YouTubeView } from "./components/YouTubeView";
 import i18n, { loadDashboardStrings } from "./i18n";
 import { useStore } from "./store";
@@ -39,7 +39,7 @@ export default function App() {
         {ready && (
           <>
             {view === "theme" && <ThemeView />}
-            {view === "modules" && <ModulesView />}
+            {view === "widgets" && <WidgetsView />}
             {view === "weather" && <WeatherView />}
             {view === "youtube" && <YouTubeView />}
             {view === "actions" && <ActionsView />}

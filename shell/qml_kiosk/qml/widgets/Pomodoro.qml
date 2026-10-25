@@ -51,7 +51,7 @@ Item {
     function restore() {
         if (!store.state) return
         try {
-            var s = JSON.parse(store.state)
+            let s = JSON.parse(store.state)
             mode = s.mode || "pomodoro"
             phase = s.phase || "work"
             cycle = s.cycle || 1
@@ -125,7 +125,7 @@ Item {
         var wasRunning = isRunning
         if (wasRunning) pause()
         if (phase === "work") {
-            var isLong = cycle >= longEvery
+            let isLong = cycle >= longEvery
             phase = isLong ? "long_break" : "short_break"
             remainingMs = (isLong ? longBreak : shortBreak) * 60000
         } else {
@@ -139,7 +139,7 @@ Item {
     }
 
     function cue() {
-        if (sound.source != "") sound.play()
+        if (sound.source.toString() !== "") sound.play()
         flash.start()
     }
 

@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "Datenträger",
+    "en": "Disks"
+  },
+  "summary": {
+    "de": "Belegung der Laufwerke, die du auswählst.",
+    "en": "Usage of the drives you pick."
+  },
+  "category": "monitoring",
+  "accent": "#a3a3a3",
+  "symbol": "ti:database",
   "modules": [
     "disk_usage"
   ],

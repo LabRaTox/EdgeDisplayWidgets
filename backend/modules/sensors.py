@@ -3,7 +3,7 @@
 Auto-discovers all hwmon chips at setup, then on every poll reads only the
 already-known temp inputs (no re-globbing). The discovery filter keeps
 labelled inputs from chips we recognise as 'interesting' and drops
-chips that are already covered by other modules (NVIDIA via nvml).
+chips that are already covered by other modules (NVIDIA via nvml in `gpu`).
 """
 
 from __future__ import annotations

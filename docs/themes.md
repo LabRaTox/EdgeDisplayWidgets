@@ -96,6 +96,45 @@ how far a theme can go.
 If an edit has no effect, check the list above: only part of a stylesheet
 reaches the display.
 
+## A theme for the store
+
+A theme can be shared through the plugin store like a widget. It then lives in
+a folder of its own and brings its stylesheet, optionally with the fonts it
+names. An example is in `examples/plugins/mint-night/`.
+
+```text
+mint-night/
+  manifest.json
+  theme.css       the same format as the files in frontend/css/themes/
+  fonts/*.ttf     optional, .otf and .woff2 as well
+```
+
+```json
+{
+  "app": "edgedash",
+  "type": "theme",
+  "id": "mint-night",
+  "version": "1.0.0",
+  "name": { "de": "Mintnacht", "en": "Mint night" },
+  "summary": { "de": "…", "en": "…" },
+  "license": "MIT",
+  "css": "theme.css"
+}
+```
+
+* **`type: theme`** tells it apart from a widget. A theme brings no module;
+  the store refuses one with `module`, and Edge Dash does not install it.
+* **`id`** is the name the theme has in the config
+  (`default_theme: mint-night`). The names of the shipped themes are reserved
+  in the store.
+* **`css`** names the stylesheet, `theme.css` if omitted.
+
+Installing and removing happen under **Plugins → Designs**, choosing under
+**Design**. If the active theme is removed, the display switches to `clean`.
+The kiosk registers the fonts in `fonts/` once the theme is chosen. The rules
+above apply as they are: the kiosk reads the variables and the listed rules,
+everything else in the stylesheet has no effect.
+
 ---
 
 [Writing a widget](widgets.md) · [Why it looks the way it does](decisions.md) · [README](../README.md) · [Deutsch](themes.de.md)

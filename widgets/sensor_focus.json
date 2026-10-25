@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "Sensor",
+    "en": "Sensor"
+  },
+  "summary": {
+    "de": "Ein einzelner Messwert, groß, mit Farbe nach Schwelle.",
+    "en": "One reading, large, coloured by threshold."
+  },
+  "category": "monitoring",
+  "accent": "#f97316",
+  "symbol": "ti:temperature",
   "modules": [
     "sensors"
   ],

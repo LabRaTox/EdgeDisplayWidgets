@@ -42,7 +42,7 @@ Item {
         if (seconds < 60) return "< 1 min"
         if (seconds < 3600) return Math.floor(seconds / 60) + " min"
         if (seconds < 86400) {
-            var h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60)
+            let h = Math.floor(seconds / 3600), m = Math.floor((seconds % 3600) / 60)
             return m === 0 ? h + " h" : h + " h " + m + " min"
         }
         // Past a day the hours stop being the interesting part.
@@ -72,7 +72,7 @@ Item {
             Layout.alignment: Qt.AlignVCenter
             spacing: 8
             Rectangle {
-                width: 8; height: 8; radius: 4
+                implicitWidth: 8; implicitHeight: 8; radius: 4
                 color: root.online ? (root.theme ? root.theme["ok"] : "#4ade80")
                                    : (root.theme ? root.theme["bad"] : "#f87171")
             }

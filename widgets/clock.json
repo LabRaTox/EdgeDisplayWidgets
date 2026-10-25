@@ -1,3 +1,229 @@
 {
-  "modules": []
+  "name": {
+    "de": "Uhr",
+    "en": "Clock"
+  },
+  "summary": {
+    "de": "Uhrzeit hier oder in einer anderen Zone, analog oder digital, mit Countdown.",
+    "en": "The time here or in another zone, analog or digital, with a countdown."
+  },
+  "category": "time",
+  "accent": "#38bdf8",
+  "symbol": "ti:clock",
+  "modules": [
+    "timezones"
+  ],
+  "description": {
+    "de": "Die Uhrzeit in der Systemzeit oder einer gewählten Zeitzone, mit Ortsname und Datum. Analog oder digital, in 22 Zifferblättern, darunter Bahnhof, Chronograph, 7-Segment, Punktmatrix, Klappzahlen, Binär und die Uhrzeit in Worten. Zehn Farbschemata, eines davon mit den Farben des Designs, oder eigene Farben. 12 oder 24 Stunden, mit oder ohne Sekunden.\n\nEin Fingertipp auf die Kachel startet einen Countdown von 1 bis 120 Minuten. Ein Ring zeigt, wie viel noch bleibt, und am Ende ertönt ein Gong.",
+    "en": "The time in system time or a chosen time zone, with the place and the date. Analog or digital, in 22 clock faces, among them railway, chronograph, 7-segment, dot matrix, flip cards, binary and the time in words. Ten colour schemes, one of them in the theme's colours, or your own colours. 12- or 24-hour, with or without seconds.\n\nA tap on the tile starts a countdown from 1 to 120 minutes. A ring shows how much is left, and a gong sounds at the end."
+  },
+  "options": [
+    {
+      "key": "timezone",
+      "type": "select",
+      "label_key": "settings.widget.clock.timezone",
+      "default": "",
+      "options_source": "timezones",
+      "help_key": "settings.widget.clock.timezone_help"
+    },
+    {
+      "key": "place_name",
+      "type": "text",
+      "label_key": "settings.widget.clock.place_name",
+      "default": "",
+      "help_key": "settings.widget.clock.place_name_help"
+    },
+    {
+      "key": "display",
+      "type": "select",
+      "label_key": "settings.widget.clock.display",
+      "default": "digital",
+      "options": [
+        "analog",
+        "digital"
+      ],
+      "option_label_keys": [
+        "settings.widget.clock.display.analog",
+        "settings.widget.clock.display.digital"
+      ]
+    },
+    {
+      "key": "face_analog",
+      "type": "select",
+      "label_key": "settings.widget.clock.face",
+      "default": "classic",
+      "options": [
+        "classic",
+        "numbers",
+        "roman",
+        "minimal",
+        "dots",
+        "railway",
+        "bauhaus",
+        "ring",
+        "modern",
+        "chrono",
+        "hands"
+      ],
+      "option_label_keys": [
+        "settings.widget.clock.analog.classic",
+        "settings.widget.clock.analog.numbers",
+        "settings.widget.clock.analog.roman",
+        "settings.widget.clock.analog.minimal",
+        "settings.widget.clock.analog.dots",
+        "settings.widget.clock.analog.railway",
+        "settings.widget.clock.analog.bauhaus",
+        "settings.widget.clock.analog.ring",
+        "settings.widget.clock.analog.modern",
+        "settings.widget.clock.analog.chrono",
+        "settings.widget.clock.analog.hands"
+      ],
+      "depends_on": {
+        "display": "analog"
+      }
+    },
+    {
+      "key": "face_digital",
+      "type": "select",
+      "label_key": "settings.widget.clock.face",
+      "default": "classic",
+      "options": [
+        "classic",
+        "light",
+        "mono",
+        "serif",
+        "segment",
+        "matrix",
+        "stacked",
+        "flip",
+        "binary",
+        "dayarc",
+        "words"
+      ],
+      "option_label_keys": [
+        "settings.widget.clock.digital.classic",
+        "settings.widget.clock.digital.light",
+        "settings.widget.clock.digital.mono",
+        "settings.widget.clock.digital.serif",
+        "settings.widget.clock.digital.segment",
+        "settings.widget.clock.digital.matrix",
+        "settings.widget.clock.digital.stacked",
+        "settings.widget.clock.digital.flip",
+        "settings.widget.clock.digital.binary",
+        "settings.widget.clock.digital.dayarc",
+        "settings.widget.clock.digital.words"
+      ],
+      "depends_on": {
+        "display": "digital"
+      }
+    },
+    {
+      "key": "scheme",
+      "type": "select",
+      "label_key": "settings.widget.clock.scheme",
+      "default": "theme",
+      "options": [
+        "theme",
+        "night",
+        "light",
+        "ocean",
+        "forest",
+        "amber",
+        "red",
+        "violet",
+        "teal",
+        "none"
+      ],
+      "option_label_keys": [
+        "settings.widget.clock.scheme.theme",
+        "settings.widget.clock.scheme.night",
+        "settings.widget.clock.scheme.light",
+        "settings.widget.clock.scheme.ocean",
+        "settings.widget.clock.scheme.forest",
+        "settings.widget.clock.scheme.amber",
+        "settings.widget.clock.scheme.red",
+        "settings.widget.clock.scheme.violet",
+        "settings.widget.clock.scheme.teal",
+        "settings.widget.clock.scheme.none"
+      ]
+    },
+    {
+      "key": "hour_format",
+      "type": "select",
+      "label_key": "settings.widget.clock.hour_format",
+      "default": "24",
+      "options": [
+        "24",
+        "12"
+      ],
+      "option_label_keys": [
+        "settings.widget.clock.hour_format.24",
+        "settings.widget.clock.hour_format.12"
+      ]
+    },
+    {
+      "key": "seconds",
+      "type": "bool",
+      "label_key": "settings.widget.clock.seconds",
+      "default": false
+    },
+    {
+      "key": "date",
+      "type": "select",
+      "label_key": "settings.widget.clock.date",
+      "default": "both",
+      "options": [
+        "none",
+        "date",
+        "weekday",
+        "both"
+      ],
+      "option_label_keys": [
+        "settings.widget.clock.date.none",
+        "settings.widget.clock.date.date",
+        "settings.widget.clock.date.weekday",
+        "settings.widget.clock.date.both"
+      ]
+    },
+    {
+      "key": "custom_colors",
+      "type": "bool",
+      "label_key": "settings.widget.clock.custom_colors",
+      "default": false
+    },
+    {
+      "key": "color_face",
+      "type": "color",
+      "label_key": "settings.widget.clock.color_face",
+      "default": "",
+      "depends_on": {
+        "custom_colors": true
+      }
+    },
+    {
+      "key": "color_text",
+      "type": "color",
+      "label_key": "settings.widget.clock.color_text",
+      "default": "",
+      "depends_on": {
+        "custom_colors": true
+      }
+    },
+    {
+      "key": "color_accent",
+      "type": "color",
+      "label_key": "settings.widget.clock.color_accent",
+      "default": "",
+      "depends_on": {
+        "custom_colors": true
+      }
+    },
+    {
+      "key": "countdown",
+      "type": "bool",
+      "label_key": "settings.widget.clock.countdown",
+      "default": true,
+      "help_key": "settings.widget.clock.countdown_help"
+    }
+  ]
 }

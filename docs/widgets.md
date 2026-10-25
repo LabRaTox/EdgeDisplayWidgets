@@ -408,6 +408,12 @@ server for its values instead of naming them: `"options_source": "sensors"`
 fills the list with the current sensors and adds readable labels. The value
 lands in the widget's `options` unchanged.
 
+A field can depend on others: `"depends_on": {"display": "analog"}` shows it
+only while `display` is `analog`, and a list (`{"scheme": ["night", "light"]}`)
+allows several values. The clock uses it so that only the faces of the chosen
+display appear. A hidden field keeps its value; it just does not apply. The
+same works for module settings.
+
 What gets stored is a reading's id, such as `k10temp@0000:00:18.3:1`. It
 names the chip and the address it sits at, a PCI slot or an i2c address, so
 a tile still points at the same sensor after a reboot and can never point
@@ -557,6 +563,138 @@ journalctl --user -u edge-dashboard -u edge-kiosk -f
 The port is under `server.port`, 8765 by default. The snapshot shows what
 the hub last sent. If a value is there, the module is fine and the view is
 where it is stuck.
+
+## A widget for the store
+
+Widgets can also be shared through the plugin store, the same one
+DECK//SWITCH gets its plugins from. A store widget does not live in the
+repository but in a folder of its own, and brings all three parts with it.
+A complete example is in `examples/plugins/moon-phase/`.
+
+```text
+moon-phase/
+  manifest.json
+  Widget.qml        the view
+  module.py         optional, the backend module
+  locales/de.json   optional, the texts
+  locales/en.json
+```
+
+The manifest is the one from [The manifest](#the-manifest), plus what the
+store needs:
+
+```json
+{
+  "app": "edgedash",
+  "type": "widget",
+  "id": "moon-phase",
+  "version": "1.0.0",
+  "min_app_version": "1.0.0",
+  "name": { "de": "Mondphase", "en": "Moon phase" },
+  "summary": { "de": "…", "en": "…" },
+  "license": "MIT",
+  "view": "Widget.qml",
+  "module": "module.py",
+  "modules": ["moon-phase"],
+  "variants": ["compact"]
+}
+```
+
+* **`app`** must be `edgedash`. Without it the store takes the archive for a
+  DECK//SWITCH plugin and refuses `type: widget`.
+* **`id`** is also the widget id in the layout: three to forty characters,
+  lowercase letters, digits and hyphens. The names of the built-in widgets
+  are reserved in the store, including their hyphenated spelling
+  (`disk-usage`).
+* **`view`** names the QML file, `Widget.qml` if omitted. **`module`** is
+  optional; without it the widget is a plain view like the clock.
+* **`min_app_version`** is compared with the running Edge Dash, which
+  installs nothing that needs a newer one.
+
+Three differences from a built-in widget:
+
+* **The view imports `EdgeDash` instead of `".."`.** Its folder is not next
+  to the shared building blocks. `import EdgeDash` provides `Heading`,
+  `Chart`, `CoreBars`, `Confirm`, `MetricWidget`, `Style` and
+  `Temperatures`, from the same files the built-in views use.
+* **The module imports absolutely:** `from backend.modules.base import
+  Module, SettingField, register_module`. It may register only the names
+  listed under `modules`, and none that already exists, so a widget cannot
+  replace the built-in weather module.
+* **The texts live in the folder**, under `locales/<language>.json`. Only
+  keys in the widget's own space are taken: `widget.<id>.…`,
+  `settings.widget.<id>.…` and `settings.mod.<module>.…` for its own
+  modules. Anything else is dropped, so a widget cannot reword the
+  dashboard.
+
+### Commands from the widget to its module
+
+A store widget has no routes of its own. When a tap has to do something in
+the backend (join a channel, mute), the view sends it to its module:
+
+```qml
+var xhr = new XMLHttpRequest()
+xhr.open("POST", bridge.api + "/api/modules/discord/command/join")
+xhr.setRequestHeader("Content-Type", "application/json")
+xhr.send(JSON.stringify({ channel_id: id }))
+```
+
+The module answers in `command()`:
+
+```python
+async def command(self, action: str, args: dict) -> dict:
+    if action == "join":
+        ...
+        return {"ok": True}
+    raise NotImplementedError
+```
+
+The body arrives as `args`, the answer goes back to the view unchanged.
+`{"ok": False, "error": ...}` comes back with status 400. An action the
+module does not know, or a module without `command()`, is a 404. The new
+state does not need to be part of the answer: the module pushes it with
+`emit()` like any other change, and every tile gets it.
+
+### Installing and submitting
+
+Both happen in the settings window under **Plugins**, in the **Widgets** tab, which lists built-in, installed and store widgets together. A card's switch turns the widget's modules on and off, and "Plugin settings" opens their settings. To install, the backend
+downloads the archive, checks the checksum from the catalog before opening
+it, and unpacks it to `~/.local/share/edge-dashboard/plugins/<id>/`. Paths
+that leave the folder and links are not unpacked. It then loads the module,
+switches it on in the config and sends the kiosk the new config. Neither an
+install nor an update needs a restart: the kiosk appends the checksum to the
+view's address, and a new address bypasses the QML cache. That covers the
+file `view` names. If it loads further QML files from its folder, the kiosk
+sees their new version only after a restart.
+
+An installed module runs in the backend with your rights, the same as a
+DECK//SWITCH plugin. The store reviews every submission, Python through its
+syntax tree, QML and JavaScript by text search, and a submission from an
+author not marked as trusted goes through moderation. What the review finds
+(addresses, network, starting programs, runtime code) is shown before
+installing, and a widget with findings needs a second click.
+
+To submit, sign in with GitHub under **Plugins → Sign in to the store** and
+open **Submit a plugin**. Drag the archive into the field, or click it and
+choose the file. ZIP, TAR and tar.gz all work, with the plugin folder as the
+top level or the files directly at the root. The archive goes to the store
+unchanged. What the store says about it, and what its review found, is
+shown at the top of the dialog afterwards. Below are your submissions with
+every version and where it stands. What is still waiting or was rejected
+can be deleted there, what was approved withdrawn. The store does not
+accept a version number that already exists.
+
+**Trying it without the store:** **Install plugins** takes a zip file or a folder and installs it by the same rules, only without the store's checksum. That way you can try your own widget before submitting it.
+
+Before submitting, a run without the store is worth it:
+
+```bash
+/usr/lib/qt6/bin/qmllint -I shell/qml_kiosk/qml examples/plugins/moon-phase/Widget.qml
+uv run pytest tests/test_plugins.py
+```
+
+To use another store, set `EDGE_STORE_URL` for the backend.
+`EDGE_PLUGINS_DIR` moves the plugins folder; the tests use it.
 
 ## From idea to widget: a calendar
 

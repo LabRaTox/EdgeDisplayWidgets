@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "Netzwerk",
+    "en": "Network"
+  },
+  "summary": {
+    "de": "Upload und Download mit Verlauf.",
+    "en": "Upload and download with history."
+  },
+  "category": "monitoring",
+  "accent": "#06b6d4",
+  "symbol": "ti:network",
   "modules": [
     "system"
   ],

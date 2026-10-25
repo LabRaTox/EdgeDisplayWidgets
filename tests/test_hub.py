@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from backend.config import AppConfig, ModuleConfig, load_config
 from backend.hub import Hub
@@ -94,7 +95,7 @@ pages:
 """
     cfg_path = tmp_path / "c.yaml"
     cfg_path.write_text(raw)
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         load_config(cfg_path)
 
 

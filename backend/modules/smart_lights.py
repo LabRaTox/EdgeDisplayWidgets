@@ -46,7 +46,7 @@ def _parse_rgb(value: Any) -> tuple[int, int, int]:
 
 
 def _rgb_to_hsv(r: int, g: int, b: int) -> tuple[float, float, float]:
-    """Convert 0–255 RGB to (h ∈ [0, 360), s ∈ [0, 1], v ∈ [0, 1])."""
+    """Convert 0-255 RGB to (h ∈ [0, 360), s ∈ [0, 1], v ∈ [0, 1])."""
     rf, gf, bf = r / 255.0, g / 255.0, b / 255.0
     mx, mn = max(rf, gf, bf), min(rf, gf, bf)
     df = mx - mn
@@ -120,7 +120,7 @@ class GoveeProvider(LightProvider):
                     "id": f"govee:{d.get('device')}",
                     "provider": "govee",
                     "name": d.get("deviceName") or d.get("device") or "?",
-                    "online": True if state else False,
+                    "online": bool(state),
                     "on": power == "on" if power else None,
                     "brightness": state.get("brightness"),
                     "has_brightness": "brightness" in cmds,
@@ -315,7 +315,7 @@ class TuyaProvider(LightProvider):
             if switch is None:
                 # Some devices use `switch_1` instead of `switch_led`.
                 switch = status.get("switch_1")
-            # Brightness in Tuya is usually 10–1000 (one decimal of percent).
+            # Brightness in Tuya is usually 10 to 1000 (one decimal of percent).
             raw_bright = status.get("bright_value") or status.get("bright_value_v2")
             brightness_pct: int | None = None
             if isinstance(raw_bright, (int, float)) and raw_bright > 0:
@@ -355,9 +355,9 @@ class TuyaProvider(LightProvider):
             commands = [{
                 "code": "colour_data_v2",
                 "value": {
-                    "h": int(round(h)),
-                    "s": int(round(s * 1000)),
-                    "v": int(round(v * 1000)),
+                    "h": round(h),
+                    "s": round(s * 1000),
+                    "v": round(v * 1000),
                 },
             }]
         else:

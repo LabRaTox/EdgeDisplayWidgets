@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "Sensoren",
+    "en": "Sensors"
+  },
+  "summary": {
+    "de": "Temperaturen aus hwmon in einer Tabelle.",
+    "en": "Temperatures from hwmon in a table."
+  },
+  "category": "monitoring",
+  "accent": "#fb923c",
+  "symbol": "ti:temperature-sun",
   "modules": [
     "sensors"
   ],

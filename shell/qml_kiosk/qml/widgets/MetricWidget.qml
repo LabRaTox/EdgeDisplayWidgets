@@ -32,7 +32,7 @@ Item {
     function noteArrival() {
         var now = Date.now()
         if (_lastArrival > 0) {
-            var observed = Math.max(200, Math.min(10000, now - _lastArrival))
+            let observed = Math.max(200, Math.min(10000, now - _lastArrival))
             gapMs = Math.round(gapMs * 0.7 + observed * 0.3)
         }
         _lastArrival = now

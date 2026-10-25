@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "Wetter",
+    "en": "Weather"
+  },
+  "summary": {
+    "de": "Aktuelles Wetter mit Vorhersage nach Stunden und Tagen.",
+    "en": "Current weather with an hourly and daily forecast."
+  },
+  "category": "weather",
+  "accent": "#0ea5e9",
+  "symbol": "ti:cloud",
   "modules": [
     "weather"
   ]

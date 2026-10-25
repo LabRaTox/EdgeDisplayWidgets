@@ -1,8 +1,29 @@
 {
+  "name": {
+    "de": "GPU",
+    "en": "GPU"
+  },
+  "summary": {
+    "de": "Last, Speicher, Temperatur und Leistung einer NVIDIA- oder AMD-Karte.",
+    "en": "Load, memory, temperature and power of an NVIDIA or AMD card."
+  },
+  "category": "monitoring",
+  "accent": "#76b900",
+  "symbol": "ti:device-desktop-analytics",
   "modules": [
-    "nvidia"
+    "gpu"
   ],
   "variants": [
     "compact"
+  ],
+  "options": [
+    {
+      "key": "card",
+      "type": "select",
+      "label_key": "settings.widget.gpu.card",
+      "help_key": "settings.widget.gpu.card_help",
+      "options_source": "gpu",
+      "default": ""
+    }
   ]
 }

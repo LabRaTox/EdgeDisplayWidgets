@@ -1,10 +1,6 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { useDraft } from "../lib/useDraft";
-import { useStore } from "../store";
-import type { ModuleSettings, SettingField } from "../types";
-import { SaveBar } from "./SaveBar";
+import type { SettingField } from "../types";
 
 /**
  * The mask the backend substitutes for a stored secret. Sending it back
@@ -14,7 +10,7 @@ import { SaveBar } from "./SaveBar";
 const SECRET_MASK = "***";
 
 /** Read a dotted path like "govee.api_key" out of a module's settings. */
-function readPath(source: Record<string, unknown>, key: string): unknown {
+export function readPath(source: Record<string, unknown>, key: string): unknown {
   return key.split(".").reduce<unknown>((value, part) => {
     if (value && typeof value === "object") {
       return (value as Record<string, unknown>)[part];
@@ -24,7 +20,7 @@ function readPath(source: Record<string, unknown>, key: string): unknown {
 }
 
 /** Write a dotted path, creating the intermediate objects it needs. */
-function writePath(
+export function writePath(
   source: Record<string, unknown>,
   key: string,
   value: unknown,
@@ -36,139 +32,34 @@ function writePath(
   return { ...source, [head]: writePath(nested, parts.slice(1).join("."), value) };
 }
 
-export function ModulesView() {
-  const { t } = useTranslation();
-  const settings = useStore((s) => s.settings);
-  const schemas = useStore((s) => s.schemas);
-  const saveSettings = useStore((s) => s.saveSettings);
-
-  const { draft, dirty, state, edit, reset, save } = useDraft(
-    settings ? settings.modules : null,
-  );
-  if (!draft) return null;
-
-  const names = Object.keys(draft).sort();
-
-  return (
-    <div className="view">
-      <div className="view-head">
-        <h2>{t("modules.title")}</h2>
-        <p>{t("modules.help")}</p>
-      </div>
-
-      {names.map((name) => (
-        <ModuleCard
-          key={name}
-          name={name}
-          settings={draft[name]!}
-          schema={schemas[name] ?? []}
-          onChange={(next) => edit((current) => ({ ...current, [name]: next }))}
-        />
-      ))}
-
-      <SaveBar
-        dirty={dirty}
-        state={state}
-        onReset={reset}
-        onSave={() => void save((modules) => saveSettings({ modules }))}
-      />
-    </div>
-  );
-}
-
-function ModuleCard({
-  name,
-  settings,
-  schema,
-  onChange,
-}: {
-  name: string;
-  settings: ModuleSettings;
-  schema: SettingField[];
-  onChange: (next: ModuleSettings) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-
-  // Modules label themselves through the dashboard's own translation file, so
-  // a new module needs no entry here. Falling back to the bare name keeps an
-  // untranslated module visible instead of blank.
-  const title = t(`widget.${name}.title`, { defaultValue: name });
-
-  return (
-    <section className={`card ${open ? "" : "collapsed"}`}>
-      <header>
-        <h3>
-          {title} <span className="muted">· {name}</span>
-        </h3>
-        <div className="spacer" />
-        <label className="inline">
-          <input
-            type="checkbox"
-            checked={settings.enabled}
-            onChange={(e) => onChange({ ...settings, enabled: e.target.checked })}
-          />
-          {t("modules.enabled")}
-        </label>
-        <button className="btn small ghost" type="button" onClick={() => setOpen((v) => !v)}>
-          {open ? "▲" : "▼"}
-        </button>
-      </header>
-
-      <div className="card-body">
-        <div className="row">
-          <label htmlFor={`${name}-interval`}>{t("modules.interval")}</label>
-          <div className="control">
-            <div className="inline">
-              <input
-                id={`${name}-interval`}
-                type="number"
-                min={0.05}
-                step={0.05}
-                value={settings.interval ?? ""}
-                placeholder={t("modules.interval_default")}
-                onChange={(e) =>
-                  onChange({
-                    ...settings,
-                    interval: e.target.value === "" ? null : Number(e.target.value),
-                  })
-                }
-              />
-              <span className="muted">{t("modules.interval_seconds")}</span>
-            </div>
-            <div className="hint">{t("modules.interval_help")}</div>
-          </div>
-        </div>
-
-        {schema.length === 0 ? (
-          <p className="muted" style={{ margin: "12px 0 0" }}>
-            {t("modules.no_extra_settings")}
-          </p>
-        ) : (
-          schema.map((field) => (
-            <Field
-              key={field.key}
-              field={field}
-              value={readPath(settings, field.key)}
-              onChange={(value) =>
-                onChange(writePath(settings, field.key, value) as ModuleSettings)
-              }
-            />
-          ))
-        )}
-      </div>
-    </section>
-  );
-}
-
 /**
  * One input, decided by a schema rather than written out here. That is the
  * whole point: a module gains an editable option by declaring it in
  * `settings_schema`, a widget by declaring it in its manifest, and this
  * window renders both without a line of code changing.
  *
- * Exported because the layout editor renders widget options with it.
+ * Used by the layout editor for widget options and by the widget page for
+ * module settings.
  */
+/**
+ * Whether a field applies, given the values of the fields beside it. A field
+ * with `depends_on` is shown only while each named field has the given value,
+ * or one of the given values when a list is named. Unset fields count with
+ * their default.
+ */
+export function applies(
+  field: SettingField,
+  fields: SettingField[],
+  valueOf: (key: string) => unknown,
+): boolean {
+  if (!field.depends_on) return true;
+  return Object.entries(field.depends_on).every(([key, wanted]) => {
+    const other = fields.find((f) => f.key === key);
+    const current = valueOf(key) ?? other?.default;
+    return Array.isArray(wanted) ? wanted.includes(current) : current === wanted;
+  });
+}
+
 export function Field({
   field,
   value,

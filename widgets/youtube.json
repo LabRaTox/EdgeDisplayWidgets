@@ -1,4 +1,15 @@
 {
+  "name": {
+    "de": "YouTube",
+    "en": "YouTube"
+  },
+  "summary": {
+    "de": "Neue Videos deiner Kanäle, abspielbar auf dem Display.",
+    "en": "New videos from your channels, playable on the display."
+  },
+  "category": "video",
+  "accent": "#ff0033",
+  "symbol": "ti:brand-youtube",
   "modules": [
     "youtube"
   ]

@@ -15,9 +15,18 @@
 
 import type {
   AutostartStatus,
+  DeviceStart,
   Health,
+  InstalledPlugin,
   QuickActionsConfig,
   Settings,
+  StoreCatalog,
+  StoreEntry,
+  StoreRating,
+  StoreMine,
+  StorePending,
+  StoreUploadResult,
+  StoreUser,
   ThemesResponse,
   WidgetsResponse,
 } from "../types";
@@ -121,9 +130,85 @@ export const api = {
       body: JSON.stringify({ enabled }),
     }),
 
+  // The store. Every call goes through the backend, which holds the token
+  // and does the unpacking; this window never talks to the store itself.
+  storeCatalog: (q = "") =>
+    request<StoreCatalog>(`/api/store/catalog${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  storePlugin: (slug: string) =>
+    request<StoreEntry>(`/api/store/plugins/${encodeURIComponent(slug)}`),
+  storeRating: (slug: string) =>
+    request<StoreRating>(`/api/store/plugins/${encodeURIComponent(slug)}/rating`),
+  storeRate: (slug: string, value: 1 | -1, comment: string) =>
+    request<StoreRating>(`/api/store/plugins/${encodeURIComponent(slug)}/rating`, {
+      method: "PUT",
+      body: JSON.stringify({ value, comment }),
+    }),
+  storeUnrate: (slug: string) =>
+    request<StoreRating>(`/api/store/plugins/${encodeURIComponent(slug)}/rating`, {
+      method: "DELETE",
+    }),
+  installed: () => request<{ plugins: InstalledPlugin[] }>("/api/plugins"),
+  install: (slug: string, version = "") =>
+    request<{ ok: boolean; plugin: InstalledPlugin; modules: string[] }>("/api/store/install", {
+      method: "POST",
+      body: JSON.stringify({ slug, version }),
+    }),
+  installUpload: (file: File) =>
+    request<{ ok: boolean; plugin: InstalledPlugin; modules: string[] }>("/api/plugins/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/zip" },
+      body: file,
+    }),
+  installFolder: (path: string) =>
+    request<{ ok: boolean; plugin: InstalledPlugin; modules: string[] }>("/api/plugins/folder", {
+      method: "POST",
+      body: JSON.stringify({ path }),
+    }),
+  rescanPlugins: () => request<{ ok: boolean; new: string[] }>("/api/plugins/rescan", { method: "POST" }),
+  uninstall: (id: string) =>
+    request<{ ok: boolean }>(`/api/plugins/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  storeMe: () => request<{ user: StoreUser | null }>("/api/store/me"),
+  storePending: () => request<{ pending: StorePending | null }>("/api/store/pending"),
+  storeDeviceStart: () => request<DeviceStart>("/api/store/auth/device", { method: "POST" }),
+  storeDevicePoll: (deviceCode: string) =>
+    request<{ status: string; backoff?: number; user?: StoreUser }>("/api/store/auth/poll", {
+      method: "POST",
+      body: JSON.stringify({ device_code: deviceCode }),
+    }),
+  storeLogout: () => request<{ ok: boolean }>("/api/store/logout", { method: "POST" }),
+  /** A finished archive goes to the store as it is; the name says its format. */
+  storeUploadArchive: (file: File) =>
+    request<StoreUploadResult>("/api/store/upload-archive", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream", "X-Filename": file.name },
+      body: file,
+    }),
+  storeMine: () => request<StoreMine>("/api/store/mine"),
+  storeWithdraw: (slug: string, version: string) =>
+    request<{ aktion: string }>(
+      `/api/store/mine/${encodeURIComponent(slug)}/${encodeURIComponent(version)}`,
+      { method: "DELETE" },
+    ),
+
   /** The kiosk's translation files — reused so labels stay in one place. */
   locale: (code: string) =>
     request<Record<string, string>>(`/locales/${encodeURIComponent(code)}.json`),
+};
+
+/**
+ * Images of plugins, always through the backend: the window never loads
+ * anything from the store directly, and never names a file inside a plugin's
+ * folder. Screenshots are addressed by their position in the manifest.
+ */
+export const images = {
+  pluginIcon: (id: string, version: string) =>
+    `${API_BASE}/api/plugins/${encodeURIComponent(id)}/icon?v=${encodeURIComponent(version)}`,
+  pluginScreenshot: (id: string, index: number, version: string) =>
+    `${API_BASE}/api/plugins/${encodeURIComponent(id)}/screenshot/${index}?v=${encodeURIComponent(version)}`,
+  storeIcon: (slug: string, version: string) =>
+    `${API_BASE}/api/store/plugins/${encodeURIComponent(slug)}/${encodeURIComponent(version)}/icon`,
+  storeScreenshot: (slug: string, version: string, index: number) =>
+    `${API_BASE}/api/store/plugins/${encodeURIComponent(slug)}/${encodeURIComponent(version)}/screenshot/${index}`,
 };
 
 /** True when this UI runs inside the app rather than in a browser tab. */
