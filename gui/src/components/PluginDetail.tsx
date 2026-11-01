@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { api, images, openExternal } from "../api/client";
 import { pick } from "../lib/localized";
-import type { StoreEntry, StoreUser, StoreWarning, ThemeMeta, WidgetMeta } from "../types";
+import type { StoreEntry, StoreUser, StoreWarning, ThemeMeta, WidgetMeta, PluginDependencies } from "../types";
 import { Icon } from "./Icon";
 import { Rating } from "./Rating";
 import { ThemeSwatch, themeLabel } from "./ThemeView";
@@ -41,6 +41,7 @@ type Facts = {
   released?: string | null;
   size?: string | null;
   minApp?: string | null;
+  dependencies?: string | null;
   modules?: string | null;
   source?: string | null;
   support?: string | null;
@@ -48,8 +49,18 @@ type Facts = {
 
 const ORDER: (keyof Omit<Facts, "support">)[] = [
   "type", "category", "version", "author", "license", "downloads", "released", "size",
-  "minApp", "modules", "source",
+  "minApp", "dependencies", "modules", "source",
 ];
+
+/** A plugin's needs as one line; system packages are marked as such. */
+function dependencyList(needs: PluginDependencies | null | undefined, systemLabel: string): string | null {
+  const python = needs?.python ?? [];
+  const system = (needs?.system ?? []).map((entry) => {
+    const name = typeof entry === "string" ? entry : [...new Set(Object.values(entry))].join(" / ");
+    return `${name} (${systemLabel})`;
+  });
+  return [...python, ...system].join(", ") || null;
+}
 
 /**
  * The facts on the right, as a table and not as running text: one looks for
@@ -179,6 +190,7 @@ export function InstalledDetail({
     released: same ? new Date(same.released_at).toLocaleDateString() : null,
     size: same ? `${Math.max(1, Math.round(same.size / 1024))} KB` : null,
     minApp: same?.min_app_version ?? null,
+    dependencies: dependencyList(widget?.dependencies, t("detail.system_package")),
     modules: widget ? widget.modules.join(", ") || t("widgets.no_module") : null,
     source: t(meta.builtin ? "widgets.builtin" : meta.source === "local" ? "widgets.local" : "detail.from_store"),
     support: meta.support || null,
@@ -303,6 +315,7 @@ export function StoreDetail({
     released: new Date(latest.released_at).toLocaleDateString(),
     size: `${Math.max(1, Math.round(latest.size / 1024))} KB`,
     minApp: latest.min_app_version,
+    dependencies: dependencyList(latest.dependencies, t("detail.system_package")),
     source: t("detail.from_store"),
     // The store files the manifest's `support` as `source_url`.
     support: entry.source_url,

@@ -28,7 +28,7 @@ from dbus_next.constants import PropertyAccess
 from dbus_next.service import ServiceInterface, dbus_property, method, signal
 from loguru import logger
 
-from . import brand
+from . import brand, host
 
 # The string annotations on the interface methods below are D-Bus type
 # signatures, not Python types: dbus-next reads them off the function to build
@@ -434,14 +434,7 @@ class SystemTray:
     async def _run_window(self, binary: Path) -> None:
         """Start the settings window and wait for it, so nothing is left over."""
         try:
-            # start_new_session: the window must not die with the backend, and
-            # must not inherit its terminal.
-            process = await asyncio.create_subprocess_exec(
-                str(binary),
-                start_new_session=True,
-                stdout=asyncio.subprocess.DEVNULL,
-                stderr=asyncio.subprocess.DEVNULL,
-            )
+            process = await host.window([str(binary)])
         except OSError as exc:
             logger.warning(f"settings window could not be started: {exc}")
             return

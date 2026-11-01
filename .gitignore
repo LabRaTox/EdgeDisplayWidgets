@@ -3,6 +3,7 @@ __pycache__/
 *$py.class
 
 .venv/
+.venv-kiosk/
 .env
 .python-version
 *.egg-info/

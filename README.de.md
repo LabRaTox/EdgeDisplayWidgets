@@ -18,8 +18,8 @@ einem Kioskfenster in QML, das die Anzeige füllt, und
   Wetter (Open-Meteo), Mediensteuerung über MPRIS, YouTube-Kacheln, smarte
   Lampen (Govee und Tuya), Quick Actions, Pomodoro und Notizen.
 - **Plugins aus dem Store**: weitere Widgets und Designs kommen mit einem
-  Klick aus dem Plugin-Store, darunter Desktop-Benachrichtigungen, Discord,
-  ein RSS-Reader, eine Diashow, eine Zeichenfläche und die Mondphase. Updates
+  Klick aus dem Plugin-Store, darunter ein Kalender mit Nextcloud,
+  Desktop-Benachrichtigungen, Discord, ein RSS-Reader, eine Diashow, eine Zeichenfläche und die Mondphase. Updates
   melden sich von selbst, und eigene Widgets lassen sich im selben Fenster
   einreichen.
 - **Notizen, lokal oder in Joplin**: Ordner, Ordnerfarben, Suche, Anheften und
@@ -71,7 +71,7 @@ Drei Prozesse, jeder mit einer Aufgabe:
 | Prozess | Was es ist | Läuft auf |
 |---|---|---|
 | `backend/` | FastAPI und der Modul-Hub, der einzige Schreiber der Konfiguration | virtuelle Umgebung des Projekts (`uv`) |
-| `shell/qml_kiosk` | das Kioskfenster auf dem Xeneon | **System**-Python mit System-PySide6 |
+| `shell/qml_kiosk` | das Kioskfenster auf dem Xeneon | PySide6 des Systems, sonst eine eigene Umgebung |
 | `gui/` | EDGE//DASH, das Einstellungsfenster | Tauri 2 und React |
 
 Kiosk und Einstellungsfenster sind beide gewöhnliche Clients des Backends
@@ -112,8 +112,8 @@ bleibt.
 | Bestandteil | Wofür | Arch-Paket |
 |---|---|---|
 | Python ab 3.11 | Laufzeit | `python` |
-| [uv](https://github.com/astral-sh/uv) | Umgebung und Abhängigkeiten | `uv` |
-| PySide6, systemweit | das Kioskfenster (Qt Quick) und der Videoplayer (Qt-WebEngine) | `pyside6` |
+| [uv](https://github.com/astral-sh/uv) | Umgebung und Abhängigkeiten, auch die Python-Pakete von Plugins | `uv` |
+| PySide6 ab 6.10 | das Kioskfenster (Qt Quick) und der Videoplayer (Qt-WebEngine), `install.sh` holt es, wenn es fehlt | `pyside6` |
 | systemd | die beiden Dienste | vorinstalliert |
 
 ```bash
@@ -236,10 +236,12 @@ nötig.
 Der Installer der Reihe nach:
 
 1. Prüft, was vorhanden ist, und nennt zu allem Fehlenden das Paket: `uv`,
-   eine systemd-Benutzersitzung, das System-PySide6 und eine Leiste, die ein
+   eine systemd-Benutzersitzung und eine Leiste, die ein
    Symbol anzeigen kann.
-2. Legt mit `uv sync` die virtuelle Umgebung aus `uv.lock` an.
-3. Baut das Einstellungsfenster, falls `npm` und `cargo` da sind. Ohne sie
+2. Legt mit `uv sync` die virtuelle Umgebung aus `uv.lock` an und richtet das
+   PySide6 für den Kiosk ein.
+3. Baut das Einstellungsfenster, falls `npm` und `cargo` da sind. Sonst lädt
+   es das fertige Programm aus dem GitHub-Release. Klappt beides nicht,
    funktioniert der Rest trotzdem, nur die Oberfläche fehlt.
 4. Installiert deren Symbol und Menüeintrag nach `~/.local/share` und
    frischt den Menü-Zwischenspeicher auf.
@@ -257,10 +259,13 @@ Ein erneuter Lauf ändert nichts, was schon stimmt. Schalter:
 ./scripts/install.sh --no-autostart  # jetzt starten, aber nicht beim Anmelden
 ```
 
-Das Kioskfenster braucht das PySide6 **der Distribution**, nicht ein Rad in
-der virtuellen Umgebung. Das Fenster selbst ist Qt Quick. Für ein Video
-startet es einen eigenen Prozess auf der systemweiten Qt-WebEngine, und das
-ist die Fassung mit den Codecs, die YouTube abspielt.
+Für das Kioskfenster nimmt der Installer das PySide6 **der Distribution**,
+wenn es mindestens 6.10 ist und PyYAML im System-Python liegt. Diese Fassung
+spielt auch H.264 und AAC. Sonst legt er `.venv-kiosk` mit PySide6 von PyPI an
+(etwa 700 MB). Das ist unter anderem auf Ubuntu und Debian der Fall und
+funktioniert ohne Handgriff am Python, nur die Systembibliotheken nennt der
+Installer samt Befehl. YouTube läuft damit über VP9 und Opus; nur Videos, die
+es ausschließlich in H.264 gibt, spielt diese Fassung nicht ab.
 
 ### Danach
 
@@ -337,10 +342,10 @@ uv run pytest                          # rund 350 Tests, sollten alle grün sein
 
 Für den Dienstbetrieb beide Units aus `systemd/` nach
 `~/.config/systemd/user/` kopieren, dabei `__PROJECT_DIR__` durch den
-absoluten Pfad des Projekts und `__UV__` durch `$(command -v uv)` ersetzen,
-dann `systemctl --user daemon-reload` und aktivieren. Die Kiosk-Unit ruft
-absichtlich `/usr/bin/python3` auf und nicht die virtuelle Umgebung, wegen des
-System-PySide6.
+absoluten Pfad des Projekts, `__UV__` durch `$(command -v uv)` und
+`__KIOSK_PYTHON__` durch `/usr/bin/python3` oder das Python in `.venv-kiosk`
+ersetzen, dann `systemctl --user daemon-reload` und aktivieren. Die
+Kiosk-Unit nutzt absichtlich nicht die virtuelle Umgebung des Backends.
 
 ## Konfiguration
 
@@ -690,6 +695,13 @@ Stelle: die eingebauten, die installierten und das Angebot des
 - **Aus einer Datei installieren**: **Plugins installieren** nimmt ein
   ZIP-Archiv oder einen Ordner mit `manifest.json`, etwa um ein eigenes
   Widget vor dem Einreichen zu testen.
+- **Abhängigkeiten**: Was ein Plugin außer seinen eigenen Dateien braucht,
+  steht in seinen Details unter **Angaben** und wird mitinstalliert.
+  Python-Pakete landen ohne besondere Rechte in
+  `~/.local/share/edge-dashboard/plugins/.deps/<id>/`, Systempakete fragen
+  über `pkexec` nach dem Passwort. Lässt sich etwas nicht installieren, wird
+  das Plugin nicht installiert, und die Meldung nennt den Befehl für die Hand.
+  Danach einfach noch einmal installieren.
 - **Einreichen**: **Im Store anmelden** (über GitHub) und **Plugin
   einreichen** laden ein Archiv hoch. Eingereichtes wird geprüft, bevor es im
   Store steht; das Fenster zeigt deine Einreichungen und ihren Stand.
@@ -821,6 +833,8 @@ backend/
   notes.py            Die Notizdatei (Ordner, Anheften)
   joplin.py           Joplin als Speicher der Notizen, über seine lokale API
   plugins.py          Installiert, lädt und entfernt Store-Plugins
+  dependencies.py     Was Plugins mitbringen: Python- und Systempakete
+  host.py             Startet andere Programme, an einer Stelle
   plugin_layout.py    Wo installierte Plugins liegen und was ihr Manifest sagt
   store.py            Der Store-Client: Katalog, Anmeldung, Upload
   tray.py             Symbol in der Leiste, über D-Bus

@@ -26,6 +26,9 @@ ICON_SRC="${PROJECT_DIR}/gui/src-tauri/icons"
 APP_ID="edgedash"
 
 BINARY="${PROJECT_DIR}/gui/src-tauri/target/release/${APP_ID}"
+# The kiosk's own virtualenv when install.sh made one, see there.
+KIOSK_PYTHON="${PROJECT_DIR}/.venv-kiosk/bin/python"
+[ -x "$KIOSK_PYTHON" ] || KIOSK_PYTHON=/usr/bin/python3
 
 log() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m!! \033[0m %s\n' "$*" >&2; }
@@ -95,7 +98,7 @@ Name=Edge Dashboard
 GenericName=Kiosk window
 Comment=Das Kioskfenster auf dem Xeneon Edge
 Comment[en]=The kiosk window on the Xeneon Edge
-Exec=/usr/bin/python3 -m qml_kiosk.main
+Exec=${KIOSK_PYTHON} -m qml_kiosk.main
 Path=${PROJECT_DIR}
 Icon=${APP_ID}
 StartupWMClass=${KIOSK_ID}

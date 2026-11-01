@@ -17,6 +17,7 @@ import asyncio
 import hashlib
 import io
 import json
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -26,7 +27,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from backend import plugin_layout, plugins, store
+from backend import dependencies, plugin_layout, plugins, store
 from backend.modules.base import get_registry, register_module, unregister_module
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -602,3 +603,199 @@ def test_pending_route_survives_an_unreachable_store(app, monkeypatch: pytest.Mo
     with TestClient(app) as client:
         r = client.get("/api/store/pending")
         assert r.status_code == 200 and r.json() == {"pending": None}
+
+
+# -- dependencies ------------------------------------------------------------
+
+
+def _with_needs(needs: object) -> bytes:
+    """A widget archive whose manifest asks for `needs`."""
+    buffer = io.BytesIO()
+    manifest = {"app": "edgedash", "type": "widget", "id": "needy", "version": "1.0.0",
+                "dependencies": needs}
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("needy/manifest.json", json.dumps(manifest))
+        archive.writestr("needy/Widget.qml", "import QtQuick\nItem {}\n")
+    return buffer.getvalue()
+
+
+def _install(data: bytes) -> plugins.Plugin:
+    return plugins.install_archive(data, sha256=hashlib.sha256(data).hexdigest(),
+                                   expected_id="", app_version="9.0.0")
+
+
+@pytest.mark.parametrize("needs", [
+    "icalendar",
+    {"python": "icalendar"},
+    {"python": ["evil @ https://example.org/evil.whl"]},
+    {"python": ["--index-url=https://example.org"]},
+    {"system": ["--overwrite=*"]},
+    {"system": ["a b"]},
+    {"system": [{"ubuntu": "foo"}]},
+    {"system": [{}]},
+    {"system": [{"arch": "--overwrite=*"}]},
+])
+def test_malformed_dependencies_are_refused(needs, plugins_dir):
+    with pytest.raises(plugins.PluginError):
+        _install(_with_needs(needs))
+    assert not (plugins_dir / "needy").exists()
+
+
+def _fake_manager(monkeypatch, manager_family: str = "arch", *, automatic=("pacman", "-S"),
+                  missing=("foo",), which=lambda name: f"/usr/bin/{name}"):
+    """A package manager where `missing` is not installed, until pkexec ran."""
+    state = {"missing": list(missing), "calls": []}
+    manager = dependencies.PackageManager(
+        manager_family,
+        lambda names: [n for n in names if n in state["missing"]],
+        ("sudo", "install"),
+        automatic,
+    )
+
+    def run(command):
+        state["calls"].append(command)
+        state["missing"] = []
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(dependencies, "package_manager", lambda: manager)
+    monkeypatch.setattr(dependencies, "_run", run)
+    monkeypatch.setattr(dependencies.shutil, "which", which)
+    return state
+
+
+def test_a_missing_system_package_blocks_the_install(plugins_dir, monkeypatch):
+    _fake_manager(monkeypatch, which=lambda name: None)
+    with pytest.raises(plugins.PluginError, match="sudo install foo"):
+        _install(_with_needs({"system": ["foo"]}))
+    assert not (plugins_dir / "needy").exists()
+
+
+def test_system_packages_go_through_pkexec(plugins_dir, monkeypatch):
+    state = _fake_manager(monkeypatch)
+    assert _install(_with_needs({"system": ["foo"]})).id == "needy"
+    assert state["calls"] == [["pkexec", "pacman", "-S", "foo"]]
+
+
+def test_a_declined_password_leaves_the_install_blocked(plugins_dir, monkeypatch):
+    state = _fake_manager(monkeypatch)
+    monkeypatch.setattr(dependencies, "_run",
+                        lambda c: subprocess.CompletedProcess(c, 126, "", ""))
+    with pytest.raises(plugins.PluginError, match="sudo install foo"):
+        _install(_with_needs({"system": ["foo"]}))
+    assert state["missing"] == ["foo"]
+
+
+def test_an_image_based_system_never_installs_on_its_own(plugins_dir, monkeypatch):
+    state = _fake_manager(monkeypatch, "fedora", automatic=())
+    with pytest.raises(plugins.PluginError):
+        _install(_with_needs({"system": ["foo"]}))
+    assert state["calls"] == []
+    assert dependencies.RPM_OSTREE.command(["foo"]) == "sudo rpm-ostree install foo"
+    assert dependencies.RPM_OSTREE.afterwards == ", restart and install again"
+
+
+def test_each_family_gets_its_own_package_name(plugins_dir, monkeypatch):
+    state = _fake_manager(monkeypatch, "debian", missing=("python3-gi",))
+    needs = {"system": [{"arch": "python-gobject", "debian": "python3-gi"}]}
+    assert _install(_with_needs(needs)).id == "needy"
+    assert state["calls"][0][-1] == "python3-gi"
+
+
+def test_a_package_not_named_for_this_family_blocks_the_install(plugins_dir, monkeypatch):
+    _fake_manager(monkeypatch, "fedora")
+    with pytest.raises(plugins.PluginError, match="no package named for fedora"):
+        _install(_with_needs({"system": [{"arch": "foo"}]}))
+
+
+def test_without_a_package_manager_names_are_looked_for_as_programs(plugins_dir, monkeypatch):
+    monkeypatch.setattr(dependencies, "package_manager", lambda: None)
+    monkeypatch.setattr(dependencies.shutil, "which",
+                        lambda name: "/usr/bin/bar" if name == "bar" else None)
+    assert _install(_with_needs({"system": [{"arch": "foo", "debian": "bar"}]})).id == "needy"
+    with pytest.raises(plugins.PluginError, match="needs foo, install them"):
+        _install(_with_needs({"system": ["foo"]}))
+
+
+@pytest.mark.parametrize(("present", "expected"), [
+    (["pacman"], "arch"),
+    (["apt-get", "dpkg-query"], "debian"),
+    (["dnf"], "fedora"),
+])
+def test_the_package_manager_is_found(present, expected, monkeypatch):
+    monkeypatch.setattr(dependencies, "OSTREE_BOOTED", Path("/nonexistent"))
+    monkeypatch.setattr(dependencies.shutil, "which",
+                        lambda name: f"/usr/bin/{name}" if name in present else None)
+    assert dependencies.package_manager().family == expected
+
+
+def test_an_image_wins_over_dnf(tmp_path, monkeypatch):
+    marker = tmp_path / "ostree-booted"
+    marker.touch()
+    monkeypatch.setattr(dependencies, "OSTREE_BOOTED", marker)
+    monkeypatch.setattr(dependencies.shutil, "which", lambda name: f"/usr/bin/{name}")
+    assert dependencies.package_manager() is dependencies.RPM_OSTREE
+
+
+def test_a_failed_python_install_keeps_the_older_copy(plugins_dir, monkeypatch):
+    _install(_with_needs({}))
+    monkeypatch.setattr(dependencies, "_run",
+                        lambda c: subprocess.CompletedProcess(c, 1, "", "no such package\n"))
+    monkeypatch.setattr(dependencies.shutil, "which", lambda name: f"/usr/bin/{name}")
+    with pytest.raises(plugins.PluginError, match="no such package"):
+        _install(_with_needs({"python": ["edge-dash-no-such-package"]}))
+    assert (plugins_dir / "needy" / "manifest.json").is_file()
+    assert not list((plugins_dir / ".deps").glob(".staging-*"))
+
+
+def test_python_packages_stay_with_the_plugin(plugins_dir, monkeypatch):
+    def run(command):
+        target = Path(command[command.index("--target") + 1])
+        (target / "needy_lib").mkdir(parents=True)
+        (target / "needy_lib" / "__init__.py").write_text("VALUE = 7\n")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(dependencies, "_run", run)
+    monkeypatch.setattr(dependencies.shutil, "which", lambda name: f"/usr/bin/{name}")
+    plugin = _install(_with_needs({"python": ["edge-dash-needy-lib"]}))
+    plugins.load_module(plugin)
+    folder = str(dependencies.folder("needy"))
+    try:
+        assert sys.path[-1] == folder, "a plugin's packages must not shadow the backend's"
+        assert __import__("needy_lib").VALUE == 7
+    finally:
+        sys.modules.pop("needy_lib", None)
+        plugins.uninstall("needy")
+    assert folder not in sys.path
+    assert not dependencies.folder("needy").exists()
+
+
+def test_uv_is_found_outside_the_path_of_a_service(tmp_path, monkeypatch):
+    monkeypatch.setattr(dependencies.shutil, "which", lambda name: None)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert dependencies.find_uv() is None
+    uv = tmp_path / ".local" / "bin" / "uv"
+    uv.parent.mkdir(parents=True)
+    uv.touch()
+    assert dependencies.find_uv() == str(uv)
+
+
+def test_a_satisfied_dependency_installs_nothing(plugins_dir, monkeypatch):
+    monkeypatch.setattr(dependencies, "_run", lambda c: pytest.fail(f"ran {c}"))
+    assert _install(_with_needs({"python": ["httpx>=0.1"]})).id == "needy"
+    assert not dependencies.folder("needy").exists()
+
+
+def test_settings_page_is_served_sandboxed(plugins_dir, app):
+    folder = plugins_dir / "paged"
+    folder.mkdir(parents=True)
+    (folder / "manifest.json").write_text(json.dumps(
+        {"app": "edgedash", "type": "widget", "id": "paged", "version": "1.0.0",
+         "settings": "settings.html"}))
+    (folder / "settings.html").write_text("<!doctype html><p>hi</p>")
+    with TestClient(app) as client:
+        response = client.get("/api/plugins/paged/settings-page")
+        assert response.status_code == 200
+        policy = response.headers["content-security-policy"]
+        assert "sandbox allow-scripts" in policy and "default-src 'none'" in policy
+        assert "allow-same-origin" not in policy
+        assert client.get("/api/plugins/other/settings-page").status_code == 404

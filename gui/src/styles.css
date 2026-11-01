@@ -1887,3 +1887,28 @@ textarea:disabled {
   padding-left: 16px;
   border-left: 2px solid var(--accent);
 }
+
+/* Search and order above the plugin list. */
+.plugin-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.plugin-toolbar input {
+  flex: 1;
+  min-width: 0;
+}
+
+.plugin-toolbar select {
+  width: auto;
+}
+
+/* A plugin's own settings page: the frame is as tall as the page says. */
+.plugin-settings-frame {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  border: 0;
+  background: transparent;
+}

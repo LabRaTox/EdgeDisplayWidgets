@@ -18,8 +18,8 @@ settings.
   (Open-Meteo), media controls (MPRIS), YouTube tiles, smart lights
   (Govee + Tuya), quick actions, pomodoro, notes.
 - **Plugins from a store**: more widgets and themes install from the plugin
-  store with one click, among them desktop notifications, Discord, an RSS
-  reader, a slideshow, a doodle pad and the moon phase. Updates show up on
+  store with one click, among them a calendar with Nextcloud, desktop
+  notifications, Discord, an RSS reader, a slideshow, a doodle pad and the moon phase. Updates show up on
   their own, and your own widgets can be submitted from the same window.
 - **Notes, locally or in Joplin**: folders, folder colours, search, pinning
   and checklists that tick with a tap. Stored in a file on this PC or in the
@@ -69,7 +69,7 @@ Three processes, each doing one thing:
 | Process | What it is | Runs on |
 |---------|-----------|---------|
 | `backend/` | FastAPI + the module hub, the only writer of the config | project virtualenv (`uv`) |
-| `shell/qml_kiosk` | the kiosk window on the Xeneon | **system** Python + system PySide6 |
+| `shell/qml_kiosk` | the kiosk window on the Xeneon | the system PySide6, otherwise a virtualenv of its own |
 | `gui/` | EDGE//DASH, the settings window | Tauri 2 + React |
 
 The kiosk and the settings window are both plain clients of the backend over
@@ -113,8 +113,8 @@ a frame even when the value repeats.
 | Component | Purpose | Arch package |
 |-----------|---------|--------------|
 | Python ≥ 3.11 | runtime | `python` |
-| [uv](https://github.com/astral-sh/uv) | virtualenv + dependency manager | `uv` |
-| PySide6 (system-wide) | the kiosk window (Qt Quick) and the video player (Qt WebEngine) | `pyside6` |
+| [uv](https://github.com/astral-sh/uv) | virtualenv + dependency manager, also for the Python packages of plugins | `uv` |
+| PySide6 6.10 or newer | the kiosk window (Qt Quick) and the video player (Qt WebEngine), `install.sh` fetches it if missing | `pyside6` |
 | `systemd` | user services | (preinstalled) |
 
 ```bash
@@ -234,11 +234,12 @@ by hand.
 The installer, step by step:
 
 1. Checks what is present and names the package for anything missing:
-   `uv`, a systemd user session, the system PySide6, and a panel that can show
-   a tray icon.
-2. Runs `uv sync` to create `.venv/` from `uv.lock`.
-3. Builds the settings window, if `npm` and `cargo` are there. Without them
-   everything else still works, only the settings UI is missing.
+   `uv`, a systemd user session and a panel that can show a tray icon.
+2. Runs `uv sync` to create `.venv/` from `uv.lock`, then sets up the kiosk's
+   PySide6.
+3. Builds the settings window, if `npm` and `cargo` are there. Otherwise it
+   downloads the finished program from the GitHub release. If neither works,
+   everything else still runs, only the settings UI is missing.
 4. Installs its icon and menu entry into `~/.local/share`, and refreshes the
    menu cache.
 5. Tells the compositor to keep the kiosk window out of the task list, in
@@ -256,14 +257,13 @@ Re-running is idempotent. Options:
 ./scripts/install.sh --no-autostart  # start now, but not at the next login
 ```
 
-The kiosk window needs the **distribution's** PySide6, not a wheel in the
-virtualenv. The window itself is Qt Quick. For a video it starts a process of
-its own on the system Qt WebEngine, which is the build that carries the codecs
-YouTube plays.
-
-```bash
-sudo pacman -S pyside6           # Arch / CachyOS
-```
+For the kiosk window the installer takes the **distribution's** PySide6 if it
+is 6.10 or newer and PyYAML is in the system Python. That build also plays
+H.264 and AAC. Otherwise it creates `.venv-kiosk` with PySide6 from PyPI (about
+700 MB). That is the case on Ubuntu and Debian among others and needs no work
+on Python, the installer only names the system libraries, with the command.
+YouTube plays over VP9 and Opus then; only videos that exist in H.264 alone
+do not play in this build.
 
 ### Afterwards
 
@@ -364,9 +364,10 @@ uv run pytest                          # ~350 tests, should pass clean
 
 To run as a service without the installer, copy both units from `systemd/`
 into `~/.config/systemd/user/`, replacing `__PROJECT_DIR__` with the absolute
-path of the checkout and `__UV__` with `$(command -v uv)`, then
+path of the checkout, `__UV__` with `$(command -v uv)` and `__KIOSK_PYTHON__`
+with `/usr/bin/python3` or the Python in `.venv-kiosk`, then
 `systemctl --user daemon-reload` and enable them. The kiosk unit deliberately
-runs `/usr/bin/python3`, not the virtualenv, for the system PySide6.
+does not use the backend's virtualenv.
 
 ## Configuration
 
@@ -698,6 +699,12 @@ the built-in ones, the installed ones, and what the
   The services keep running: the backend only restarts its modules, so the
   tiles go without new data for a moment, and the kiosk re-reads the config.
   The display shows the new widget as soon as it is placed under **Layout**.
+- **Dependencies**: what a plugin needs besides its own files shows in its
+  details and installs along with it. Python packages need no special rights
+  and land in `~/.local/share/edge-dashboard/plugins/.deps/<id>/`; system
+  packages ask for the password through `pkexec`. If something cannot be
+  installed, the plugin is not installed either, and the message names the
+  command to run by hand. Then install again.
 - **Updates**: a bar at the top names what has a newer version, and **Update
   all** fetches them. **Check for new plugins** looks again, on disk and in
   the store.
@@ -847,6 +854,8 @@ backend/
   notes.py            The notes file (folders, pinning)
   joplin.py           Joplin as the notes store, over its local API
   plugins.py          Installs, loads and removes store plugins
+  dependencies.py     What plugins bring along: Python and system packages
+  host.py             Starts other programs, from one place
   plugin_layout.py    Where installed plugins live and what their manifest says
   store.py            The plugin store client: catalog, sign-in, upload
   tray.py             Tray icon (StatusNotifierItem over D-Bus)

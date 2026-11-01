@@ -628,6 +628,11 @@ der Store braucht:
   optional; fehlt es, ist das Widget eine reine Anzeige wie die Uhr.
 * **`min_app_version`** vergleicht Edge Dash mit der eigenen Version und
   installiert nichts, was eine neuere braucht.
+* **`dependencies`** nennt, was das Widget außer seinen eigenen Dateien
+  braucht, siehe unten. Die Liste steht auf der Plugin-Seite unter
+  **Angaben**, schon vor der Installation.
+* **`settings`** nennt eine eigene Seite für den Einstellungsdialog, siehe
+  [Eine eigene Einstellungsseite](#eine-eigene-einstellungsseite).
 
 Drei Unterschiede zu einem eingebauten Widget:
 
@@ -644,6 +649,86 @@ Drei Unterschiede zu einem eingebauten Widget:
   `settings.widget.<id>.…` und `settings.mod.<modul>.…` für die eigenen
   Module. Alles andere wird verworfen, ein Widget kann also keine Texte des
   Dashboards umschreiben.
+
+### Abhängigkeiten
+
+Jedes Plugin kann Pakete mitbringen, die es braucht. Das ist nicht an ein
+bestimmtes Plugin gebunden: Sie stehen im Manifest, den Rest macht der
+Installer.
+
+```json
+"dependencies": {
+  "python": ["icalendar>=6.0", "recurring-ical-events>=3.3"],
+  "system": ["ffmpeg"]
+}
+```
+
+* **`python`** nennt Pakete von PyPI, in der üblichen Schreibweise mit
+  Version. Direkte Adressen werden abgelehnt. Besondere Rechte sind nicht
+  nötig: `uv` legt fertige Wheels nach `<plugins>/.deps/<id>/`, ein Paket ohne
+  Wheel geht also nicht. Der Ordner kommt beim Laden ans Ende von `sys.path`.
+  Ein Plugin kann damit Pakete ergänzen, aber keines des Backends ersetzen,
+  und der Ordner verschwindet mit dem Plugin. Verlangen zwei Plugins
+  verschiedene Versionen eines Pakets, teilen sie sich die zuerst geladene.
+* **`system`** nennt Pakete der Distribution. Ein einfacher Name gilt überall.
+  Wo die Namen abweichen, nennt ein Objekt einen je Familie:
+
+  ```json
+  "system": ["ffmpeg", {"arch": "python-gobject", "debian": "python3-gi", "fedora": "python3-gobject"}]
+  ```
+
+  `debian` gilt auch für Ubuntu. Fehlt der Name für eine Familie, blockt dort
+  die Installation. Fehlt ein Paket, fragt `pkexec` nach dem Passwort, und
+  pacman, apt oder dnf installieren es. Auf einem Fedora mit Image wie Bazzite
+  nennt die Meldung stattdessen den `rpm-ostree`-Befehl, weil das Paket erst
+  mit dem nächsten Start ankommt. Ohne einen dieser Paketmanager wird jeder
+  Name als Programm gesucht.
+
+**Die Installation blockt, bis alles da ist.** Lässt sich ein Paket nicht
+installieren, weil `pkexec` fehlt, das Passwort abgelehnt wurde oder niemand
+antwortet, wird das Plugin nicht installiert, und der Fehler nennt den
+Befehl für die Hand. Eine ältere Fassung bleibt liegen. Danach einfach noch
+einmal installieren.
+
+Abhängigkeiten gehören nicht zur Durchsicht im Store. Nenne nur Pakete, denen
+du traust, mit einer unteren Versionsgrenze. Setze `min_app_version` auf die
+erste Edge-Dash-Version, die `dependencies` kennt: Ältere ignorieren das Feld,
+und das Modul scheitert dann an seinem Import.
+
+### Eine eigene Einstellungsseite
+
+`settings_schema` deckt Felder und Listen ab. Für alles darüber hinaus, etwa
+Konten mit Anmeldung, kann ein Plugin eine Seite mitbringen:
+
+```json
+"settings": "settings.html"
+```
+
+Das Fenster ist dunkel, die Seite muss das also auch angeben, mit
+`<meta name="color-scheme" content="dark">`. Sonst malt der Browser den Frame
+deckend weiß hinter die helle Schrift der Seite.
+
+Die Seite erscheint im Dialog der Plugin-Einstellungen unter den allgemeinen
+Feldern. Sie läuft in einem abgeschotteten Frame ohne Origin, Netzwerk und
+Speicher, als eine Datei mit Skript und Styles darin. Sie spricht per
+`postMessage` mit dem Fenster, und das Fenster gibt nur weiter, was zum ersten
+Modul dieses Plugins gehört:
+
+| Die Seite sendet | Bedeutung |
+| --- | --- |
+| `{type: "ready"}` | Die Seite ist geladen. Das Fenster antwortet mit `init`. |
+| `{type: "height", height}` | Der Frame nimmt diese Höhe an. |
+| `{type: "change", settings}` | Die Einstellungen des Moduls, wie sie sein sollen. Geschrieben wird beim Speichern des Dialogs. `enabled` und `interval` bleiben beim Dialog. |
+| `{type: "command", id, action, args}` | Führt `command(action, args)` im Modul aus. Das Fenster antwortet mit `result`. |
+| `{type: "open", url}` | Öffnet einen http(s)-Link im Browser. |
+
+| Das Fenster sendet | Bedeutung |
+| --- | --- |
+| `{type: "init", settings, language, colors}` | Die aktuellen Einstellungen, die Sprache des Fensters und seine Farben als CSS-Variablen (`--bg`, `--text`, `--accent` usw.). |
+| `{type: "result", id, ok, data, error}` | Die Antwort auf ein `command`. |
+
+Ein vollständiges Beispiel mit Konten und Browser-Anmeldung ist
+`plugin-sources/calendar/settings.html`.
 
 ### Befehle vom Widget an sein Modul
 
@@ -720,7 +805,10 @@ Plugin-Ordner, das nutzen die Tests.
 
 ## Vom Wunsch zum Widget: ein Kalender
 
-Ein Kalender-Widget, als Checkliste durch die Abschnitte oben:
+Ein Kalender-Widget, als Checkliste durch die Abschnitte oben. Der echte
+Kalender ist ein Store-Plugin in `plugin-sources/calendar/`, mit Monat, Woche
+und Tag, CalDAV-Konten, `dependencies` und eigener Einstellungsseite. Das hier
+ist die kleine Fassung für den Anfang:
 
 1. **Modul** `kalender`. Quelle kann eine Kalenderdatei, ein CalDAV-Server
    oder ein Skript sein. Termine ändern sich selten, also reicht

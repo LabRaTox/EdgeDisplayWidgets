@@ -28,6 +28,8 @@ from pathlib import Path
 
 from loguru import logger
 
+from . import host
+
 ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = ROOT / "systemd"
 UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
@@ -130,13 +132,13 @@ def set_enabled(enabled: bool) -> AutostartStatus:
 
 
 def _systemctl(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["systemctl", "--user", *args],
-        capture_output=True,
-        text=True,
-        timeout=COMMAND_TIMEOUT_S,
-        check=False,
-    )
+    return host.run(["systemctl", "--user", *args], timeout=COMMAND_TIMEOUT_S)
+
+
+def kiosk_python() -> str:
+    """What runs the kiosk: its own virtualenv if `install.sh` made one."""
+    own = ROOT / ".venv-kiosk" / "bin" / "python"
+    return str(own) if own.is_file() else "/usr/bin/python3"
 
 
 def _unsupported_reason() -> str | None:
@@ -166,7 +168,9 @@ def _write_unit(unit: str) -> Path:
     if uv is None and "__UV__" in text:
         raise AutostartError("'uv' not found — cannot render the backend unit")
 
-    text = text.replace("__PROJECT_DIR__", str(ROOT)).replace("__UV__", uv or "")
+    text = (text.replace("__PROJECT_DIR__", str(ROOT))
+            .replace("__UV__", uv or "")
+            .replace("__KIOSK_PYTHON__", kiosk_python()))
 
     UNIT_DIR.mkdir(parents=True, exist_ok=True)
     target = UNIT_DIR / unit

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hashlib
 import inspect
@@ -27,7 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 from pydantic import BaseModel
 
-from . import autostart, plugin_layout, plugins, store
+from . import autostart, host, plugin_layout, plugins, store
 from .config import AppConfig, ModuleConfig, load_config
 from .hub import Hub
 from .joplin import JoplinError
@@ -421,6 +422,16 @@ _IMAGE_SUFFIXES = {".png", ".svg", ".jpg", ".jpeg", ".webp", ".gif"}
 _IMAGE_HEADERS = {"Cache-Control": "public, max-age=86400",
                   "Content-Security-Policy": "sandbox"}
 
+#: Headers for a plugin's settings page: its own inline script and styles,
+#: images only as data, and no connection to anything.
+_SETTINGS_PAGE_HEADERS = {
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "sandbox allow-scripts; default-src 'none'; "
+                               "script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                               "img-src data:; font-src data:",
+}
+
 #: What the store accepts as a version number.
 _VERSION = re.compile(r"\d+(\.\d+){0,3}([.-][0-9a-zA-Z]+)?")
 
@@ -549,12 +560,7 @@ def _quit_dashboard() -> None:
     """
     logger.info("quit requested from the tray")
     with contextlib.suppress(OSError, subprocess.SubprocessError):
-        subprocess.run(
-            ["systemctl", "--user", "stop", "edge-kiosk.service"],
-            capture_output=True,
-            timeout=10,
-            check=False,
-        )
+        host.run(["systemctl", "--user", "stop", "edge-kiosk.service"], timeout=10)
     os.kill(os.getpid(), signal.SIGINT)
 
 
@@ -954,6 +960,8 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
             entry["warnings"] = plugin.install.get("warnings", [])
             if plugin_layout.inside(plugin.path, manifest.get("icon")) is not None:
                 entry["icon_url"] = f"/api/plugins/{wid}/icon?v={plugin.version}"
+            entry["dependencies"] = manifest.get("dependencies") or {}
+            entry["settings_page"] = plugin.settings_file is not None
         return entry
 
     @app.get("/locales/{code}.json")
@@ -1010,6 +1018,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
             "author": plugin.install.get("author", ""),
             "warnings": plugin.install.get("warnings", []),
             "installed_at": plugin.install.get("installed_at"),
+            "dependencies": plugin.manifest.get("dependencies") or {},
         }
 
     async def _after_plugin_change(names: list[str]) -> None:
@@ -1023,11 +1032,12 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
             await current_hub().reload(current_cfg())
             await current_hub().publish("settings", settings=_settings_view(current_cfg()))
 
-    def _install_local(data: bytes) -> tuple[plugin_layout.Plugin, list[str]]:
+    async def _install_local(data: bytes) -> tuple[plugin_layout.Plugin, list[str]]:
         """Install an archive from this machine: no store, so no checksum to
         compare with. The unpacking rules are the same as for the store."""
         try:
-            plugin = plugins.install_archive(
+            plugin = await asyncio.to_thread(
+                plugins.install_archive,
                 data,
                 sha256=hashlib.sha256(data).hexdigest(),
                 expected_id="",
@@ -1050,7 +1060,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail="no archive in the request")
         if len(data) > plugins.MAX_ARCHIVE_BYTES:
             raise HTTPException(status_code=413, detail="archive is larger than 64 MB")
-        plugin, names = _install_local(data)
+        plugin, names = await _install_local(data)
         await _after_plugin_change(names)
         return JSONResponse({"ok": True, "plugin": _installed_view(plugin), "modules": names},
                             headers=_NO_STORE)
@@ -1065,7 +1075,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except OSError as exc:
             raise HTTPException(status_code=422, detail=f"cannot read {payload.path}: {exc}") from exc
-        plugin, names = _install_local(data)
+        plugin, names = await _install_local(data)
         await _after_plugin_change(names)
         return JSONResponse({"ok": True, "plugin": _installed_view(plugin), "modules": names},
                             headers=_NO_STORE)
@@ -1096,6 +1106,20 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         if path is None or path.suffix.lower() not in _IMAGE_SUFFIXES:
             raise HTTPException(status_code=404, detail="no such image")
         return FileResponse(path, headers=_IMAGE_HEADERS)
+
+    @app.get("/api/plugins/{plugin_id}/settings-page")
+    async def plugin_settings_page(plugin_id: str) -> FileResponse:
+        """A plugin's own settings page, for a sandboxed frame in the window.
+
+        The header repeats the sandbox, so the page has no origin and no way
+        out even when opened on its own. All it can do is talk to the window
+        through postMessage, and the window decides what it answers.
+        """
+        plugin = plugin_layout.load(_check_id(plugin_id))
+        path = plugin.settings_file if plugin else None
+        if path is None:
+            raise HTTPException(status_code=404, detail="no settings page")
+        return FileResponse(path, media_type="text/html", headers=_SETTINGS_PAGE_HEADERS)
 
     @app.get("/api/plugins/{plugin_id}/icon")
     async def plugin_icon(plugin_id: str) -> Response:
@@ -1191,7 +1215,10 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
 
         try:
             data = await store.download(str(chosen.get("download_url", "")))
-            plugin = plugins.install_archive(
+            # In a thread: dependencies can take minutes and a password
+            # prompt, and the display keeps updating meanwhile.
+            plugin = await asyncio.to_thread(
+                plugins.install_archive,
                 data,
                 sha256=str(chosen.get("sha256", "")),
                 expected_id=slug,

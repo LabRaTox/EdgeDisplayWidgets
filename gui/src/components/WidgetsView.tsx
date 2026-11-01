@@ -14,6 +14,7 @@ import type {
   WidgetMeta,
 } from "../types";
 import { pick } from "../lib/localized";
+import { PluginSettingsFrame } from "./PluginSettingsFrame";
 import { Field, applies, readPath, writePath } from "./Field";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
@@ -45,6 +46,10 @@ const NOTICE_MS = 5000;
 const TYPES = ["widget", "theme"] as const;
 type PluginType = (typeof TYPES)[number];
 
+/** How the list can be ordered. Plain names come first: that is the default. */
+const SORTS = ["name_asc", "name_desc", "newest", "rating"] as const;
+type Sort = (typeof SORTS)[number];
+
 type Entry =
   | { kind: "widget"; id: string; meta: WidgetMeta }
   | { kind: "theme"; id: string; meta: ThemeMeta }
@@ -59,6 +64,48 @@ function categoryOf(entry: Entry): string {
   if (entry.kind === "theme") return "other";
   const raw = entry.kind === "widget" ? entry.meta.category : entry.entry.category;
   return (CATEGORIES as readonly string[]).includes(raw) ? raw : "other";
+}
+
+function nameOf(entry: Entry): string {
+  return entry.kind === "store"
+    ? pick(entry.entry.i18n?.name, entry.entry.name)
+    : pick(entry.meta.name, entry.id);
+}
+
+/** What a search looks through, in the window's language. */
+function searchTextOf(entry: Entry): string {
+  const summary =
+    entry.kind === "store"
+      ? pick(entry.entry.i18n?.summary, entry.entry.summary)
+      : pick(entry.meta.summary);
+  const author = entry.kind === "store" ? entry.entry.author : (entry.meta.author ?? "");
+  return `${nameOf(entry)} ${entry.id} ${summary} ${author}`.toLowerCase();
+}
+
+/**
+ * The order of the list. Date and rating live in the store, so an installed
+ * plugin is looked up there too, and what the store does not know (the
+ * built-in widgets, local plugins) comes last. Names break every tie.
+ */
+function compareEntries(sort: Sort, catalog: StoreEntry[] | null) {
+  const bySlug = new Map((catalog ?? []).map((s) => [s.slug, s]));
+  const released = (e: Entry) => {
+    const date = bySlug.get(e.id)?.latest.released_at;
+    return date ? Date.parse(date) : -Infinity;
+  };
+  const score = (e: Entry) => {
+    const rating = bySlug.get(e.id)?.rating;
+    return rating ? rating.up - rating.down : -Infinity;
+  };
+  return (a: Entry, b: Entry): number => {
+    const names = nameOf(a).localeCompare(nameOf(b));
+    // Equal infinities subtract to NaN, hence the comparison first.
+    const order = (x: number, y: number) => (x === y ? names : y > x ? 1 : -1);
+    if (sort === "name_desc") return -names;
+    if (sort === "newest") return order(released(a), released(b));
+    if (sort === "rating") return order(score(a), score(b));
+    return names;
+  };
 }
 
 /**
@@ -96,6 +143,8 @@ export function WidgetsView() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState("");
   const [filter, setFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<Sort>("name_asc");
   const [installOpen, setInstallOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
   const [user, setUser] = useState<StoreUser | null>(null);
@@ -157,12 +206,13 @@ export function WidgetsView() {
     const fromStore = (catalog ?? [])
       .filter((s) => (s.kind || "widget") === of && !known.has(s.slug))
       .map((s) => ({ kind: "store" as const, id: s.slug, entry: s }));
-    const list = [...here, ...fromStore];
-    const sortName = (e: Entry) =>
-      e.kind === "store" ? pick(e.entry.i18n?.name, e.entry.name) : pick(e.meta.name, e.id);
-    return list.sort((a, b) => sortName(a).localeCompare(sortName(b)));
+    return [...here, ...fromStore];
   };
-  const entries = entriesOf(type);
+  // The topics count what the search left, so they show where the hits are.
+  const needle = search.trim().toLowerCase();
+  const entries = entriesOf(type)
+    .filter((e) => !needle || searchTextOf(e).includes(needle))
+    .sort(compareEntries(sort, catalog));
 
   const counts = new Map<string, number>();
   for (const e of entries) counts.set(categoryOf(e), (counts.get(categoryOf(e)) ?? 0) + 1);
@@ -399,8 +449,28 @@ export function WidgetsView() {
 
         <div className="plugin-content">
           {type === "theme" && <p className="hint">{t("widgets.themes_hint")}</p>}
+          <div className="plugin-toolbar">
+            <input
+              type="search"
+              value={search}
+              placeholder={t("widgets.search")}
+              aria-label={t("widgets.search")}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <select
+              value={sort}
+              aria-label={t("widgets.sort")}
+              onChange={(event) => setSort(event.target.value as Sort)}
+            >
+              {SORTS.map((option) => (
+                <option key={option} value={option}>
+                  {t(`widgets.sort.${option}`)}
+                </option>
+              ))}
+            </select>
+          </div>
           {visible.length === 0 ? (
-            <p className="empty-note">{t("widgets.empty_category")}</p>
+            <p className="empty-note">{t(needle ? "widgets.no_match" : "widgets.empty_category")}</p>
           ) : (
             <div className="plugin-list">
               {visible.map((e) =>
@@ -617,7 +687,14 @@ function WidgetCard({
         </button>
       )}
 
-      {open && <ModuleSettingsDialog title={name} modules={meta.modules} onClose={() => setOpen(false)} />}
+      {open && (
+        <ModuleSettingsDialog
+          title={name}
+          modules={meta.modules}
+          page={meta.settings_page ? { plugin: id, version: meta.version } : null}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -630,10 +707,13 @@ function WidgetCard({
 function ModuleSettingsDialog({
   title,
   modules,
+  page,
   onClose,
 }: {
   title: string;
   modules: string[];
+  /** The plugin's own settings page, shown under the first module's fields. */
+  page: { plugin: string; version: string } | null;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -751,6 +831,15 @@ function ModuleSettingsDialog({
                   onChange={(value) => edit(name, writePath(current, field.key, value) as ModuleSettings)}
                 />
               ))}
+            {page && name === modules[0] && (
+              <PluginSettingsFrame
+                plugin={page.plugin}
+                version={page.version}
+                module={name}
+                value={current}
+                onChange={(next) => edit(name, next)}
+              />
+            )}
           </section>
         );
       })}

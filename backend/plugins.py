@@ -31,7 +31,7 @@ from typing import Any
 
 from loguru import logger
 
-from . import plugin_layout
+from . import dependencies, plugin_layout
 from .modules.base import get_registry, unregister_module
 from .plugin_layout import APP, INSTALL_FILE, SAFE_ID, Plugin
 
@@ -93,6 +93,10 @@ def check_manifest(manifest: dict[str, Any], *, expected_id: str, app_version: s
     needed = str(manifest.get("min_app_version") or "")
     if needed and newer(needed, app_version):
         raise PluginError(f"needs Edge Dash {needed} or newer, this is {app_version}")
+    try:
+        dependencies.declared(manifest)
+    except dependencies.DependencyError as exc:
+        raise PluginError(str(exc)) from exc
 
 
 def _check_checksum(data: bytes, expected: str) -> None:
@@ -183,6 +187,15 @@ def install_archive(
                 raise PluginError(f"view {manifest.get('view', plugin_layout.DEFAULT_VIEW)!r} is missing")
             if "module" in manifest and candidate.module_file is None:
                 raise PluginError(f"module {manifest['module']!r} is missing")
+            if "settings" in manifest and candidate.settings_file is None:
+                raise PluginError(f"settings page {manifest['settings']!r} is missing")
+
+        # Last, so a broken archive costs no download and no password prompt.
+        # Until this passes the plugin is not installed: an older copy stays.
+        try:
+            dependencies.ensure(plugin_id, manifest)
+        except dependencies.DependencyError as exc:
+            raise PluginError(str(exc)) from exc
 
         record = {"version": manifest.get("version", ""), "sha256": sha256.lower(),
                   "installed_at": time.time(), **(meta or {})}
@@ -217,6 +230,7 @@ def uninstall(plugin_id: str) -> None:
     if not target.is_dir():
         raise PluginError(f"'{plugin_id}' is not installed")
     shutil.rmtree(target)
+    dependencies.remove(plugin_id)
     logger.info(f"removed widget '{plugin_id}'")
 
 
@@ -264,6 +278,7 @@ def load_module(plugin: Plugin) -> list[str]:
     replace the built-in weather module for every widget that uses it.
     """
     unload_module(plugin.id)
+    dependencies.activate(plugin.id)
     path = plugin.module_file if plugin.type == "widget" else None
     if path is None:
         # Recorded all the same: a rescan tells new plugins from known ones

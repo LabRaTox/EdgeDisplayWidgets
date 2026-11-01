@@ -157,6 +157,7 @@ def test_enabling_writes_both_units_and_enables_them(systemctl, tmp_path: Path):
         written = (tmp_path / "systemd" / unit).read_text()
         assert "__PROJECT_DIR__" not in written, "placeholder left in the unit"
         assert "__UV__" not in written
+        assert "__KIOSK_PYTHON__" not in written
         assert str(autostart.ROOT) in written
 
     commands = [call[2] for call in systemctl]
@@ -286,3 +287,12 @@ def test_tray_is_not_started_by_merely_creating_the_app(app, monkeypatch):
     with TestClient(app):
         pass
     assert started == []
+
+
+def test_the_kiosk_runs_on_its_own_virtualenv_if_there_is_one(tmp_path, monkeypatch):
+    monkeypatch.setattr(autostart, "ROOT", tmp_path)
+    assert autostart.kiosk_python() == "/usr/bin/python3"
+    own = tmp_path / ".venv-kiosk" / "bin" / "python"
+    own.parent.mkdir(parents=True)
+    own.touch()
+    assert autostart.kiosk_python() == str(own)

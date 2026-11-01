@@ -200,6 +200,16 @@ export interface WidgetMeta {
   support: string;
   /** How many screenshots the manifest lists; fetched by position. */
   screenshots: number;
+  /** Only for installed widgets. */
+  dependencies?: PluginDependencies;
+  settings_page?: boolean;
+}
+
+/** What a plugin needs besides its own files. */
+export interface PluginDependencies {
+  python?: string[];
+  /** One name for all systems, or one per family (`arch`, `debian`, `fedora`). */
+  system?: (string | Record<string, string>)[];
 }
 
 /** A finding of the store's review that the user should see before installing. */
@@ -215,6 +225,7 @@ export interface StoreVersion {
   sha256: string;
   size: number;
   min_app_version: string | null;
+  dependencies?: PluginDependencies | null;
   downloads: number;
   released_at: string;
   icon_url: string | null;

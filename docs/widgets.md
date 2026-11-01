@@ -610,6 +610,11 @@ store needs:
   optional; without it the widget is a plain view like the clock.
 * **`min_app_version`** is compared with the running Edge Dash, which
   installs nothing that needs a newer one.
+* **`dependencies`** names what the widget needs besides its own files, see
+  below. The store shows the list before the install, and so does the
+  **Details** table on the plugin page.
+* **`settings`** names a page of its own for the settings dialog, see
+  [A settings page of its own](#a-settings-page-of-its-own).
 
 Three differences from a built-in widget:
 
@@ -626,6 +631,85 @@ Three differences from a built-in widget:
   `settings.widget.<id>.…` and `settings.mod.<module>.…` for its own
   modules. Anything else is dropped, so a widget cannot reword the
   dashboard.
+
+### Dependencies
+
+Any plugin can bring packages it needs. Nothing about this is specific to
+one plugin: name them in the manifest and the installer does the rest.
+
+```json
+"dependencies": {
+  "python": ["icalendar>=6.0", "recurring-ical-events>=3.3"],
+  "system": ["ffmpeg"]
+}
+```
+
+* **`python`** lists packages from PyPI, in the usual notation with a
+  version. Direct URLs are refused. No special rights are needed: `uv`
+  installs finished wheels into `<plugins>/.deps/<id>/`, so a package without
+  a wheel cannot be used. That folder goes at the end of `sys.path` when the
+  plugin loads, which means a plugin can add packages but cannot replace one
+  the backend uses, and it goes away with the plugin. Two plugins that ask
+  for different versions of one package share the one that loaded first.
+* **`system`** lists packages of the distribution. A plain name means the
+  same everywhere. Where the names differ, an object gives one per family:
+
+  ```json
+  "system": ["ffmpeg", {"arch": "python-gobject", "debian": "python3-gi", "fedora": "python3-gobject"}]
+  ```
+
+  `debian` covers Ubuntu too. A family without a name blocks the install. If
+  a package is missing, `pkexec` asks for the password and pacman, apt or dnf
+  installs it. On an image-based Fedora such as Bazzite the error names the
+  `rpm-ostree` command instead, because the package only arrives with the
+  next boot. Without one of these package managers each name is looked for
+  as a program.
+
+**The install is blocked until everything is there.** If a package cannot
+be installed, because `pkexec` is missing, the password was declined or
+nothing answers, the plugin is not installed and the error names the command
+to run by hand. An older version stays in place. After running it, install
+again.
+
+Dependencies are not part of the store's review: name only packages you
+trust, with a lower version bound. Set `min_app_version` to the first Edge
+Dash that knows `dependencies`, since older ones ignore the field and the
+module then fails on its import.
+
+### A settings page of its own
+
+`settings_schema` covers fields and lists. For anything beyond that, such as
+accounts with a login, a plugin can bring a page:
+
+```json
+"settings": "settings.html"
+```
+
+The window is dark, so a page has to say that it is too, with
+`<meta name="color-scheme" content="dark">`. Without it the browser paints
+the frame opaque white behind the page's light text.
+
+The page appears in the plugin settings dialog under the generic fields. It
+runs in a sandboxed frame without an origin, network access or storage, as
+one file with inline script and styles. It talks to the window by
+`postMessage`, and the window only passes on what belongs to this plugin's
+first module:
+
+| The page sends | Meaning |
+| --- | --- |
+| `{type: "ready"}` | The page has loaded. The window answers with `init`. |
+| `{type: "height", height}` | The frame takes this height. |
+| `{type: "change", settings}` | The module's settings as they should be. Written when the dialog is saved. `enabled` and `interval` stay the dialog's. |
+| `{type: "command", id, action, args}` | Runs `command(action, args)` on the module. The window answers with `result`. |
+| `{type: "open", url}` | Opens an http(s) link in the browser. |
+
+| The window sends | Meaning |
+| --- | --- |
+| `{type: "init", settings, language, colors}` | The current settings, the window's language and its colours as CSS variables (`--bg`, `--text`, `--accent`, ...). |
+| `{type: "result", id, ok, data, error}` | The answer to a `command`. |
+
+`plugin-sources/calendar/settings.html` is a complete example, with accounts
+and a browser login.
 
 ### Commands from the widget to its module
 
@@ -698,7 +782,10 @@ To use another store, set `EDGE_STORE_URL` for the backend.
 
 ## From idea to widget: a calendar
 
-A calendar widget, as a checklist through the sections above:
+A calendar widget, as a checklist through the sections above. The real one
+is a store plugin in `plugin-sources/calendar/`, with month, week and day
+views, CalDAV accounts, `dependencies` and a settings page of its own. This
+is the small version to start from:
 
 1. **Module** `calendar`. The source can be a calendar file, a CalDAV
    server or a script. Appointments rarely change, so

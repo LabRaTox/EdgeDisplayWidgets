@@ -41,6 +41,7 @@ import httpx
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .. import host
 from .base import Module, SettingField, register_module
 
 # `color` / `text_color` are handed to the display and painted as given, so
@@ -412,20 +413,10 @@ class QuickActionsModule(Module):
 
     async def _probe_shell(self, probe: StatusProbe) -> str:
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *(probe.command or []),
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-        except FileNotFoundError:
+            output = await host.capture(probe.command or [], timeout=self.status_timeout)
+        except (FileNotFoundError, TimeoutError):
             return "unknown"
-        try:
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=self.status_timeout)
-        except TimeoutError:
-            proc.kill()
-            await proc.wait()
-            return "unknown"
-        return self._derive_state(probe, stdout.decode("utf-8", errors="replace"), proc.returncode == 0)
+        return self._derive_state(probe, output.stdout, output.returncode == 0)
 
     async def _probe_http(self, probe: StatusProbe) -> str:
         async with httpx.AsyncClient(timeout=self.status_timeout) as client:
@@ -466,48 +457,30 @@ class QuickActionsModule(Module):
         return result
 
     async def _run_shell(self, action: QuickAction) -> dict[str, Any]:
-        # `command` is validated to be a non-empty list[str] above. Using
-        # `create_subprocess_exec`/Popen (argv list) instead of a shell means
-        # there's no shell interpreter between us and execve — no injection.
+        # `command` is validated to be a non-empty list[str] above. `host`
+        # takes an argv list, so there's no shell interpreter between us and
+        # execve — no injection.
         if action.detach:
-            # Launch detached (new session) and return at once — the process
-            # outlives this request; we don't capture output or wait.
-            import subprocess
-
+            # Launch detached and return at once; the process outlives this
+            # request, we don't capture output or wait.
             try:
-                subprocess.Popen(
-                    action.command,  # type: ignore[arg-type]
-                    start_new_session=True,
-                    stdin=subprocess.DEVNULL,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
+                host.detach(action.command)  # type: ignore[arg-type]
             except FileNotFoundError as exc:
                 return {"ok": False, "error": f"command not found: {exc.filename}"}
             except Exception as exc:
                 return {"ok": False, "error": str(exc)}
             return {"ok": True, "detached": True, "command_summary": shlex.join(action.command or [])}
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *action.command,  # type: ignore[arg-type]
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+            output = await host.capture(action.command, timeout=self.timeout_seconds)  # type: ignore[arg-type]
         except FileNotFoundError as exc:
             return {"ok": False, "error": f"command not found: {exc.filename}"}
-        try:
-            stdout, stderr = await asyncio.wait_for(
-                proc.communicate(), timeout=self.timeout_seconds,
-            )
         except TimeoutError:
-            proc.kill()
-            await proc.wait()
             return {"ok": False, "error": f"timeout after {self.timeout_seconds}s"}
         return {
-            "ok": proc.returncode == 0,
-            "exit_code": proc.returncode,
-            "stdout": stdout.decode("utf-8", errors="replace")[: self.output_limit],
-            "stderr": stderr.decode("utf-8", errors="replace")[: self.output_limit],
+            "ok": output.returncode == 0,
+            "exit_code": output.returncode,
+            "stdout": output.stdout[: self.output_limit],
+            "stderr": output.stderr[: self.output_limit],
             "command_summary": shlex.join(action.command or []),
         }
 

@@ -1,6 +1,6 @@
 [project]
 name = "edge-dashboard"
-version = "1.6.0"
+version = "1.7.0"
 description = "Modular dashboard for the Corsair Xeneon Edge 14.5\" secondary touch display."
 requires-python = ">=3.11"
 readme = "README.md"
@@ -18,6 +18,7 @@ dependencies = [
     "dbus-next>=0.2.3",
     "httpx>=0.27",
     "pillow>=12.3.0",
+    "packaging>=24.0",
 ]
 
 [dependency-groups]
@@ -26,6 +27,9 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.7",
     "httpx>=0.27",
+    # For plugin-sources/tests: what the calendar plugin brings along.
+    "icalendar>=6.0",
+    "recurring-ical-events>=3.3",
 ]
 
 [build-system]

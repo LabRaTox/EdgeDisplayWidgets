@@ -122,6 +122,14 @@ class Plugin:
         return inside(self.path, self.manifest["module"])
 
     @property
+    def settings_file(self) -> Path | None:
+        """A page of its own for the settings dialog, see `docs/widgets.md`."""
+        if "settings" not in self.manifest:
+            return None
+        path = inside(self.path, self.manifest["settings"])
+        return path if path is not None and path.suffix == ".html" else None
+
+    @property
     def modules(self) -> list[str]:
         """The backend modules this widget subscribes to, as declared."""
         raw = self.manifest.get("modules") or []

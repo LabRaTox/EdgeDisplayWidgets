@@ -1,0 +1,60 @@
+# Builds the settings window for every release, for systems without npm and
+# cargo. scripts/install.sh downloads the result.
+#
+# On the oldest Ubuntu that has webkit2gtk-4.1 on purpose: a binary runs on
+# the glibc it was built against and anything newer, and a build on a current
+# Arch runs almost nowhere else.
+name: Settings window
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, like v1.7.0
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+
+      - name: Build
+        working-directory: gui
+        run: |
+          npm ci
+          npx tauri build --no-bundle
+
+      - name: Package
+        run: |
+          name="edgedash-${TAG#v}-x86_64-linux.tar.gz"
+          tar -C gui/src-tauri/target/release -czf "$name" edgedash
+          sha256sum "$name" > "$name.sha256"
+          echo "ASSET=$name" >> "$GITHUB_ENV"
+
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" "$ASSET" "$ASSET.sha256" --clobber

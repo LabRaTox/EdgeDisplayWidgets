@@ -1,7 +1,7 @@
 # Maintainer: LabRaTox <278214024+LabRaTox@users.noreply.github.com>
 
 pkgname=edge-dashboard
-pkgver=1.6.0
+pkgver=1.7.0
 pkgrel=1
 pkgdesc="Touch dashboard for the Corsair Xeneon Edge: live widgets, plugin store, settings window"
 arch=('x86_64')
@@ -26,6 +26,9 @@ depends=(
   'python-dbus-next'
   'python-httpx'
   'python-pillow'
+  'python-packaging'
+  # Fetches the Python packages a plugin asks for.
+  'uv'
   # The kiosk window: QML on the system's PySide6, plus the Qt modules it
   # imports (WebSockets for the data, Multimedia for sounds, WebEngine for
   # the video player).

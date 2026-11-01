@@ -29,6 +29,7 @@ ARCH_PACKAGES = {
     "dbus-next": "python-dbus-next",
     "httpx": "python-httpx",
     "pillow": "python-pillow",
+    "packaging": "python-packaging",
 }
 
 

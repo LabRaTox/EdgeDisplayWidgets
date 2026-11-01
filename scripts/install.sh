@@ -42,6 +42,18 @@ step() { printf '\n\033[1;36m==>\033[0m \033[1m%s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m!! \033[0m %s\n' "$*" >&2; }
 fail() { printf '\033[1;31m!! \033[0m %s\n' "$*" >&2; exit 1; }
 
+#: The oldest PySide6 the kiosk is known to run on.
+MIN_PYSIDE="6.10"
+#: What PySide6 from PyPI needs from the system. The 64-bit time move renamed
+#: two of these on Ubuntu 24.04 and Debian 13, and the old names cannot be
+#: installed there.
+T64=""
+apt-cache show libasound2t64 >/dev/null 2>&1 && T64=t64
+KIOSK_LIBS_DEBIAN="libegl1 libgl1 libgbm1 libglib2.0-0${T64} libfontconfig1 libdbus-1-3 libnss3 libasound2${T64} libpulse0 libxkbcommon0 libxkbcommon-x11-0 libxkbfile1 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxtst6 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-sync1 libxcb-xfixes0 libxcb-xkb1 libwayland-client0 libwayland-cursor0 libwayland-egl1"
+KIOSK_LIBS_FEDORA="mesa-libEGL libglvnd-glx mesa-libgbm glib2 fontconfig dbus-libs nss alsa-lib pulseaudio-libs libxkbcommon libxkbcommon-x11 libxkbfile libXcomposite libXdamage libXrandr libXtst xcb-util-cursor xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util-wm libwayland-client libwayland-cursor libwayland-egl"
+#: The Python both virtualenvs run on.
+PYTHON_VERSION="3.13"
+
 #: Collected as we go and printed at the end, so a warning in step two is not
 #: lost by the time step seven has scrolled past.
 NOTES=()
@@ -62,7 +74,8 @@ pkg_hint() {
 
 step "Checking what is here"
 
-command -v uv >/dev/null || fail "'uv' not found. $(pkg_hint uv uv uv)"
+# Debian and Ubuntu do not package it.
+command -v uv >/dev/null || fail "'uv' not found. $(pkg_hint uv 'curl -LsSf https://astral.sh/uv/install.sh | sh' uv | sed 's/^sudo apt install //')"
 UV_PATH=$(command -v uv)
 log "uv: ${UV_PATH}"
 
@@ -74,16 +87,6 @@ if ! systemctl --user is-system-running >/dev/null 2>&1; then
     fi
 fi
 log "systemd user session: reachable"
-
-# The kiosk window runs on the *system* Python: it needs the distribution's
-# PySide6, which links the system Qt WebEngine, and that is the build carrying
-# the codecs the YouTube widget plays. The PyPI wheel does not.
-if /usr/bin/python3 -c "import PySide6.QtWebEngineWidgets" >/dev/null 2>&1; then
-    log "PySide6 (system Python): present"
-else
-    note "PySide6 is missing for /usr/bin/python3, the kiosk window will not start.
-    $(pkg_hint pyside6 python3-pyside6.qtwebenginewidgets python3-pyside6)"
-fi
 
 # The tray icon needs a panel that implements StatusNotifierItem. Most do;
 # GNOME needs an extension for it.
@@ -99,8 +102,48 @@ fi
 
 step "Python dependencies"
 cd "$PROJECT_DIR"
-uv sync
+# Named, because uv otherwise takes the newest Python, and a new one has no
+# finished packages yet: on a system without a compiler that ends the install.
+uv sync --no-dev --python "$PYTHON_VERSION"
 log "virtualenv ready"
+
+# ------------------------------------------------------------- the kiosk window
+
+# The distribution's PySide6 comes first: it links the system Qt WebEngine,
+# which plays H.264 and AAC. Without one that is recent enough, a virtualenv
+# of its own takes PySide6 from PyPI. That build has no H.264, which YouTube
+# does not need as long as a video exists in VP9, and it weighs about 700 MB.
+step "Kiosk window"
+KIOSK_VENV="${PROJECT_DIR}/.venv-kiosk"
+KIOSK_PYTHON=/usr/bin/python3
+
+system_pyside_fits() {
+    /usr/bin/python3 - "$MIN_PYSIDE" 2>/dev/null <<'PY'
+import sys
+import yaml
+import PySide6
+import PySide6.QtQuick, PySide6.QtWebEngineWidgets, PySide6.QtWebSockets, PySide6.QtMultimedia
+
+have = tuple(int(part) for part in PySide6.__version__.split(".")[:2])
+sys.exit(have < tuple(int(part) for part in sys.argv[1].split(".")))
+PY
+}
+
+if system_pyside_fits; then
+    log "PySide6 of the system: fits"
+    rm -rf "$KIOSK_VENV"
+else
+    log "no recent PySide6 on the system, installing one for the kiosk (about 700 MB)"
+    KIOSK_PYTHON="${KIOSK_VENV}/bin/python"
+    [ -x "$KIOSK_PYTHON" ] || uv venv --quiet --python "$PYTHON_VERSION" "$KIOSK_VENV"
+    uv pip install --quiet --python "$KIOSK_PYTHON" "PySide6>=${MIN_PYSIDE}" pyyaml
+    if PROBLEM=$(QT_QPA_PLATFORM=offscreen "$KIOSK_PYTHON" -c "import PySide6.QtQuick, PySide6.QtWebEngineWidgets" 2>&1); then
+        log "PySide6 for the kiosk: ready"
+    else
+        note "PySide6 for the kiosk cannot load: ${PROBLEM##*$'\n'}
+    $(pkg_hint qt6-base "$KIOSK_LIBS_DEBIAN" "$KIOSK_LIBS_FEDORA")"
+    fi
+fi
 
 # ------------------------------------------------------- the settings window
 
@@ -120,10 +163,19 @@ elif command -v npm >/dev/null && command -v cargo >/dev/null; then
         # checkout, and the AppImage step pulls tools off the network.
         npm run tauri build -- --no-bundle
     ) && log "built: ${BINARY}" || note "the settings window failed to build; the tray icon will have nothing to open"
+elif VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' "${PROJECT_DIR}/pyproject.toml" | head -1) &&
+     "${PROJECT_DIR}/scripts/fetch-settings-window.sh" "$VERSION" "$BINARY"; then
+    log "downloaded: ${BINARY}"
 else
-    note "npm and cargo are needed to build the settings window.
+    note "the settings window could not be downloaded, and building it takes npm and cargo.
     $(pkg_hint 'nodejs npm rust' 'nodejs npm cargo' 'nodejs npm rust')
     The dashboard itself works without it; only the settings UI is missing."
+fi
+
+# A downloaded binary brings its code and not its libraries.
+if [ -x "$BINARY" ] && ldd "$BINARY" 2>/dev/null | grep -q "not found"; then
+    note "the settings window is missing a library.
+    $(pkg_hint webkit2gtk-4.1 libwebkit2gtk-4.1-0 webkit2gtk4.1)"
 fi
 
 # ------------------------------------------------------ desktop integration
@@ -150,6 +202,7 @@ mkdir -p "$SYSTEMD_USER_DIR"
 for unit in "${UNITS[@]}"; do
     [ -f "${PROJECT_DIR}/systemd/${unit}" ] || fail "missing template: systemd/${unit}"
     sed -e "s|__PROJECT_DIR__|${PROJECT_DIR}|g" -e "s|__UV__|${UV_PATH}|g" \
+        -e "s|__KIOSK_PYTHON__|${KIOSK_PYTHON}|g" \
         "${PROJECT_DIR}/systemd/${unit}" > "${SYSTEMD_USER_DIR}/${unit}"
     log "unit installed: ${SYSTEMD_USER_DIR}/${unit}"
 done

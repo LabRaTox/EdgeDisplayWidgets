@@ -106,6 +106,16 @@ export const api = {
       body: JSON.stringify(patch),
     }),
 
+  /**
+   * Ask a running module to do something. A refusal comes back as an
+   * ApiError whose message is the module's error key.
+   */
+  moduleCommand: <T>(module: string, action: string, args: Record<string, unknown> = {}) =>
+    request<T>(
+      `/api/modules/${encodeURIComponent(module)}/command/${encodeURIComponent(action)}`,
+      { method: "POST", body: JSON.stringify(args) },
+    ),
+
   quickActions: () => request<QuickActionsConfig>("/api/quick_actions/config"),
   saveQuickActions: (config: QuickActionsConfig) =>
     request<{ ok: boolean; count: number }>("/api/quick_actions/config", {
@@ -205,6 +215,8 @@ export const images = {
     `${API_BASE}/api/plugins/${encodeURIComponent(id)}/icon?v=${encodeURIComponent(version)}`,
   pluginScreenshot: (id: string, index: number, version: string) =>
     `${API_BASE}/api/plugins/${encodeURIComponent(id)}/screenshot/${index}?v=${encodeURIComponent(version)}`,
+  pluginSettings: (id: string, version: string) =>
+    `${API_BASE}/api/plugins/${encodeURIComponent(id)}/settings-page?v=${encodeURIComponent(version)}`,
   storeIcon: (slug: string, version: string) =>
     `${API_BASE}/api/store/plugins/${encodeURIComponent(slug)}/${encodeURIComponent(version)}/icon`,
   storeScreenshot: (slug: string, version: string, index: number) =>

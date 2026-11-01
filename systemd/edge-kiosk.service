@@ -15,10 +15,11 @@ Type=simple
 WorkingDirectory=__PROJECT_DIR__
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONPATH=__PROJECT_DIR__/shell
-# The system Python, not the project virtualenv: the window needs the
-# distribution's PySide6. It talks to the backend over Qt's own WebSocket, so
-# nothing from the virtualenv is required here.
-ExecStart=/usr/bin/python3 -m qml_kiosk.main
+# Not the project virtualenv: the window talks to the backend over Qt's own
+# WebSocket and needs nothing from it. install.sh fills in the system Python
+# when the distribution's PySide6 will do, because that build plays H.264, and
+# otherwise a virtualenv of its own with PySide6 from PyPI.
+ExecStart=__KIOSK_PYTHON__ -m qml_kiosk.main
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=10

@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.7.0 · 1 November 2026
+
+### New
+
+- **Plugin dependencies**: a plugin names what it needs under `dependencies`
+  in its manifest, Python packages and packages of the distribution, on Arch,
+  Debian, Ubuntu and Fedora. They show on the plugin
+  page and install along with the plugin. Python packages need no rights and
+  land in a folder of the plugin's own; system packages ask for the password.
+  What cannot be installed blocks the plugin and names the command to run.
+  The package now depends on `uv` and `python-packaging`
+- **Plugin settings pages**: a plugin can bring its own page for the settings
+  dialog, in a sandboxed frame
+- **Search and sorting** on the plugin page: by name in both directions,
+  newest first and best rated
+- The settings window comes as a finished program with every release, built
+  on an old Ubuntu so it runs on current distributions too. `install.sh`
+  downloads it when `npm` and `cargo` are missing
+- **More distributions**: `install.sh` now runs through on Ubuntu 22.04 and
+  24.04, Debian 13, Fedora 43 and Bazzite. Without a recent PySide6 on the
+  system the kiosk gets a virtualenv of its own with PySide6 from PyPI, and
+  the installer names the system libraries it needs, with the command
+- The installer pins Python 3.13 and leaves out the development packages
+- Plugins install off the event loop, so the display keeps
+  updating during a long installation
+
 ## 1.6.0 · 25 October 2026
 
 The first release with a package. Backend and settings window share one
