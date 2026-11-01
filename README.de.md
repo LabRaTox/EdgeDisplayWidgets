@@ -189,6 +189,17 @@ das Anwendungsmenü.
 
 ## Installation
 
+### Mit einem Befehl (Ubuntu, Debian, Fedora, Bazzite)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LabRaTox/EdgeDisplayWidgets/main/scripts/get.sh | bash
+```
+
+Das holt `uv`, falls es fehlt, entpackt das neueste Release nach
+`~/.local/share/edge-dashboard/app` und startet den Installer. Der nennt
+fehlende Systembibliotheken samt Befehl. Danach denselben Befehl noch einmal
+ausführen. Auch ein Update läuft so, Einstellungen bleiben dabei erhalten.
+
 ### Als Paket (Arch, CachyOS)
 
 Die Paketdateien liegen im Repository unter `packaging/aur/`, und an jedem

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### New
+
+- **One-line install and update** for systems without the Arch package:
+  `scripts/get.sh`
+
 ## 1.7.0 · 1 November 2026
 
 ### New

@@ -188,6 +188,17 @@ unchanged and the settings window still opens from the application menu.
 
 ## Installation
 
+### With one command (Ubuntu, Debian, Fedora, Bazzite)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LabRaTox/EdgeDisplayWidgets/main/scripts/get.sh | bash
+```
+
+This fetches `uv` if it is missing, unpacks the newest release into
+`~/.local/share/edge-dashboard/app` and starts the installer, which names any
+missing system libraries with the command. Then run the same command again.
+Updating works the same way, and the settings stay.
+
 ### As a package (Arch, CachyOS)
 
 The package files are in the repository under `packaging/aur/`, and every
