@@ -15,7 +15,9 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# 2.12 or newer: older versions pull in tao 0.35, which draws its own tall GTK
+# header bar on Wayland instead of leaving the frame to the compositor.
+tauri = { version = "2.12", features = [] }
 tauri-plugin-log = "2"
 log = "0.4"
 tauri-plugin-single-instance = "2"
