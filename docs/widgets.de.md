@@ -439,6 +439,60 @@ gilt als leer und verliert Varianten und Optionen. Eine lesbare Datei mit
 ungültigem `options`-Block behält ihre Varianten und verliert nur die
 Optionen, und ein einziges ungültiges Feld nimmt die ganze Liste mit.
 
+## Designregeln
+
+Das sind Empfehlungen. Ein Widget, das bewusst anders aussieht, ist willkommen,
+und nichts prüft ein Plugin darauf. Du bekommst dafür ohne Aufwand eine Kachel,
+die neben den anderen gut aussieht und jedem Design folgt.
+
+**Farben aus dem Design nehmen.** `Ui` ist ein Singleton in `EdgeDash` mit den
+Werten des aktiven Designs: `Ui.fg`, `Ui.muted`, `Ui.accent`, `Ui.ok`, `Ui.warn`,
+`Ui.bad`, `Ui.surface`, `Ui.border`, `Ui.font`. `ok`, `warn` und `bad` stehen für
+ihre Bedeutung, nicht für Dekoration. Eine feste Farbe ist in Ordnung, wo sie
+Daten sind, etwa die Farbe eines Kalenders oder ein Bild. `Qt.rgba(1, 1, 1, ...)`
+besser meiden, auf einem hellen Design verschwindet es. Dafür gibt es die Töne
+`Ui.pressed` und `Ui.track`.
+
+**Ecken aus dem Design nehmen.** `Ui.corner` ist der Radius der Kacheln, in einem
+Design 0, im anderen 12. Für etwas, das gern rund wäre, gibt es `Ui.pill(height)`.
+
+**Platz für Finger lassen.** Alles zum Antippen ist mindestens 44 Pixel groß
+(`Ui.touch`). Das Display wird mit dem Finger bedient, nicht mit der Maus.
+
+**Eine Hauptaktion je Ansicht.** Sie bekommt den gefüllten Knopf oder den `Fab`,
+alles andere bleibt schlicht.
+
+Die Bausteine erledigen das alles schon. `import EdgeDash` liefert:
+
+| Baustein | Wofür | Wichtigste Eigenschaften |
+|---|---|---|
+| `Card` | eine Fläche in einer Kachel | `interactive`, `tapped()` |
+| `Chip` | ein Filter, ein Datum, ein Reiter | `label`, `on`, `tapped()` |
+| `IconButton` | ein Symbol zum Antippen | `icon`, `tint`, `iconSize`, `on`, `tapped()` |
+| `ActionButton` | ein Knopf mit Text | `label`, `icon`, `filled`, `fill`, `tint`, `tapped()` |
+| `Fab` | der runde Knopf in der Ecke | `icon`, `tapped()` |
+| `SectionHeader` | eine Überschrift in einer Kachel | `text`, `alert` |
+| `Slider` | ein Wert, in beide Richtungen | `value`, `maximum`, `vertical`, `dimmed`, `shown`, `moved()`, `finished()` |
+| `Glyph` | ein Symbol in einer Farbe | `name`, `tint`, `size` |
+
+```qml
+import QtQuick
+import EdgeDash
+
+Item {
+    Card {
+        anchors.fill: parent
+        interactive: true
+        onTapped: console.log("geöffnet")
+        SectionHeader { x: 12; y: 10; text: "Heute"; alert: true }
+    }
+    Fab { anchors.right: parent.right; anchors.bottom: parent.bottom; onTapped: add() }
+}
+```
+
+Sie brauchen Edge Dash 1.7.3, setze also `min_app_version`, wenn du sie nutzt.
+`plugin-sources/todo` und `plugin-sources/volume` nutzen die meisten davon.
+
 ## Einbinden
 
 Es gibt zwei Konfigurationsdateien: `config.yaml` als Vorlage und
@@ -639,7 +693,8 @@ Drei Unterschiede zu einem eingebauten Widget:
 * **Die Anzeige importiert `EdgeDash` statt `".."`.** Der Ordner liegt nicht
   neben den gemeinsamen Bausteinen. `import EdgeDash` liefert `Heading`,
   `Chart`, `CoreBars`, `Confirm`, `MetricWidget`, `Style` und
-  `Temperatures`, aus denselben Dateien wie für die eingebauten Anzeigen.
+  `Temperatures`, aus denselben Dateien wie für die eingebauten Anzeigen,
+  dazu die Bausteine unter [Designregeln](#designregeln).
 * **Das Modul importiert absolut:** `from backend.modules.base import Module,
   SettingField, register_module`. Es darf nur die Namen anmelden, die unter
   `modules` stehen, und keinen, den es schon gibt. Ein Widget kann das

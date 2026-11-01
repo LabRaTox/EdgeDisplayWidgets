@@ -13,3 +13,12 @@ Confirm 1.0 ../Confirm.qml
 MetricWidget 1.0 ../widgets/MetricWidget.qml
 singleton Style 1.0 ../Style.qml
 singleton Temperatures 1.0 ../widgets/Temperatures.qml
+singleton Ui 1.0 ../Ui.qml
+Glyph 1.0 ../Glyph.qml
+Card 1.0 ../Card.qml
+Chip 1.0 ../Chip.qml
+IconButton 1.0 ../IconButton.qml
+ActionButton 1.0 ../ActionButton.qml
+Fab 1.0 ../Fab.qml
+SectionHeader 1.0 ../SectionHeader.qml
+Slider 1.0 ../Slider.qml

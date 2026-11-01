@@ -123,7 +123,9 @@ def _satisfied(spec: str, search: list[str]) -> bool:
 
 
 def missing_python(plugin_id: str, specs: list[str]) -> list[str]:
-    search = [str(folder(plugin_id)), *sys.path]
+    # What another plugin brought does not count: it leaves with that plugin.
+    others = str(folder(plugin_id).parent)
+    search = [str(folder(plugin_id)), *(path for path in sys.path if not path.startswith(others))]
     return [spec for spec in specs if not _satisfied(spec, search)]
 
 

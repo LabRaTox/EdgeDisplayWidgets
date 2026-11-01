@@ -428,6 +428,60 @@ empty and loses its variants and its options. A readable file with an
 invalid `options` block keeps its variants and loses only the options, and
 a single invalid field takes the whole list with it.
 
+## Design rules
+
+These are recommendations. A widget that looks different on purpose is
+welcome, and nothing checks a plugin for them. What they give you is a tile
+that sits well next to the others and follows every theme, without effort.
+
+**Take colours from the theme.** `Ui` is a singleton in `EdgeDash` with the
+active theme's values: `Ui.fg`, `Ui.muted`, `Ui.accent`, `Ui.ok`, `Ui.warn`,
+`Ui.bad`, `Ui.surface`, `Ui.border`, `Ui.font`. Use `ok`, `warn` and `bad` for
+what they mean and not as decoration. A fixed colour is fine where it is data,
+like a calendar's own colour or a picture. Avoid `Qt.rgba(1, 1, 1, ...)`: on a
+light theme it disappears. `Ui.pressed` and `Ui.track` are the tints for that.
+
+**Take corners from the theme.** `Ui.corner` is the radius of the tiles, 0 in
+one theme and 12 in another. For something that would like to be round use
+`Ui.pill(height)`.
+
+**Leave room for fingers.** Anything to tap is at least 44 pixels (`Ui.touch`),
+and the display is used with a finger, not a mouse.
+
+**One main action per view.** It gets the filled button or the `Fab`,
+everything else stays plain.
+
+The building blocks do all of this already. `import EdgeDash` provides:
+
+| Block | For | Main properties |
+|---|---|---|
+| `Card` | a surface inside a tile | `interactive`, `tapped()` |
+| `Chip` | a filter, a date, a tab | `label`, `on`, `tapped()` |
+| `IconButton` | a symbol to tap | `icon`, `tint`, `iconSize`, `on`, `tapped()` |
+| `ActionButton` | a button with a word | `label`, `icon`, `filled`, `fill`, `tint`, `tapped()` |
+| `Fab` | the round button in the corner | `icon`, `tapped()` |
+| `SectionHeader` | a heading inside a tile | `text`, `alert` |
+| `Slider` | a value, in either direction | `value`, `maximum`, `vertical`, `dimmed`, `shown`, `moved()`, `finished()` |
+| `Glyph` | an icon in a colour | `name`, `tint`, `size` |
+
+```qml
+import QtQuick
+import EdgeDash
+
+Item {
+    Card {
+        anchors.fill: parent
+        interactive: true
+        onTapped: console.log("opened")
+        SectionHeader { x: 12; y: 10; text: "Today"; alert: true }
+    }
+    Fab { anchors.right: parent.right; anchors.bottom: parent.bottom; onTapped: add() }
+}
+```
+
+They need Edge Dash 1.7.3, so set `min_app_version` when you use them.
+`plugin-sources/todo` and `plugin-sources/volume` use most of them.
+
 ## Wiring it up
 
 There are two config files: `config.yaml` as the template and
@@ -621,7 +675,8 @@ Three differences from a built-in widget:
 * **The view imports `EdgeDash` instead of `".."`.** Its folder is not next
   to the shared building blocks. `import EdgeDash` provides `Heading`,
   `Chart`, `CoreBars`, `Confirm`, `MetricWidget`, `Style` and
-  `Temperatures`, from the same files the built-in views use.
+  `Temperatures`, from the same files the built-in views use, and the
+  blocks under [Design rules](#design-rules).
 * **The module imports absolutely:** `from backend.modules.base import
   Module, SettingField, register_module`. It may register only the names
   listed under `modules`, and none that already exists, so a widget cannot

@@ -779,6 +779,17 @@ def test_uv_is_found_outside_the_path_of_a_service(tmp_path, monkeypatch):
     assert dependencies.find_uv() == str(uv)
 
 
+def test_another_plugins_package_does_not_count(plugins_dir, monkeypatch):
+    """Otherwise a plugin breaks when the one that brought the package leaves."""
+    other = dependencies.folder("other")
+    info = other / "needy_lib-1.0.dist-info"
+    info.mkdir(parents=True)
+    (info / "METADATA").write_text("Metadata-Version: 2.1\nName: needy-lib\nVersion: 1.0\n")
+    monkeypatch.syspath_prepend(str(other))
+    assert dependencies.missing_python("needy", ["needy-lib"]) == ["needy-lib"]
+    assert dependencies.missing_python("other", ["needy-lib"]) == []
+
+
 def test_a_satisfied_dependency_installs_nothing(plugins_dir, monkeypatch):
     monkeypatch.setattr(dependencies, "_run", lambda c: pytest.fail(f"ran {c}"))
     assert _install(_with_needs({"python": ["httpx>=0.1"]})).id == "needy"

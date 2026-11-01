@@ -80,3 +80,16 @@ def test_every_view_has_a_manifest():
         if path.stem not in SHARED and not (MANIFESTS / f"{widget_id(path.name)}.json").is_file()
     ]
     assert not orphans, f"no manifest for: {', '.join(orphans)}"
+
+
+def test_every_shared_block_is_offered_to_plugins():
+    """A file in the window's qmldir that is missing from EdgeDash's would
+    work for built-in views and fail for every installed one."""
+    qml = Path(__file__).resolve().parent.parent / "shell" / "qml_kiosk" / "qml"
+    own = {line.split()[-1] for line in (qml / "qmldir").read_text().splitlines() if line.strip()}
+    offered = {line.split()[-1].removeprefix("../")
+               for line in (qml / "EdgeDash" / "qmldir").read_text().splitlines()
+               if line.strip() and not line.startswith(("#", "module"))}
+    assert own <= offered
+    assert all((qml / name).is_file() for name in offered)
+

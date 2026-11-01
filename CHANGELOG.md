@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.7.3 · 1 November 2026
+
+### New
+
+- **Building blocks for widgets** in `EdgeDash`: `Card`, `Chip`, `IconButton`,
+  `ActionButton`, `Fab`, `SectionHeader`, `Slider`, `Glyph` and the `Ui`
+  singleton. They follow the theme, down to its corners. Using them is a
+  choice, the guide has the design rules
+
+### Fixed
+
+- A plugin no longer counts a Python package another plugin brought as its
+  own, which left it broken once that plugin was removed
+
 ## 1.7.1 · 1 November 2026
 
 ### New
