@@ -18,6 +18,13 @@ ApplicationWindow {
     height: 720
     color: theme ? theme["bg"] : "#0a0a0a"
     title: "Edge Dashboard"
+    // Behind everything, so it has to come first.
+    Wallpaper {
+        anchors.fill: parent
+        sources: bridge.wallpapers
+        page: deck.item ? deck.item.currentIndex : 0
+    }
+
     /*
      * No decoration: this is a display, not a window anyone moves around.
      *

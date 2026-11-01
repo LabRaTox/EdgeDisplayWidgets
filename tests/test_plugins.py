@@ -810,3 +810,35 @@ def test_settings_page_is_served_sandboxed(plugins_dir, app):
         assert "sandbox allow-scripts" in policy and "default-src 'none'" in policy
         assert "allow-same-origin" not in policy
         assert client.get("/api/plugins/other/settings-page").status_code == 404
+
+
+# -- wallpapers --------------------------------------------------------------
+
+
+def _theme_zip(names: list[str], files: tuple[str, ...]) -> bytes:
+    buffer = io.BytesIO()
+    manifest = {"app": "edgedash", "type": "theme", "id": "wall-theme", "version": "1.0.0",
+                "wallpapers": names}
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("wall-theme/manifest.json", json.dumps(manifest))
+        archive.writestr("wall-theme/theme.css", ":root { --bg: #000; }")
+        for name in files:
+            archive.writestr(f"wall-theme/{name}", b"x")
+    return buffer.getvalue()
+
+
+def test_a_theme_brings_its_wallpapers_in_order(plugins_dir):
+    plugin = _install(_theme_zip(["w/b.jpg", "w/a.png"], ("w/a.png", "w/b.jpg")))
+    assert [path.name for path in plugin.wallpaper_files] == ["b.jpg", "a.png"]
+
+
+@pytest.mark.parametrize("names", [["w/missing.jpg"], ["w/a.txt"], ["../outside.jpg"]])
+def test_a_wallpaper_that_cannot_be_shown_is_refused(names, plugins_dir):
+    with pytest.raises(plugins.PluginError, match="wallpaper"):
+        _install(_theme_zip(names, ("w/a.txt",)))
+    assert not (plugins_dir / "wall-theme").exists()
+
+
+def test_a_theme_without_wallpapers_stays_as_it_was(plugins_dir):
+    assert _install(_theme_zip([], ())).wallpaper_files == []
+

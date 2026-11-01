@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.7.4 · Unreleased
+
+### New
+
+- **Wallpapers in themes**: a theme plugin can bring pictures that lie behind
+  the pages, one per page in turn, fading on a page change
+
 ## 1.7.3 · 1 November 2026
 
 ### New

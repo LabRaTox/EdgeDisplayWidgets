@@ -52,6 +52,7 @@ TYPES = ("widget", "theme")
 
 #: Font files a theme may bring along in `fonts/`.
 FONT_SUFFIXES = (".ttf", ".otf", ".woff2")
+WALLPAPER_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
 
 
 def plugins_dir() -> Path:
@@ -120,6 +121,15 @@ class Plugin:
         if "module" not in self.manifest:
             return None
         return inside(self.path, self.manifest["module"])
+
+    @property
+    def wallpaper_files(self) -> list[Path]:
+        """The pictures a theme lays behind the pages, in manifest order."""
+        names = self.manifest.get("wallpapers")
+        if self.type != "theme" or not isinstance(names, list):
+            return []
+        found = (inside(self.path, name) for name in names)
+        return [p for p in found if p is not None and p.suffix.lower() in WALLPAPER_SUFFIXES]
 
     @property
     def settings_file(self) -> Path | None:

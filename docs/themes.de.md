@@ -109,6 +109,7 @@ mint-night/
   manifest.json
   theme.css       dasselbe Format wie die Dateien in frontend/css/themes/
   fonts/*.ttf     optional, auch .otf und .woff2
+  wallpapers/*    freiwillig: Bilder hinter den Seiten
 ```
 
 ```json
@@ -131,6 +132,12 @@ mint-night/
   (`default_theme: mint-night`). Die Namen der mitgelieferten Themes sind im
   Store reserviert.
 * **`css`** nennt das Stylesheet, ohne Angabe `theme.css`.
+* **`wallpapers`** nennt Bilder, die hinter den Seiten liegen, eine Liste von
+  Pfaden im Ordner (`.jpg`, `.png`, `.webp`). Jede Seite bekommt das nächste,
+  nach dem letzten geht es von vorn los, beim Seitenwechsel wird überblendet.
+  Die Bilder werden auf 2560x720 zugeschnitten, also am besten gleich in dieser
+  Größe anlegen. Damit Text lesbar bleibt, braucht `--card-bg` eine Deckkraft
+  von rund 0,8. Braucht Edge Dash 1.7.4, setze also `min_app_version`.
 
 Installiert und entfernt wird unter **Plugins → Designs**, ausgewählt unter
 **Design**. Wird das aktive Theme entfernt, wechselt die Anzeige zu `clean`.

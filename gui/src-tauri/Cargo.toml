@@ -1,6 +1,6 @@
 [package]
 name = "edgedash"
-version = "1.7.3"
+version = "1.7.4"
 description = "Settings window for the Edge Dashboard"
 authors = ["LabRaTox"]
 license = "MIT"

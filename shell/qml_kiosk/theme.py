@@ -232,6 +232,12 @@ def theme_file(name: str, themes_dir: pathlib.Path) -> pathlib.Path | None:
     return plugin.css_file if plugin is not None else None
 
 
+def wallpapers(name: str) -> list[str]:
+    """The pictures an installed theme lays behind the pages, as URLs."""
+    plugin = plugin_layout.load(name) if SAFE_NAME.match(name or "") else None
+    return [path.as_uri() for path in plugin.wallpaper_files] if plugin is not None else []
+
+
 def font_files(name: str) -> list[pathlib.Path]:
     """The fonts an installed theme brings, for the window to register."""
     plugin = plugin_layout.load(name) if SAFE_NAME.match(name or "") else None

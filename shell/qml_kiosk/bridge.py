@@ -62,6 +62,7 @@ class Bridge(QObject):
         #: Font files of installed themes already handed to Qt.
         self._fonts: set[str] = set()
         self._theme: dict = {}
+        self._wallpapers: list = []
         self._online = False
         self._retry_ms = 500
         #: The video player, while one is running, and the output it uses.
@@ -141,6 +142,7 @@ class Bridge(QObject):
         self._theme = theme_module.load(name, THEMES_DIR)
         self._metrics = theme_module.metrics(name, THEMES_DIR)
         self._effects = theme_module.effects(name, THEMES_DIR, self._theme)
+        self._wallpapers = theme_module.wallpapers(name)
         self._load_locale(cfg.get("default_language", "auto"))
 
         pages = []
@@ -190,6 +192,11 @@ class Bridge(QObject):
     @Property("QVariant", notify=themeChanged)
     def theme(self):
         return self._theme
+
+    @Property("QVariant", notify=themeChanged)
+    def wallpapers(self):
+        """Pictures behind the pages, one per page in turn. Empty for most themes."""
+        return self._wallpapers
 
     @Property("QVariant", notify=themeChanged)
     def metrics(self):

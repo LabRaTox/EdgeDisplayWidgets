@@ -107,6 +107,7 @@ mint-night/
   manifest.json
   theme.css       the same format as the files in frontend/css/themes/
   fonts/*.ttf     optional, .otf and .woff2 as well
+  wallpapers/*    optional pictures behind the pages
 ```
 
 ```json
@@ -128,6 +129,12 @@ mint-night/
   (`default_theme: mint-night`). The names of the shipped themes are reserved
   in the store.
 * **`css`** names the stylesheet, `theme.css` if omitted.
+* **`wallpapers`** names pictures that lie behind the pages, a list of paths
+  in the folder (`.jpg`, `.png`, `.webp`). Each page takes the next one, after
+  the last it starts over, and a page change fades between them. They are
+  cropped to 2560x720, so it is best to make them that size. For text to stay
+  readable `--card-bg` needs an opacity of about 0.8. This needs Edge Dash
+  1.7.4, so set `min_app_version`.
 
 Installing and removing happen under **Plugins → Designs**, choosing under
 **Design**. If the active theme is removed, the display switches to `clean`.

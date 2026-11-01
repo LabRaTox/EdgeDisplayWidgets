@@ -181,6 +181,8 @@ def install_archive(
             css = candidate.css_file
             if css is None or css.suffix != ".css":
                 raise PluginError(f"css {manifest.get('css', plugin_layout.DEFAULT_CSS)!r} is missing")
+            if len(candidate.wallpaper_files) != len(manifest.get("wallpapers") or []):
+                raise PluginError("a wallpaper is missing or not a picture")
         else:
             view = candidate.view_file
             if view is None or view.suffix != ".qml":
