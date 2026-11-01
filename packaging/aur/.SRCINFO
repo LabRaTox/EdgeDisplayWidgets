@@ -1,6 +1,6 @@
 pkgbase = edge-dashboard
 	pkgdesc = Touch dashboard for the Corsair Xeneon Edge: live widgets, plugin store, settings window
-	pkgver = 1.7.0
+	pkgver = 1.7.1
 	pkgrel = 1
 	url = https://github.com/LabRaTox/EdgeDisplayWidgets
 	install = edge-dashboard.install
@@ -36,7 +36,7 @@ pkgbase = edge-dashboard
 	optdepends = nvidia-utils: GPU readings on NVIDIA cards
 	optdepends = joplin-desktop: keep the notes in Joplin (AUR, or the AppImage)
 	optdepends = libnotify: notify-send for quick actions
-	source = edge-dashboard-1.7.0.tar.gz::https://github.com/LabRaTox/EdgeDisplayWidgets/archive/refs/tags/v1.7.0.tar.gz
+	source = edge-dashboard-1.7.1.tar.gz::https://github.com/LabRaTox/EdgeDisplayWidgets/archive/refs/tags/v1.7.1.tar.gz
 	sha256sums = 9e90a0633ba7ed0443df355d9413f96cb91f081effc484cbba2be026872fe933
 
 pkgname = edge-dashboard

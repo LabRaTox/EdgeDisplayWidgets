@@ -1,11 +1,17 @@
 # Changelog
 
-## Unreleased
+## 1.7.1 · 1 November 2026
 
 ### New
 
 - **One-line install and update** for systems without the Arch package:
   `scripts/get.sh`
+
+### Changed
+
+- On Arch the installer names the packages for the system PySide6 when the
+  kiosk cannot load
+- README brought up to date
 
 ## 1.7.0 · 1 November 2026
 

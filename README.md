@@ -9,7 +9,8 @@
 Dashboard for the **Corsair Xeneon Edge 14.5"** (2560x720), the second touch
 display that sits under the monitors. It runs on Linux, developed and used
 daily on [CachyOS](https://cachyos.org/) (Arch Linux) with KDE Plasma and an
-NVIDIA or AMD GPU. Three parts: a local FastAPI server, a kiosk window in QML that
+NVIDIA or AMD GPU. The installation is also checked on Ubuntu, Debian, Fedora
+and Bazzite. Three parts: a local FastAPI server, a kiosk window in QML that
 fills the display, and **EDGE//DASH**, a separate desktop application for the
 settings.
 
@@ -18,9 +19,10 @@ settings.
   (Open-Meteo), media controls (MPRIS), YouTube tiles, smart lights
   (Govee + Tuya), quick actions, pomodoro, notes.
 - **Plugins from a store**: more widgets and themes install from the plugin
-  store with one click, among them a calendar with Nextcloud, desktop
-  notifications, Discord, an RSS reader, a slideshow, a doodle pad and the moon phase. Updates show up on
-  their own, and your own widgets can be submitted from the same window.
+  store with one click, among them desktop notifications, Discord, an RSS
+  reader, a slideshow, a doodle pad and the moon phase. Plugins bring their
+  own dependencies. Updates show up on their own, and your own widgets can be
+  submitted from the same window.
 - **Notes, locally or in Joplin**: folders, folder colours, search, pinning
   and checklists that tick with a tap. Stored in a file on this PC or in the
   Joplin desktop app, where changes made on the PC appear on the display a few
@@ -103,30 +105,25 @@ a frame even when the value repeats.
 
 ### Operating system
 
-- **Linux** with systemd (Arch / CachyOS reference; Fedora / Ubuntu work
-  if you adapt the package names).
-- Wayland or X11 session for the kiosk display detection (Sway, Hyprland,
-  KDE Plasma, GNOME, all supported via either `wlr-randr` or `xrandr`).
+- **Linux** with systemd, x86_64. Developed on Arch and CachyOS. The
+  installation is checked on Ubuntu 22.04 and 24.04, Debian 13, Fedora 43,
+  Bazzite and Arch; other distributions should run as well.
+- Wayland or X11. The kiosk window finds its display by itself.
 
 ### Hard dependencies
 
-| Component | Purpose | Arch package |
-|-----------|---------|--------------|
-| Python ≥ 3.11 | runtime | `python` |
-| [uv](https://github.com/astral-sh/uv) | virtualenv + dependency manager, also for the Python packages of plugins | `uv` |
-| PySide6 6.10 or newer | the kiosk window (Qt Quick) and the video player (Qt WebEngine), `install.sh` fetches it if missing | `pyside6` |
-| `systemd` | user services | (preinstalled) |
+The installation takes care of most of these:
 
-```bash
-sudo pacman -S python uv pyside6
-```
+| Component | Purpose | Comes from |
+|-----------|---------|------------|
+| [uv](https://github.com/astral-sh/uv) | virtualenvs and dependencies, also the Python packages of plugins | the one-line install fetches it |
+| Python 3.13 | runtime | `uv` fetches it if missing |
+| PySide6 6.10 or newer | the kiosk window (Qt Quick) and the video player (Qt WebEngine) | the system, otherwise PyPI, see [Installation](#installation) |
+| WebKitGTK 4.1 | the settings window | the system, the installer names the package |
+| `systemd` | user services | preinstalled |
 
-Node and Rust are needed only to build the settings window; the installer says
-so if they are missing and carries on without it.
-
-```bash
-sudo pacman -S nodejs npm rust webkit2gtk-4.1
-```
+Node and Rust are needed only to build the settings window yourself. Without
+them the installer downloads the finished program from the release.
 
 ### Optional dependencies (per module)
 
@@ -144,7 +141,8 @@ sudo pacman -S nodejs npm rust webkit2gtk-4.1
 
 ### Desktop environments
 
-Built and used on KDE Plasma 6 (Wayland). What the other environments need:
+Built and used on KDE Plasma 6 (Wayland). What the other environments need,
+which matters most on Ubuntu, Debian and Fedora, where GNOME is the default:
 
 | Session | Kiosk out of the task list | Tray icon |
 |---|---|---|
@@ -188,7 +186,7 @@ unchanged and the settings window still opens from the application menu.
 
 ## Installation
 
-### With one command (Ubuntu, Debian, Fedora, Bazzite)
+### With one command (all distributions)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LabRaTox/EdgeDisplayWidgets/main/scripts/get.sh | bash
@@ -198,6 +196,9 @@ This fetches `uv` if it is missing, unpacks the newest release into
 `~/.local/share/edge-dashboard/app` and starts the installer, which names any
 missing system libraries with the command. Then run the same command again.
 Updating works the same way, and the settings stay.
+
+This works on Arch and CachyOS too, but there the package is the better way,
+because updates then come through pacman.
 
 ### As a package (Arch, CachyOS)
 
@@ -239,15 +240,14 @@ cd EdgeDisplayWidgets
 
 That is the whole installation. When it finishes, the dashboard is on the
 display, the tray icon is there, the settings window is in the application
-menu, and everything comes back at the next login. Nothing else has to be run
-by hand.
+menu, and everything comes back at the next login.
 
 The installer, step by step:
 
 1. Checks what is present and names the package for anything missing:
    `uv`, a systemd user session and a panel that can show a tray icon.
-2. Runs `uv sync` to create `.venv/` from `uv.lock`, then sets up the kiosk's
-   PySide6.
+2. Runs `uv sync` to create `.venv/` from `uv.lock`, on Python 3.13 and without
+   the development packages, then sets up the kiosk's PySide6.
 3. Builds the settings window, if `npm` and `cargo` are there. Otherwise it
    downloads the finished program from the GitHub release. If neither works,
    everything else still runs, only the settings UI is missing.
@@ -257,10 +257,12 @@ The installer, step by step:
    whatever way that compositor understands (see
    [Desktop environments](#desktop-environments)).
 6. Renders both systemd units into `~/.config/systemd/user/`, with the project
-   path and the `uv` path baked in.
+   path, the `uv` path and the kiosk's Python baked in.
 7. Enables and starts them, then reports whether they came up.
 
-Re-running is idempotent. Options:
+Re-running is idempotent. It has to run after a `git pull` that brings new
+Python packages, because the services do not update the virtualenv themselves.
+Options:
 
 ```bash
 ./scripts/install.sh --no-build      # skip building the settings window
@@ -274,7 +276,8 @@ H.264 and AAC. Otherwise it creates `.venv-kiosk` with PySide6 from PyPI (about
 700 MB). That is the case on Ubuntu and Debian among others and needs no work
 on Python, the installer only names the system libraries, with the command.
 YouTube plays over VP9 and Opus then; only videos that exist in H.264 alone
-do not play in this build.
+do not play in this build. On Arch the installer names the packages for the
+system PySide6 instead.
 
 ### Afterwards
 
@@ -292,6 +295,9 @@ systemctl --user stop   edge-dashboard edge-kiosk         # stop both
 PYTHONPATH=$PWD/shell /usr/bin/python3 -m qml_kiosk.main
 ```
 
+If the installer created `.venv-kiosk`, use the Python in there in place of
+`/usr/bin/python3`.
+
 It picks the output matching the Edge's native `2560×720` and fills it. If
 the display appears later than the window (a cold boot), the window moves over
 by itself when it shows up. `--help` lists the overrides; see
@@ -299,7 +305,7 @@ by itself when it shows up. `--help` lists the overrides; see
 
 ### Settings window
 
-The installer builds it. These are the commands behind that, for development
+The installer builds it or downloads it from the release. These are the commands behind that, for development
 or for a rebuild after changing the UI:
 
 ```bash
@@ -370,7 +376,7 @@ answering the request.
 ```bash
 uv sync                                # install deps into ./.venv
 uv run python -m backend.main          # API on http://127.0.0.1:8765
-uv run pytest                          # ~350 tests, should pass clean
+uv run pytest                          # ~400 tests, should pass clean
 ```
 
 To run as a service without the installer, copy both units from `systemd/`
@@ -385,7 +391,8 @@ does not use the backend's virtualenv.
 The dashboard loads its config in this order:
 
 1. `$EDGE_CONFIG` environment variable (explicit path, useful for tests).
-2. `config.local.yaml` in the project root, if it exists. Installed as a
+2. `config.local.yaml` in the project root, if it exists; after the one-line
+   install that is `~/.local/share/edge-dashboard/app`. Installed as a
    package, `~/.config/edge-dashboard/config.yaml` instead.
 3. `config.yaml` (the committed template).
 
@@ -713,14 +720,19 @@ the built-in ones, the installed ones, and what the
 - **Dependencies**: what a plugin needs besides its own files shows in its
   details and installs along with it. Python packages need no special rights
   and land in `~/.local/share/edge-dashboard/plugins/.deps/<id>/`; system
-  packages ask for the password through `pkexec`. If something cannot be
-  installed, the plugin is not installed either, and the message names the
+  packages ask for the password through `pkexec`, with pacman, apt or dnf. On
+  image-based systems such as Bazzite the message names the `rpm-ostree`
+  command. If something cannot be installed, the plugin is not installed either, and the message names the
   command to run by hand. Then install again.
+- **Search and sort**: a field above the list searches name, description and
+  author, and the list sorts by name in both directions, newest first or best
+  rated.
 - **Updates**: a bar at the top names what has a newer version, and **Update
   all** fetches them. **Check for new plugins** looks again, on disk and in
   the store.
 - **Settings**: the switch on a card turns the widget's modules on and off,
-  **Plugin settings** opens its options. A plugin's detail page shows its
+  **Plugin settings** opens its options. Plugins can bring a page of their
+  own there, in a sandboxed frame. A plugin's detail page shows its
   description, screenshots, version history and rating.
 - **Themes**: under the **Designs** tab; an installed theme is then picked
   under **Theme**.
@@ -777,7 +789,8 @@ edge-kiosk --windowed                    # a normal window, for development
 edge-kiosk --show-cursor                 # keep the mouse pointer visible
 ```
 
-(`edge-kiosk` above is `PYTHONPATH=$PWD/shell /usr/bin/python3 -m qml_kiosk.main`.)
+(`edge-kiosk` comes with the package. Otherwise it stands for the command in
+[Launching the kiosk by hand](#launching-the-kiosk-by-hand).)
 
 The kiosk window has no keyboard shortcuts; systemd starts and stops it. In
 the video window, Esc closes the video. The cursor is hidden unless
@@ -850,7 +863,7 @@ file named by the config value and needs no list.
 ```bash
 uv sync                              # set up .venv
 uv run python -m backend.main        # dev server with auto-restart via uvicorn flags
-uv run pytest                        # ~350 tests
+uv run pytest                        # ~400 tests
 uv run ruff check                    # lint
 uv run ruff format                   # format
 ```
@@ -893,8 +906,11 @@ config.yaml           Committed template
 config.local.yaml     Gitignored, written by the settings window
 systemd/              User unit templates (backend + kiosk)
 packaging/            The Arch package: PKGBUILD, units and launchers for /usr
+.github/workflows/    Builds the settings window for every release
 scripts/
+  get.sh              The one-liner: install and update from the release
   install.sh          The installer, does everything below as well
+  fetch-settings-window.sh  Downloads the finished settings window
   install-desktop.sh  Icon and menu entry for the settings window
   window-rule.sh      Keeps the kiosk out of the task list, per compositor
   make-icon.py        Renders every icon file from backend/brand.py

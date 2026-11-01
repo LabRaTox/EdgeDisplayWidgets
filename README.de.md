@@ -9,7 +9,8 @@
 Dashboard für das **Corsair Xeneon Edge 14,5"** (2560x720), das zweite
 Touchdisplay unter dem Monitor. Läuft unter Linux, entwickelt und im
 Dauerbetrieb auf [CachyOS](https://cachyos.org/) (Arch Linux) mit KDE Plasma
-und NVIDIA- oder AMD-Grafik. Es besteht aus drei Teilen: einem lokalen FastAPI-Server,
+und NVIDIA- oder AMD-Grafik. Die Installation ist außerdem auf Ubuntu, Debian,
+Fedora und Bazzite geprüft. Es besteht aus drei Teilen: einem lokalen FastAPI-Server,
 einem Kioskfenster in QML, das die Anzeige füllt, und
 **EDGE//DASH**, einer eigenen Anwendung für die Einstellungen.
 
@@ -18,10 +19,10 @@ einem Kioskfenster in QML, das die Anzeige füllt, und
   Wetter (Open-Meteo), Mediensteuerung über MPRIS, YouTube-Kacheln, smarte
   Lampen (Govee und Tuya), Quick Actions, Pomodoro und Notizen.
 - **Plugins aus dem Store**: weitere Widgets und Designs kommen mit einem
-  Klick aus dem Plugin-Store, darunter ein Kalender mit Nextcloud,
-  Desktop-Benachrichtigungen, Discord, ein RSS-Reader, eine Diashow, eine Zeichenfläche und die Mondphase. Updates
-  melden sich von selbst, und eigene Widgets lassen sich im selben Fenster
-  einreichen.
+  Klick aus dem Plugin-Store, darunter Desktop-Benachrichtigungen, Discord,
+  ein RSS-Reader, eine Diashow, eine Zeichenfläche und die Mondphase. Plugins
+  bringen ihre Abhängigkeiten selbst mit. Updates melden sich von selbst, und
+  eigene Widgets lassen sich im selben Fenster einreichen.
 - **Notizen, lokal oder in Joplin**: Ordner, Ordnerfarben, Suche, Anheften und
   Checklisten zum Abhaken per Fingertipp. Gespeichert in einer Datei auf
   diesem PC oder in der Joplin-Desktop-App; was am PC in Joplin geändert wird,
@@ -105,27 +106,23 @@ bleibt.
 
 ## Voraussetzungen
 
-- **Linux mit systemd.** Entwickelt auf Arch und CachyOS, andere
-  Distributionen laufen mit angepassten Paketnamen.
+- **Linux mit systemd, x86_64.** Entwickelt auf Arch und CachyOS. Die
+  Installation ist auf Ubuntu 22.04 und 24.04, Debian 13, Fedora 43, Bazzite
+  und Arch geprüft. Andere Distributionen sollten ebenso laufen.
 - **Wayland oder X11.** Das Kioskfenster sucht sich seine Anzeige selbst.
 
-| Bestandteil | Wofür | Arch-Paket |
+Um die meisten Bestandteile kümmert sich die Installation:
+
+| Bestandteil | Wofür | Woher |
 |---|---|---|
-| Python ab 3.11 | Laufzeit | `python` |
-| [uv](https://github.com/astral-sh/uv) | Umgebung und Abhängigkeiten, auch die Python-Pakete von Plugins | `uv` |
-| PySide6 ab 6.10 | das Kioskfenster (Qt Quick) und der Videoplayer (Qt-WebEngine), `install.sh` holt es, wenn es fehlt | `pyside6` |
+| [uv](https://github.com/astral-sh/uv) | Umgebungen und Abhängigkeiten, auch die Python-Pakete von Plugins | der Einzeiler installiert es |
+| Python 3.13 | Laufzeit | `uv` holt es, falls es fehlt |
+| PySide6 ab 6.10 | das Kioskfenster (Qt Quick) und der Videoplayer (Qt-WebEngine) | vom System, sonst von PyPI, siehe [Installation](#installation) |
+| WebKitGTK 4.1 | das Einstellungsfenster | System, der Installer nennt das Paket |
 | systemd | die beiden Dienste | vorinstalliert |
 
-```bash
-sudo pacman -S python uv pyside6
-```
-
-Node und Rust braucht nur der Bau des Einstellungsfensters. Fehlen sie, sagt
-der Installer das und macht ohne weiter.
-
-```bash
-sudo pacman -S nodejs npm rust webkit2gtk-4.1
-```
+Node und Rust braucht nur, wer das Einstellungsfenster selbst baut. Fehlen sie,
+lädt der Installer das fertige Programm aus dem Release.
 
 ### Je nach Modul
 
@@ -144,7 +141,8 @@ sudo pacman -S nodejs npm rust webkit2gtk-4.1
 ## Desktop-Umgebungen
 
 Entwickelt und benutzt unter KDE Plasma 6 auf Wayland. Was die anderen
-brauchen:
+brauchen, wichtig vor allem für Ubuntu, Debian und Fedora, die standardmäßig
+GNOME mitbringen:
 
 | Sitzung | Kiosk aus der Fensterliste | Symbol in der Leiste |
 |---|---|---|
@@ -189,7 +187,7 @@ das Anwendungsmenü.
 
 ## Installation
 
-### Mit einem Befehl (Ubuntu, Debian, Fedora, Bazzite)
+### Mit einem Befehl (alle Distributionen)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LabRaTox/EdgeDisplayWidgets/main/scripts/get.sh | bash
@@ -199,6 +197,9 @@ Das holt `uv`, falls es fehlt, entpackt das neueste Release nach
 `~/.local/share/edge-dashboard/app` und startet den Installer. Der nennt
 fehlende Systembibliotheken samt Befehl. Danach denselben Befehl noch einmal
 ausführen. Auch ein Update läuft so, Einstellungen bleiben dabei erhalten.
+
+Auf Arch und CachyOS funktioniert das ebenso, dort ist aber das Paket der
+bessere Weg, weil Updates dann über pacman laufen.
 
 ### Als Paket (Arch, CachyOS)
 
@@ -241,16 +242,15 @@ cd EdgeDisplayWidgets
 
 Das ist die ganze Installation. Danach steht das Dashboard auf dem Display,
 das Symbol ist in der Leiste, das Einstellungsfenster im Anwendungsmenü, und
-beim nächsten Anmelden kommt alles von selbst wieder. Von Hand ist nichts mehr
-nötig.
+beim nächsten Anmelden kommt alles von selbst wieder.
 
 Der Installer der Reihe nach:
 
 1. Prüft, was vorhanden ist, und nennt zu allem Fehlenden das Paket: `uv`,
    eine systemd-Benutzersitzung und eine Leiste, die ein
    Symbol anzeigen kann.
-2. Legt mit `uv sync` die virtuelle Umgebung aus `uv.lock` an und richtet das
-   PySide6 für den Kiosk ein.
+2. Legt mit `uv sync` die virtuelle Umgebung aus `uv.lock` an, mit Python 3.13
+   und ohne Entwicklungspakete, und richtet das PySide6 für den Kiosk ein.
 3. Baut das Einstellungsfenster, falls `npm` und `cargo` da sind. Sonst lädt
    es das fertige Programm aus dem GitHub-Release. Klappt beides nicht,
    funktioniert der Rest trotzdem, nur die Oberfläche fehlt.
@@ -259,10 +259,12 @@ Der Installer der Reihe nach:
 5. Sagt dem Compositor, dass das Kioskfenster nicht in die Fensterliste
    gehört, auf die Art, die dieser Compositor versteht.
 6. Schreibt beide systemd-Units nach `~/.config/systemd/user/`, mit dem
-   Projektpfad und dem Pfad zu `uv` eingesetzt.
+   Projektpfad, dem Pfad zu `uv` und dem Python des Kiosks eingesetzt.
 7. Aktiviert und startet sie und meldet, ob sie hochgekommen sind.
 
-Ein erneuter Lauf ändert nichts, was schon stimmt. Schalter:
+Ein erneuter Lauf ändert nichts, was schon stimmt. Nach einem `git pull` mit
+neuen Python-Paketen muss er laufen, denn die Dienste aktualisieren die Umgebung
+nicht selbst. Schalter:
 
 ```bash
 ./scripts/install.sh --no-build      # Einstellungsfenster nicht bauen
@@ -276,7 +278,8 @@ spielt auch H.264 und AAC. Sonst legt er `.venv-kiosk` mit PySide6 von PyPI an
 (etwa 700 MB). Das ist unter anderem auf Ubuntu und Debian der Fall und
 funktioniert ohne Handgriff am Python, nur die Systembibliotheken nennt der
 Installer samt Befehl. YouTube läuft damit über VP9 und Opus; nur Videos, die
-es ausschließlich in H.264 gibt, spielt diese Fassung nicht ab.
+es ausschließlich in H.264 gibt, spielt diese Fassung nicht ab. Unter Arch
+nennt der Installer stattdessen die Pakete für das System-PySide6.
 
 ### Danach
 
@@ -294,14 +297,17 @@ systemctl --user stop   edge-dashboard edge-kiosk         # beide anhalten
 PYTHONPATH=$PWD/shell /usr/bin/python3 -m qml_kiosk.main
 ```
 
+Hat der Installer `.venv-kiosk` angelegt, tritt das Python daraus an die Stelle
+von `/usr/bin/python3`.
+
 Es sucht die Anzeige mit der Auflösung 2560x720 und füllt sie. Taucht das
 Display später auf als das Fenster, etwa nach einem Kaltstart, zieht das
 Fenster von selbst um. `--help` listet die Schalter.
 
 ### Das Einstellungsfenster
 
-Der Installer baut es. Für Entwicklung oder nach Änderungen an der
-Oberfläche:
+Der Installer baut es oder lädt es aus dem Release. Für Entwicklung oder nach
+Änderungen an der Oberfläche:
 
 ```bash
 cd gui
@@ -348,7 +354,7 @@ gerade die Anfrage beantwortet.
 ```bash
 uv sync                                # Umgebung anlegen
 uv run python -m backend.main          # API auf http://127.0.0.1:8765
-uv run pytest                          # rund 350 Tests, sollten alle grün sein
+uv run pytest                          # rund 400 Tests, sollten alle grün sein
 ```
 
 Für den Dienstbetrieb beide Units aus `systemd/` nach
@@ -364,8 +370,9 @@ Geladen wird in dieser Reihenfolge:
 
 1. die Umgebungsvariable `$EDGE_CONFIG`, ein ausdrücklicher Pfad, nützlich für
    Tests
-2. `config.local.yaml` im Projektverzeichnis, falls vorhanden; beim Paket
-   stattdessen `~/.config/edge-dashboard/config.yaml`
+2. `config.local.yaml` im Projektverzeichnis, falls vorhanden; das ist nach dem
+   Einzeiler `~/.local/share/edge-dashboard/app`. Beim Paket stattdessen
+   `~/.config/edge-dashboard/config.yaml`
 3. `config.yaml`, die mitgelieferte Vorlage
 
 **Bearbeitet wird im Einstellungsfenster, nicht in der Datei.** Was dort
@@ -695,11 +702,15 @@ Stelle: die eingebauten, die installierten und das Angebot des
   die Kacheln sind also einen Moment ohne neue Daten, und der Kiosk liest die
   Konfiguration neu ein. Auf dem Display erscheint das Widget, sobald es unter
   **Layout** platziert ist.
+- **Suchen und sortieren**: über der Liste durchsucht ein Feld Name,
+  Beschreibung und Autor, sortiert wird nach Name in beiden Richtungen, nach den
+  neuesten oder den am besten bewerteten Plugins.
 - **Updates**: eine Leiste oben nennt, wofür es eine neue Version gibt,
   **Alle aktualisieren** holt sie. **Nach neuen Plugins sehen** schaut auf der
   Platte und im Store neu nach.
 - **Einstellungen**: der Schalter auf einer Karte schaltet die Module des
-  Widgets an und aus, **Plugin-Einstellungen** öffnet seine Optionen. Die
+  Widgets an und aus, **Plugin-Einstellungen** öffnet seine Optionen. Plugins
+  können dort eine eigene Seite mitbringen, in einem abgeschotteten Frame. Die
   Detailseite zeigt Beschreibung, Screenshots, Versionen und Bewertung.
 - **Designs**: im Reiter **Designs**; ein installiertes Design wird danach
   unter **Design** ausgewählt.
@@ -710,8 +721,10 @@ Stelle: die eingebauten, die installierten und das Angebot des
   steht in seinen Details unter **Angaben** und wird mitinstalliert.
   Python-Pakete landen ohne besondere Rechte in
   `~/.local/share/edge-dashboard/plugins/.deps/<id>/`, Systempakete fragen
-  über `pkexec` nach dem Passwort. Lässt sich etwas nicht installieren, wird
-  das Plugin nicht installiert, und die Meldung nennt den Befehl für die Hand.
+  über `pkexec` nach dem Passwort, mit pacman, apt oder dnf. Auf Systemen mit
+  Image wie Bazzite nennt die Meldung den `rpm-ostree`-Befehl. Lässt sich etwas
+  nicht installieren, wird das Plugin nicht installiert, und die Meldung nennt
+  den Befehl für die Hand.
   Danach einfach noch einmal installieren.
 - **Einreichen**: **Im Store anmelden** (über GitHub) und **Plugin
   einreichen** laden ein Archiv hoch. Eingereichtes wird geprüft, bevor es im
@@ -763,7 +776,8 @@ edge-kiosk --windowed                    # normales Fenster, für Entwicklung
 edge-kiosk --show-cursor                 # Mauszeiger sichtbar lassen
 ```
 
-(`edge-kiosk` steht für `PYTHONPATH=$PWD/shell /usr/bin/python3 -m qml_kiosk.main`.)
+(`edge-kiosk` kommt mit dem Paket. Sonst steht es für den Aufruf aus
+[Das Kioskfenster von Hand starten](#das-kioskfenster-von-hand-starten).)
 
 Tastenkürzel hat das Kioskfenster keine, gestartet und beendet wird es über
 systemd. Im Videofenster schließt Esc das Video. Der Mauszeiger ist
@@ -829,7 +843,7 @@ keine Liste.
 ```bash
 uv sync                              # Umgebung anlegen
 uv run python -m backend.main        # Server starten
-uv run pytest                        # rund 350 Tests
+uv run pytest                        # rund 400 Tests
 uv run ruff check                    # Linter
 uv run ruff format                   # Formatierer
 ```
@@ -873,8 +887,11 @@ config.yaml           Eingecheckte Vorlage
 config.local.yaml     Nicht in Git, vom Einstellungsfenster geschrieben
 systemd/              Vorlagen für die beiden Benutzer-Units
 packaging/            Das Arch-Paket: PKGBUILD, Units und Startskripte für /usr
+.github/workflows/    Baut das Einstellungsfenster für jedes Release
 scripts/
+  get.sh              Der Einzeiler: Installation und Update aus dem Release
   install.sh          Der Installer, erledigt alles Folgende mit
+  fetch-settings-window.sh  Lädt das fertige Einstellungsfenster
   install-desktop.sh  Symbol und Menüeintrag des Einstellungsfensters
   window-rule.sh      Hält den Kiosk aus der Fensterliste, je Compositor
   make-icon.py        Zeichnet alle Symboldateien aus backend/brand.py

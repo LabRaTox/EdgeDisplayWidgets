@@ -51,6 +51,8 @@ T64=""
 apt-cache show libasound2t64 >/dev/null 2>&1 && T64=t64
 KIOSK_LIBS_DEBIAN="libegl1 libgl1 libgbm1 libglib2.0-0${T64} libfontconfig1 libdbus-1-3 libnss3 libasound2${T64} libpulse0 libxkbcommon0 libxkbcommon-x11-0 libxkbfile1 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxtst6 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-sync1 libxcb-xfixes0 libxcb-xkb1 libwayland-client0 libwayland-cursor0 libwayland-egl1"
 KIOSK_LIBS_FEDORA="mesa-libEGL libglvnd-glx mesa-libgbm glib2 fontconfig dbus-libs nss alsa-lib pulseaudio-libs libxkbcommon libxkbcommon-x11 libxkbfile libXcomposite libXdamage libXrandr libXtst xcb-util-cursor xcb-util-image xcb-util-keysyms xcb-util-renderutil xcb-util-wm libwayland-client libwayland-cursor libwayland-egl"
+#: Arch has a current PySide6, so there the system's is the one to install.
+KIOSK_PACKAGES_ARCH="pyside6 python-yaml qt6-declarative qt6-websockets qt6-multimedia qt6-webengine"
 #: The Python both virtualenvs run on.
 PYTHON_VERSION="3.13"
 
@@ -141,7 +143,7 @@ else
         log "PySide6 for the kiosk: ready"
     else
         note "PySide6 for the kiosk cannot load: ${PROBLEM##*$'\n'}
-    $(pkg_hint qt6-base "$KIOSK_LIBS_DEBIAN" "$KIOSK_LIBS_FEDORA")"
+    $(pkg_hint "$KIOSK_PACKAGES_ARCH" "$KIOSK_LIBS_DEBIAN" "$KIOSK_LIBS_FEDORA")"
     fi
 fi
 
