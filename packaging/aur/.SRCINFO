@@ -37,6 +37,6 @@ pkgbase = edge-dashboard
 	optdepends = joplin-desktop: keep the notes in Joplin (AUR, or the AppImage)
 	optdepends = libnotify: notify-send for quick actions
 	source = edge-dashboard-1.7.3.tar.gz::https://github.com/LabRaTox/EdgeDisplayWidgets/archive/refs/tags/v1.7.3.tar.gz
-	sha256sums = bf07e2dd220001ad7a63402970c772eef09ed408a028d3ffa2809234633fc00e
+	sha256sums = 3fe350dd47ccb8b965375ae818690faf784898f89711431fc932187094b1c77c
 
 pkgname = edge-dashboard
