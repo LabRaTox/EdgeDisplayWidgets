@@ -62,7 +62,7 @@ source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 # On a new version: the sum belongs to the tag's tarball and can only be
 # computed once the tag is on GitHub. Then `updpkgsums` and
 # `makepkg --printsrcinfo > .SRCINFO`.
-sha256sums=('3fe350dd47ccb8b965375ae818690faf784898f89711431fc932187094b1c77c')
+sha256sums=('9a87bce1cb9548f34d5d7d3dec8ded084bbb147f19199e3332aa6d0be90ea8b3')
 
 _srcdir="EdgeDisplayWidgets-$pkgver"
 
