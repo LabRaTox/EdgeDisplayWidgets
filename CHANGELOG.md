@@ -6,6 +6,8 @@
 
 - **Wallpapers in themes**: a theme plugin can bring pictures that lie behind
   the pages, one per page in turn, fading on a page change
+- **Plugins by the same author**: a click on an author's name, on a card or
+  a detail page, shows all of their plugins
 
 ### Changed
 

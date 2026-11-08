@@ -18,7 +18,7 @@ import { PluginSettingsFrame } from "./PluginSettingsFrame";
 import { Field, applies, readPath, writePath } from "./Field";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
-import { InstalledDetail, StoreDetail, Warnings } from "./PluginDetail";
+import { ByAuthor, InstalledDetail, StoreDetail, Warnings } from "./PluginDetail";
 import { StoreSubmit } from "./StoreSubmit";
 import { ThemeSwatch, themeLabel } from "./ThemeView";
 
@@ -72,14 +72,19 @@ function nameOf(entry: Entry): string {
     : pick(entry.meta.name, entry.id);
 }
 
+/** Who made it. The built-in ones count as nobody's: they are the app's. */
+function authorOf(entry: Entry): string {
+  if (entry.kind === "store") return entry.entry.author;
+  return entry.meta.builtin ? "" : (entry.meta.author ?? "");
+}
+
 /** What a search looks through, in the window's language. */
 function searchTextOf(entry: Entry): string {
   const summary =
     entry.kind === "store"
       ? pick(entry.entry.i18n?.summary, entry.entry.summary)
       : pick(entry.meta.summary);
-  const author = entry.kind === "store" ? entry.entry.author : (entry.meta.author ?? "");
-  return `${nameOf(entry)} ${entry.id} ${summary} ${author}`.toLowerCase();
+  return `${nameOf(entry)} ${entry.id} ${summary} ${authorOf(entry)}`.toLowerCase();
 }
 
 /**
@@ -144,6 +149,8 @@ export function WidgetsView() {
   const [busy, setBusy] = useState("");
   const [filter, setFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  /** Only this author's plugins, after a click on a name. */
+  const [author, setAuthor] = useState("");
   const [sort, setSort] = useState<Sort>("name_asc");
   const [installOpen, setInstallOpen] = useState(false);
   const [submitOpen, setSubmitOpen] = useState(false);
@@ -211,6 +218,7 @@ export function WidgetsView() {
   // The topics count what the search left, so they show where the hits are.
   const needle = search.trim().toLowerCase();
   const entries = entriesOf(type)
+    .filter((e) => !author || authorOf(e) === author)
     .filter((e) => !needle || searchTextOf(e).includes(needle))
     .sort(compareEntries(sort, catalog));
 
@@ -294,6 +302,12 @@ export function WidgetsView() {
 
   if (!settings) return null;
 
+  const showAuthor = (name: string) => {
+    setAuthor(name);
+    setFilter("all");
+    setDetail(null);
+  };
+
   if (detail) {
     const fromStore = (catalog ?? []).find((s) => s.slug === detail.id) ?? null;
     if (detail.kind === "store") {
@@ -310,6 +324,7 @@ export function WidgetsView() {
               void install(entry).then(() => setDetail(null));
             }}
             onBack={() => setDetail(null)}
+            onAuthor={showAuthor}
           />
         </div>
       );
@@ -325,6 +340,7 @@ export function WidgetsView() {
             storeEntry={fromStore}
             user={user}
             onBack={() => setDetail(null)}
+            onAuthor={showAuthor}
           />
         </div>
       );
@@ -457,6 +473,17 @@ export function WidgetsView() {
               aria-label={t("widgets.search")}
               onChange={(event) => setSearch(event.target.value)}
             />
+            {author && (
+              <button
+                type="button"
+                className="author-chip"
+                title={t("widgets.author_filter_clear")}
+                onClick={() => setAuthor("")}
+              >
+                {t("widgets.author_only", { author })}
+                <span aria-hidden="true"> ✕</span>
+              </button>
+            )}
             <select
               value={sort}
               aria-label={t("widgets.sort")}
@@ -470,7 +497,7 @@ export function WidgetsView() {
             </select>
           </div>
           {visible.length === 0 ? (
-            <p className="empty-note">{t(needle ? "widgets.no_match" : "widgets.empty_category")}</p>
+            <p className="empty-note">{t(needle || author ? "widgets.no_match" : "widgets.empty_category")}</p>
           ) : (
             <div className="plugin-list">
               {visible.map((e) =>
@@ -484,6 +511,7 @@ export function WidgetsView() {
                     update={(catalog ?? []).find((s) => s.slug === e.id && s.update) ?? null}
                     busy={busy === e.id}
                     onUpdate={(s) => void install(s)}
+                    onAuthor={showAuthor}
                   />
                 ) : e.kind === "widget" ? (
                   <WidgetCard
@@ -494,6 +522,7 @@ export function WidgetsView() {
                     update={(catalog ?? []).find((s) => s.slug === e.id && s.update) ?? null}
                     busy={busy === e.id}
                     onUpdate={(s) => void install(s)}
+                    onAuthor={showAuthor}
                   />
                 ) : (
                   <StoreCard
@@ -503,6 +532,7 @@ export function WidgetsView() {
                     isTheme={type === "theme"}
                     busy={busy === e.id}
                     onInstall={() => void install(e.entry)}
+                    onAuthor={showAuthor}
                   />
                 ),
               )}
@@ -576,8 +606,10 @@ function WidgetCard({
   busy,
   onUpdate,
   onOpen,
+  onAuthor,
 }: {
   onOpen: () => void;
+  onAuthor: (author: string) => void;
   id: string;
   meta: WidgetMeta;
   update: StoreEntry | null;
@@ -617,11 +649,7 @@ function WidgetCard({
     }
   };
 
-  const details = [
-    `v${meta.version}`,
-    meta.author && !meta.builtin ? t("widgets.by_author", { author: meta.author }) : "",
-    meta.source === "local" ? t("widgets.local") : "",
-  ].filter(Boolean);
+  const showAuthor = Boolean(meta.author && !meta.builtin);
 
   return (
     <div
@@ -642,7 +670,16 @@ function WidgetCard({
           <button type="button" className="plugin-name" onClick={onOpen}>
             {name}
           </button>
-          <small>{details.join(" · ")}</small>
+          <small>
+            v{meta.version}
+            {showAuthor && (
+              <>
+                {" · "}
+                <ByAuthor author={meta.author!} onAuthor={onAuthor} />
+              </>
+            )}
+            {meta.source === "local" && ` · ${t("widgets.local")}`}
+          </small>
         </div>
 
         {update && <span className="line-break" aria-hidden="true" />}
@@ -860,8 +897,10 @@ function ThemeCard({
   busy,
   onUpdate,
   onOpen,
+  onAuthor,
 }: {
   onOpen: () => void;
+  onAuthor: (author: string) => void;
   id: string;
   meta: ThemeMeta;
   active: boolean;
@@ -885,11 +924,7 @@ function ThemeCard({
     }
   };
 
-  const details = [
-    `v${meta.version}`,
-    meta.author ? t("widgets.by_author", { author: meta.author }) : "",
-    meta.source === "local" ? t("widgets.local") : "",
-  ].filter(Boolean);
+  const showAuthor = Boolean(meta.author);
 
   return (
     <div className="plugin-card">
@@ -903,7 +938,17 @@ function ThemeCard({
           >
             {name}
           </button>
-          <small>{details.join(" · ")}</small>
+          <small>
+            v{meta.version}
+            {showAuthor && (
+              <>
+                {" · "}
+                {/* A built-in theme's author is the app; nothing to filter by. */}
+                <ByAuthor author={meta.author!} onAuthor={meta.builtin ? undefined : onAuthor} />
+              </>
+            )}
+            {meta.source === "local" && ` · ${t("widgets.local")}`}
+          </small>
         </div>
         {update && (
           <button
@@ -941,8 +986,10 @@ function StoreCard({
   busy,
   onInstall,
   onOpen,
+  onAuthor,
 }: {
   onOpen: () => void;
+  onAuthor: (author: string) => void;
   entry: StoreEntry;
   isTheme: boolean;
   busy: boolean;
@@ -969,7 +1016,7 @@ function StoreCard({
             {name}
           </button>
           <small>
-            v{entry.latest.version} · {t("widgets.by_author", { author: entry.author })}
+            v{entry.latest.version} · <ByAuthor author={entry.author} onAuthor={onAuthor} />
             {" · ♥ "}{entry.rating.up}
           </small>
         </div>

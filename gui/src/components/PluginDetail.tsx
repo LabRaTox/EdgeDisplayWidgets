@@ -8,6 +8,43 @@ import { Icon } from "./Icon";
 import { Rating } from "./Rating";
 import { ThemeSwatch, themeLabel } from "./ThemeView";
 
+/**
+ * "by <author>", with the name as a link to everything else by the same
+ * author. Inside a card, whose name opens the detail page, the click must not
+ * reach the card as well. Without `onAuthor` it is plain text.
+ */
+export function ByAuthor({
+  author,
+  onAuthor,
+  className,
+}: {
+  author: string;
+  onAuthor?: (author: string) => void;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  if (!onAuthor) return <span className={className}>{t("widgets.by_author", { author })}</span>;
+  // The sentence comes from the translation; only the name in it is a button.
+  const [before = "", after = ""] = t("widgets.by_author", { author: "\u0001" }).split("\u0001");
+  return (
+    <span className={className}>
+      {before}
+      <button
+        type="button"
+        className="author-link"
+        title={t("widgets.author_filter", { author })}
+        onClick={(event) => {
+          event.stopPropagation();
+          onAuthor(author);
+        }}
+      >
+        {author}
+      </button>
+      {after}
+    </span>
+  );
+}
+
 /** What the store's review found, shown before installing and on the detail page. */
 export function Warnings({ warnings }: { warnings: StoreWarning[] }) {
   const { t } = useTranslation();
@@ -162,8 +199,11 @@ export function InstalledDetail({
   storeEntry,
   user,
   onBack,
+  onAuthor,
 }: {
   user: StoreUser | null;
+  /** Show every plugin by this author. */
+  onAuthor?: (author: string) => void;
   id: string;
   kind: "widget" | "theme";
   meta: WidgetMeta | ThemeMeta;
@@ -212,7 +252,9 @@ export function InstalledDetail({
           <small className="detail-category">{facts.category ?? facts.type}</small>
           <h2 className={meta.builtin && kind === "theme" ? "capitalize" : undefined}>{name}</h2>
           {meta.author && (
-            <small className="detail-author">{t("widgets.by_author", { author: meta.author })}</small>
+            <small className="detail-author">
+              <ByAuthor author={meta.author} onAuthor={meta.builtin ? undefined : onAuthor} />
+            </small>
           )}
         </div>
       </header>
@@ -264,8 +306,11 @@ export function StoreDetail({
   user,
   onInstall,
   onBack,
+  onAuthor,
 }: {
   user: StoreUser | null;
+  /** Show every plugin by this author. */
+  onAuthor?: (author: string) => void;
   slug: string;
   /** What the list already had, so something stands there at once. */
   known: StoreEntry | null;
@@ -330,7 +375,9 @@ export function StoreDetail({
         <div>
           <small className="detail-category">{facts.category ?? facts.type}</small>
           <h2>{name}</h2>
-          <small className="detail-author">{t("widgets.by_author", { author: entry.author })}</small>
+          <small className="detail-author">
+            <ByAuthor author={entry.author} onAuthor={onAuthor} />
+          </small>
         </div>
         <div className="detail-head-buttons">
           <button

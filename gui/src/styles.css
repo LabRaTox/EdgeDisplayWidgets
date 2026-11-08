@@ -1904,6 +1904,43 @@ textarea:disabled {
   width: auto;
 }
 
+/* The author's name links to everything else by them. It reads as part of
+   the line it sits in until the pointer is on it. */
+.author-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+.author-link:hover {
+  color: var(--accent);
+  text-decoration-style: solid;
+}
+
+/* The author filter in force, beside the search; a click lifts it. */
+.author-chip {
+  flex: none;
+  padding: 0 12px;
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.author-chip:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
 /* A plugin's own settings page: the frame is as tall as the page says. */
 .plugin-settings-frame {
   display: block;
