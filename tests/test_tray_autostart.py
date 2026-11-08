@@ -139,6 +139,7 @@ def systemctl(monkeypatch, tmp_path: Path):
 
     monkeypatch.setattr(autostart.subprocess, "run", fake_run)
     monkeypatch.setattr(autostart, "UNIT_DIR", tmp_path / "systemd")
+    monkeypatch.setattr(autostart, "LOGIN_ENTRY", tmp_path / "autostart" / "edge-dashboard-start.desktop")
     return calls
 
 
@@ -165,6 +166,14 @@ def test_enabling_writes_both_units_and_enables_them(systemctl, tmp_path: Path):
     # Both units in one call, backend first — the window follows what it talks to.
     enable = next(call for call in systemctl if call[2] == "enable")
     assert enable[3:] == list(autostart.UNITS)
+
+    # The login entry for sessions without graphical-session.target.
+    entry = (tmp_path / "autostart" / "edge-dashboard-start.desktop").read_text()
+    assert "systemctl --user start edge-dashboard.service edge-kiosk.service" in entry
+    assert "NotShowIn=KDE;GNOME;" in entry
+
+    autostart.set_enabled(False)
+    assert not (tmp_path / "autostart" / "edge-dashboard-start.desktop").exists()
 
 
 def test_disabling_without_units_is_not_an_error(systemctl):

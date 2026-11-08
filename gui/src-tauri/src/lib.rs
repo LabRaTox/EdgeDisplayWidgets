@@ -46,7 +46,9 @@ fn remember_dropped(app: &tauri::AppHandle, event: &DragDropEvent) {
 ///
 /// Errors come back as a code (`not-dropped`, `not-a-file`, `too-large`,
 /// `io:…`); the page puts them into words in its own language.
-#[tauri::command]
+// `async`: a plain command runs on the GTK main thread, and reading up to
+// 64 MB there freezes the window.
+#[tauri::command(async)]
 fn read_dropped_file(
     path: String,
     dropped: tauri::State<'_, Dropped>,
@@ -81,6 +83,16 @@ fn read_dropped_file(
     Ok(tauri::ipc::Response::new(data))
 }
 
+/// What the kiosk needs from the graphical session to find its screen.
+const SESSION_VARS: [&str; 6] = [
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XAUTHORITY",
+    "XDG_CURRENT_DESKTOP",
+    "XDG_SESSION_TYPE",
+    "DBUS_SESSION_BUS_ADDRESS",
+];
+
 /// Units the dashboard consists of, in the order they should come up.
 const UNITS: [&str; 2] = ["edge-dashboard.service", "edge-kiosk.service"];
 
@@ -96,8 +108,25 @@ const UNITS: [&str; 2] = ["edge-dashboard.service", "edge-kiosk.service"];
 /// backend with a dark display is not what anyone meant by "start it".
 /// `systemctl start` on a running unit does nothing, so this is safe to call
 /// whenever the window cannot reach anything.
-#[tauri::command]
+#[tauri::command(async)]
 fn start_dashboard() -> Result<(), String> {
+    // The units only see the user manager's environment. KDE and GNOME put
+    // the display there, sway, Hyprland without uwsm and plain X11 window
+    // managers often do not, and then the kiosk has no screen to open. This
+    // window runs inside the session, so it hands over what it has.
+    let session: Vec<&str> = SESSION_VARS
+        .iter()
+        .copied()
+        .filter(|name| std::env::var_os(name).is_some())
+        .collect();
+    if !session.is_empty() {
+        let _ = std::process::Command::new("systemctl")
+            .arg("--user")
+            .arg("import-environment")
+            .args(&session)
+            .status();
+    }
+
     let output = std::process::Command::new("systemctl")
         .arg("--user")
         .arg("start")
@@ -123,16 +152,20 @@ fn start_dashboard() -> Result<(), String> {
 /// checked here rather than trusted: the page is ours, but `xdg-open` acts on
 /// whatever scheme it is handed, and `file://` or a desktop entry would be a
 /// very different thing to open.
-#[tauri::command]
+#[tauri::command(async)]
 fn open_url(url: String) -> Result<(), String> {
     if !(url.starts_with("https://") || url.starts_with("http://")) {
         return Err("only http and https links can be opened".into());
     }
-    std::process::Command::new("xdg-open")
+    let mut child = std::process::Command::new("xdg-open")
         .arg(&url)
         .spawn()
-        .map(|_| ())
-        .map_err(|error| format!("could not open the link: {error}"))
+        .map_err(|error| format!("could not open the link: {error}"))?;
+    // Reaped in the background, or every click leaves a zombie behind.
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

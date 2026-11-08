@@ -22,7 +22,7 @@ import shutil
 from collections.abc import Callable
 from pathlib import Path
 
-from dbus_next import BusType, Variant
+from dbus_next import BusType, Message, MessageType, Variant
 from dbus_next.aio import MessageBus
 from dbus_next.constants import PropertyAccess
 from dbus_next.service import ServiceInterface, dbus_property, method, signal
@@ -323,6 +323,9 @@ class SystemTray:
         self.bus: MessageBus | None = None
         self.item: TrayItem | None = None
         self.menu: TrayMenu | None = None
+        self._name = ""
+        #: Re-registrations in flight; the loop only keeps weak references.
+        self._pending: set[asyncio.Task] = set()
 
         self.clients = 0
         #: Tasks waiting on the settings windows we started.
@@ -353,22 +356,60 @@ class SystemTray:
         self.bus.export(ITEM_PATH, self.item)
         self.bus.export(MENU_PATH, self.menu)
 
-        name = f"org.kde.StatusNotifierItem-{os.getpid()}-1"
+        self._name = f"org.kde.StatusNotifierItem-{os.getpid()}-1"
         try:
-            await self.bus.request_name(name)
-            introspection = await self.bus.introspect(WATCHER_NAME, WATCHER_PATH)
-            proxy = self.bus.get_proxy_object(WATCHER_NAME, WATCHER_PATH, introspection)
-            watcher = proxy.get_interface(WATCHER_NAME)
-            await watcher.call_register_status_notifier_item(name)
+            await self.bus.request_name(self._name)
         except Exception as exc:
-            # No panel that speaks StatusNotifierItem — no reason to stop the
-            # backend over it.
-            logger.info(f"tray icon could not register (no supported panel?): {exc}")
+            logger.info(f"tray icon could not claim its bus name: {exc}")
             await self.stop()
             return False
 
-        logger.info("tray icon registered")
+        # The watcher belongs to the panel. It may come after us (GNOME's
+        # AppIndicator extension, Waybar, any race at login) and it comes
+        # back after a panel restart; each time it knows nothing of the
+        # icon, so every new owner of the name gets it registered again.
+        self.bus.add_message_handler(self._on_bus_message)
+        with contextlib.suppress(Exception):
+            await self.bus.call(Message(
+                destination="org.freedesktop.DBus",
+                path="/org/freedesktop/DBus",
+                interface="org.freedesktop.DBus",
+                member="AddMatch",
+                signature="s",
+                body=["type='signal',sender='org.freedesktop.DBus',"
+                      "interface='org.freedesktop.DBus',member='NameOwnerChanged',"
+                      f"arg0='{WATCHER_NAME}'"],
+            ))
+        if await self._register():
+            logger.info("tray icon registered")
+        else:
+            logger.info("no tray host yet (no supported panel?), waiting for one")
         return True
+
+    async def _register(self) -> bool:
+        if self.bus is None:
+            return False
+        try:
+            introspection = await self.bus.introspect(WATCHER_NAME, WATCHER_PATH)
+            proxy = self.bus.get_proxy_object(WATCHER_NAME, WATCHER_PATH, introspection)
+            watcher = proxy.get_interface(WATCHER_NAME)
+            await watcher.call_register_status_notifier_item(self._name)
+        except Exception:
+            return False
+        return True
+
+    def _on_bus_message(self, message: Message) -> None:
+        if (message.message_type == MessageType.SIGNAL
+                and message.member == "NameOwnerChanged"
+                and message.body and message.body[0] == WATCHER_NAME
+                and len(message.body) > 2 and message.body[2]):
+            task = asyncio.get_running_loop().create_task(self._reregister())
+            self._pending.add(task)
+            task.add_done_callback(self._pending.discard)
+
+    async def _reregister(self) -> None:
+        if await self._register():
+            logger.info("tray host appeared, icon registered")
 
     async def stop(self) -> None:
         bus, self.bus = self.bus, None

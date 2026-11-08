@@ -21,6 +21,9 @@ def _sandbox_plugins_and_token(tmp_path_factory: pytest.TempPathFactory,
     monkeypatch.setenv("XDG_CONFIG_HOME", str(base / "config"))
     # The notes file lives under the data directory.
     monkeypatch.setenv("XDG_DATA_HOME", str(base / "data"))
+    # The test client calls itself "testserver"; the host check would
+    # otherwise refuse it like a rebinding page.
+    monkeypatch.setenv("EDGE_ALLOWED_HOSTS", "testserver")
 
 
 @pytest.fixture

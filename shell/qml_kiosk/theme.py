@@ -319,7 +319,9 @@ def effects(name: str, themes_dir: pathlib.Path, colours: dict | None = None) ->
             if "repeating-linear-gradient" in gradient:
                 colour_match = _COLOUR.search(gradient)
                 stops = re.findall(r"([\d.]+)px", gradient)
-                if colour_match and len(stops) >= 2:
+                # A period under one pixel would ask for thousands of lines,
+                # or infinitely many at zero.
+                if colour_match and len(stops) >= 2 and float(stops[-1]) >= 1:
                     out["scanline_color"] = _resolve(colour_match.group(1), colours)
                     out["scanline_thickness"] = float(stops[-1]) - float(stops[-2])
                     out["scanline_period"] = float(stops[-1])

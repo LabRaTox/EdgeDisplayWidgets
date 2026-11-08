@@ -21,7 +21,8 @@
 set -euo pipefail
 
 PROJECT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-SYSTEMD_USER_DIR="${HOME}/.config/systemd/user"
+# systemd looks for user units under $XDG_CONFIG_HOME, not always ~/.config.
+SYSTEMD_USER_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/systemd/user"
 UNITS=(edge-dashboard.service edge-kiosk.service)
 
 DO_BUILD=1
@@ -65,9 +66,14 @@ note() { NOTES+=("$1"); warn "$1"; }
 # are there so the message is useful rather than merely correct.
 pkg_hint() {
     local arch="$1" debian="$2" fedora="$3"
-    if command -v pacman >/dev/null; then echo "sudo pacman -S ${arch}"
+    # Bazzite, Silverblue, Kinoite and Aurora have dnf too, but their /usr is
+    # read-only: packages go into the image and need a reboot.
+    if [ -e /run/ostree-booted ]; then echo "rpm-ostree install ${fedora} && systemctl reboot"
+    elif command -v pacman >/dev/null; then echo "sudo pacman -S ${arch}"
     elif command -v apt >/dev/null; then echo "sudo apt install ${debian}"
     elif command -v dnf >/dev/null; then echo "sudo dnf install ${fedora}"
+    # openSUSE names most libraries like Fedora does; close enough for a hint.
+    elif command -v zypper >/dev/null; then echo "sudo zypper install ${fedora}"
     else echo "install: ${arch}"
     fi
 }
@@ -81,6 +87,12 @@ command -v uv >/dev/null || fail "'uv' not found. $(pkg_hint uv 'curl -LsSf http
 UV_PATH=$(command -v uv)
 log "uv: ${UV_PATH}"
 
+# Void, Alpine, Gentoo with OpenRC, Devuan: no systemd, so no user units to
+# run the dashboard. Said now rather than after everything is installed.
+command -v systemctl >/dev/null || fail "Edge Dash runs as systemd user services, and this system has no systemctl"
+# NixOS has no /usr/bin/python3 and no FHS libraries for the PyPI Qt wheels.
+[ -e /etc/NIXOS ] && fail "NixOS is not supported by this installer"
+
 # A user instance has to exist, or none of the units can be enabled. This is a
 # property of the session, not of the distribution.
 if ! systemctl --user is-system-running >/dev/null 2>&1; then
@@ -92,7 +104,9 @@ log "systemd user session: reachable"
 
 # The tray icon needs a panel that implements StatusNotifierItem. Most do;
 # GNOME needs an extension for it.
-if command -v qdbus6 >/dev/null && qdbus6 2>/dev/null | grep -q StatusNotifierWatcher; then
+# busctl comes with systemd; qdbus6 is called qdbus-qt6 on Fedora and is
+# often missing on Debian and Ubuntu.
+if busctl --user list 2>/dev/null | grep -q StatusNotifierWatcher; then
     log "tray: a StatusNotifierItem host is running"
 elif [[ "${XDG_CURRENT_DESKTOP:-}" == *GNOME* ]]; then
     note "GNOME without an AppIndicator extension shows no tray icon.
@@ -158,13 +172,17 @@ elif [ -x "$BINARY" ] && [ "$BINARY" -nt "${PROJECT_DIR}/gui/package.json" ]; th
     log "already built: ${BINARY}"
 elif command -v npm >/dev/null && command -v cargo >/dev/null; then
     log "building, this takes a minute or two"
-    (
+    if (
         cd "${PROJECT_DIR}/gui"
         [ -d node_modules ] || npm install
         # The bundle targets (.deb, AppImage) are not needed to run from a
         # checkout, and the AppImage step pulls tools off the network.
         npm run tauri build -- --no-bundle
-    ) && log "built: ${BINARY}" || note "the settings window failed to build; the tray icon will have nothing to open"
+    ); then
+        log "built: ${BINARY}"
+    else
+        note "the settings window failed to build; the tray icon will have nothing to open"
+    fi
 elif VERSION=$(sed -n 's/^version = "\(.*\)"$/\1/p' "${PROJECT_DIR}/pyproject.toml" | head -1) &&
      "${PROJECT_DIR}/scripts/fetch-settings-window.sh" "$VERSION" "$BINARY"; then
     log "downloaded: ${BINARY}"
@@ -210,13 +228,52 @@ for unit in "${UNITS[@]}"; do
 done
 systemctl --user daemon-reload
 
+# Sessions without graphical-session.target (XFCE, Cinnamon, MATE, LXQt...)
+# never pull the enabled units in. A login entry starts them there; KDE and
+# GNOME reach the target, so the entry stays out of their way. The settings
+# window's autostart switch writes the same file (backend/autostart.py).
+LOGIN_ENTRY="${XDG_CONFIG_HOME:-${HOME}/.config}/autostart/edge-dashboard-start.desktop"
+write_login_entry() {
+    mkdir -p "$(dirname "$LOGIN_ENTRY")"
+    cat > "$LOGIN_ENTRY" <<ENTRY
+[Desktop Entry]
+Type=Application
+Name=Edge Dashboard
+Comment=Starts the Edge Dashboard services where the session does not
+Exec=sh -c "systemctl --user import-environment DISPLAY WAYLAND_DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE 2>/dev/null; exec systemctl --user start ${UNITS[*]}"
+NotShowIn=KDE;GNOME;
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+ENTRY
+}
+
 if [ "$DO_ENABLE" = "1" ]; then
     systemctl --user enable "${UNITS[@]}" >/dev/null 2>&1 && log "enabled for the next login"
+    write_login_entry && log "login entry: ${LOGIN_ENTRY}"
+    # Tiling compositors read neither the target nor XDG autostart entries
+    # unless something like uwsm or dex is set up.
+    if ! systemctl --user is-active --quiet graphical-session.target; then
+        DESKTOP_NAME="${XDG_CURRENT_DESKTOP:-}"
+        case "${DESKTOP_NAME,,}" in
+            *hyprland*) note "Hyprland does not start user services by itself. Add to hyprland.conf:
+    exec-once = systemctl --user import-environment DISPLAY WAYLAND_DISPLAY; systemctl --user start ${UNITS[*]}" ;;
+            *sway*|*i3*) note "${DESKTOP_NAME} does not start user services by itself. Add to its config:
+    exec sh -c 'systemctl --user import-environment DISPLAY WAYLAND_DISPLAY; systemctl --user start ${UNITS[*]}'" ;;
+        esac
+    fi
 else
     log "autostart not enabled (--no-autostart)"
 fi
 
 if [ "$DO_START" = "1" ]; then
+    # The units see only the user manager's environment. KDE and GNOME put
+    # the display there; sway, Hyprland without uwsm and many X11 sessions do
+    # not, and the kiosk would have no screen to open.
+    SESSION_VARS=()
+    for var in DISPLAY WAYLAND_DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE; do
+        [ -n "${!var:-}" ] && SESSION_VARS+=("$var")
+    done
+    [ ${#SESSION_VARS[@]} -gt 0 ] && systemctl --user import-environment "${SESSION_VARS[@]}"
     systemctl --user restart "${UNITS[@]}"
     sleep 2
     for unit in "${UNITS[@]}"; do

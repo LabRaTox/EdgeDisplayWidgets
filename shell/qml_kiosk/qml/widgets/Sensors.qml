@@ -29,10 +29,24 @@ Item {
         return theme ? theme["accent"] : "#00e0ff"
     }
 
+
+    /*
+     * Patched in place: set() leaves a row whose values did not change alone,
+     * while clear() and append() destroyed and rebuilt every delegate on
+     * every poll.
+     */
+    function patchRows(entries) {
+        while (rows.count > entries.length) rows.remove(rows.count - 1)
+        for (var i = 0; i < entries.length; i++) {
+            if (i < rows.count) rows.set(i, entries[i])
+            else rows.append(entries[i])
+        }
+    }
+
     function receive(module, data) {
         payload = data
-        rows.clear()
         if (!data || data.available !== true) {
+            rows.clear()
             note = (data && data.reason) ? data.reason : bridge.tr("common.unavailable")
             return
         }
@@ -42,13 +56,15 @@ Item {
             if (primary.length > 0) readings = primary
         }
         if (readings.length === 0) {
+            rows.clear()
             note = bridge.tr("widget.sensors.empty")
             return
         }
         note = ""
+        var entries = []
         for (var i = 0; i < readings.length; i++) {
             var r = readings[i]
-            rows.append({
+            entries.push({
                 "chip": String(r.display_chip || r.chip || "").toLowerCase(),
                 "label": String(r.display_label || r.label || ""),
                 "value": r.temp_c.toFixed(1) + "°C",
@@ -56,6 +72,7 @@ Item {
                 "primary": r.primary === true
             })
         }
+        patchRows(entries)
     }
 
     ListModel { id: rows }

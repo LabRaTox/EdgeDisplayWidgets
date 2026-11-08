@@ -57,7 +57,10 @@ Item {
 
     Timer {
         interval: root.showSeconds ? 250 : 1000
-        running: true
+        // Only while the page is in view (Main.qml hides the others);
+        // the first tick on return shows the right time straight away.
+        running: root.visible
+        triggeredOnStart: true
         repeat: true
         onTriggered: root.now = Date.now()
     }

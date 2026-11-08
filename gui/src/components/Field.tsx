@@ -170,9 +170,11 @@ export function Field({
           onChange={(e) => onChange(e.target.value)}
           onFocus={(e) => {
             // A masked secret is not a value anyone wants to edit character by
-            // character — clear it on focus so typing replaces it, and leaving
-            // it untouched keeps the mask (and therefore the stored secret).
-            if (field.secret && e.target.value === SECRET_MASK) onChange("");
+            // character. Selecting it lets typing replace it and Backspace
+            // clear it, while just clicking in and out keeps the mask and
+            // therefore the stored secret. Clearing it here would erase the
+            // secret on the next save of anything else.
+            if (field.secret && e.target.value === SECRET_MASK) e.target.select();
           }}
         />
       );

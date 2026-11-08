@@ -231,8 +231,12 @@ async def device_poll(device_code: str) -> dict[str, Any]:
     has to widen its interval, which is why `backoff` is passed on.
     """
     answer = await _request("POST", "/api/auth/device/poll", json={"device_code": device_code})
+    if not isinstance(answer, dict):
+        raise StoreError("unexpected answer from the store")
     status = answer.get("status", "pending")
     if status == "ok":
+        if not answer.get("token"):
+            raise StoreError("the store confirmed the sign-in but sent no token")
         write_token(answer["token"])
         return {"status": "ok", "user": answer.get("user")}
     if status == "slow_down":
@@ -327,6 +331,8 @@ async def upload(data: bytes, filename: str = "plugin.zip") -> dict[str, Any]:
 async def my_plugins() -> dict[str, Any]:
     """The signed-in author's plugins, only those for Edge Dash."""
     answer = await _request("GET", "/api/me/plugins", auth=True)
+    if not isinstance(answer, dict):
+        raise StoreError("unexpected answer from the store")
     plugins = [p for p in answer.get("plugins", []) if p.get("app", "deckswitch") == APP]
     return {"count": len(plugins), "plugins": plugins}
 

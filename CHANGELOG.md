@@ -1,11 +1,80 @@
 # Changelog
 
-## 1.7.4 · Unreleased
+## 1.7.4 · 8 November 2026
 
 ### New
 
 - **Wallpapers in themes**: a theme plugin can bring pictures that lie behind
   the pages, one per page in turn, fading on a page change
+
+### Changed
+
+- Other distributions and desktops:
+  - the installer stops early without systemd, and on NixOS
+  - package hints for openSUSE (zypper) and for image-based systems such as
+    Bazzite and Silverblue (rpm-ostree)
+  - the window rule works on Plasma 5
+  - KWin reloads without `qdbus6`, and the tray check no longer needs it
+  - the installer and the settings window hand the display variables to the
+    user services, so the kiosk finds its screen on sway, Hyprland and X11
+    window managers
+  - `XDG_CONFIG_HOME` is honoured for the user units
+  - Flatpak and Snap apps get their icons in the quick action app picker
+  - GPU names are found on Debian, Ubuntu and openSUSE
+- The kiosk only rebuilds its pages when the layout really changed. Saving a
+  module option no longer resets running countdowns
+- After the backend comes back, the kiosk reads the config again
+- The network chart scales back down once a peak has scrolled out
+- The config file is written readable for its owner only, it holds API keys
+- The kiosk finds the Xeneon by its model name and in device pixels, so a
+  scaled or rotated output works. With several screens and no match it waits
+  in a window instead of covering the main monitor, and it hides while the
+  display is unplugged
+- Programs started from quick actions, Steam games and the settings window
+  run in a systemd scope of their own and survive a restart of the backend
+- Autostart on XFCE, Cinnamon, MATE, LXQt and other sessions without
+  `graphical-session.target`, through an XDG autostart entry. The installer
+  names the line to add on Hyprland, Sway and i3
+- The tray icon appears when the panel starts after the backend or restarts
+- The backend refuses requests for foreign host names while bound to
+  loopback (DNS rebinding). `EDGE_ALLOWED_HOSTS` adds names
+- The Hyprland snippet uses the `windowrule` syntax of 0.53 and later, and
+  `windowrulev2` on older versions
+- Kiosk: pages out of view are no longer drawn, and clocks, weather age,
+  heartbeat and media progress rest while their page is hidden. A running
+  countdown still rings. Widget guide: rest while out of view
+- Kiosk: a data frame is converted once per widget that wants it rather than
+  once per tile, sensor and disk rows are updated in place, and the media
+  progress ticks once a second instead of four times
+- Dependencies updated
+
+### Fixed
+
+- Saving the settings of the Quick Actions widget deleted the commands, URLs
+  and folders of every action
+- Clicking into a secret field and saving something else erased the stored
+  secret
+- Wallpapers: the picture darkened while fading, loaded twice at start,
+  jumped to the first page's picture on every save and stayed in memory
+  after switching to a theme without wallpapers
+- The kiosk opened two connection attempts per failure while the backend was
+  away
+- Two saves at the same moment could overwrite each other or tear modules
+  down twice
+- A probe that hung kept running after every reload
+- A note typed just before a page rebuild was lost
+- The settings window froze while reading a large dropped file or starting
+  the services, and left a zombie process per opened link
+- Dashboard texts were missing in the settings window when it started before
+  the backend
+- A store sign-in that expired or was declined kept polling forever
+- An installation that failed for lack of disk space was reported as
+  "installed, but its module failed to load"
+- The weather tile cut off the rain line under the hourly forecast once an
+  hour with rain came in after the tile was built
+- Smaller fixes: version numbers with unusual digits, media actions with a
+  `name` field, Joplin answers that are not JSON, autostart status when
+  systemctl hangs, Tuya errors no longer show the user id
 
 ## 1.7.3 · 1 November 2026
 

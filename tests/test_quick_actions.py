@@ -422,3 +422,16 @@ def test_tile_sizes_survive_the_config_api(tmp_path, monkeypatch):
         assert (stored["label_size"], stored["icon_size"]) == (22, 70)
         too_big = dict(action, icon_size=500)
         assert client.post("/api/quick_actions/config", json={"actions": [too_big]}).status_code == 400
+
+
+def test_outside_service_only_inside_a_unit(monkeypatch):
+    from backend import host
+
+    monkeypatch.delenv("INVOCATION_ID", raising=False)
+    assert host.outside_service(["xdg-open", "x"]) == ["xdg-open", "x"]
+    monkeypatch.setenv("INVOCATION_ID", "abc")
+    monkeypatch.setattr(host.shutil, "which", lambda name: "/usr/bin/systemd-run")
+    assert host.outside_service(["xdg-open", "x"])[-3:] == ["--", "xdg-open", "x"]
+    assert host.outside_service(["xdg-open", "x"])[:3] == ["systemd-run", "--user", "--scope"]
+    monkeypatch.setattr(host.shutil, "which", lambda name: None)
+    assert host.outside_service(["xdg-open", "x"]) == ["xdg-open", "x"]

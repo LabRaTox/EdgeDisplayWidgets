@@ -147,4 +147,4 @@ die Regeln aus der Liste, alles andere im Stylesheet bleibt ohne Wirkung.
 
 ---
 
-[Ein Widget schreiben](widgets.de.md) · [Warum es so aussieht](entscheidungen.md) · [README](../README.de.md) · [English](themes.md)
+[Ein Widget schreiben](widgets.de.md) · [Einrichtung und Entwicklung](setup.de.md) · [README](../README.de.md) · [English](themes.md)

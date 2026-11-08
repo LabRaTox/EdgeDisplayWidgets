@@ -214,6 +214,7 @@
   "widgets.finding.dynamic": "Code zur Laufzeit",
   "widgets.finding.filesystem": "Dateizugriff",
   "widgets.sign_in": "Im Store anmelden",
+  "widgets.sign_in_failed": "Die Anmeldung ist abgelaufen oder wurde abgelehnt. Bitte noch einmal versuchen.",
   "widgets.sign_out": "Abmelden",
   "widgets.open_github": "GitHub öffnen",
   "widgets.type.widget": "Widgets",

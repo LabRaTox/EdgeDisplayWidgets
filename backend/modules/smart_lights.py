@@ -458,7 +458,10 @@ class SmartLightsModule(Module):
                 errors[name] = None
             except Exception as exc:
                 logger.warning(f"smart_lights: {name} fetch failed: {exc}")
-                errors[name] = str(exc)[:200]
+                # Not str(exc): httpx puts the request URL in it, and Tuya's
+                # URL carries the user id, a secret, all the way to the kiosk.
+                status = getattr(getattr(exc, "response", None), "status_code", None)
+                errors[name] = f"{type(exc).__name__} {status}" if status else type(exc).__name__
 
         self._meta_by_id = {d["id"]: d.get("_meta", {}) for d in merged}
         # Strip _meta from the public payload — frontend doesn't need it.

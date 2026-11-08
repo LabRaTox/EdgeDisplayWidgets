@@ -12,6 +12,7 @@
 import { create } from "zustand";
 
 import { api, inApp, startDashboard, waitForBackend } from "./api/client";
+import i18n, { loadDashboardStrings } from "./i18n";
 import type {
   QuickActionsConfig,
   SettingField,
@@ -81,60 +82,15 @@ export const useStore = create<StoreState>((set, get) => ({
   quickActions: null,
   error: null,
 
-  async load(afterStart = false) {
-    try {
-      // Quick actions are fetched separately because their endpoint returns
-      // the unmasked tile list this window is allowed to edit, while
-      // /api/settings deliberately scrubs commands and headers.
-      const [health, settings, schemas, themes, widgets, quickActions] =
-        await Promise.all([
-          api.health(),
-          api.settings(),
-          api.moduleSchemas(),
-          api.themes(),
-          api.widgets(),
-          api.quickActions().catch(() => null),
-        ]);
-      set({
-        ready: true,
-        online: true,
-        error: null,
-        version: health.version,
-        settings,
-        schemas: schemas.modules,
-        themes: themes.themes,
-        themeMeta: themes.meta ?? {},
-        widgets: widgets.widgets,
-        widgetVariants: widgets.variants ?? {},
-        widgetOptions: widgets.options ?? {},
-        widgetMeta: widgets.meta ?? {},
-        quickActions,
-      });
-    } catch (err) {
-      // Nothing answered. Inside the app that most likely means the services
-      // are not running at all, which this window can fix rather than report:
-      // it is usually opened from the tray, and the tray's Quit stops them.
-      // Once only, so a backend that starts and then fails does not put us
-      // into a loop.
-      if (!afterStart && inApp()) {
-        set({ starting: true, error: null });
-        try {
-          await startDashboard();
-          if (await waitForBackend()) {
-            set({ starting: false });
-            await useStore.getState().load(true);
-            return;
-          }
-        } catch (startError) {
-          console.warn("could not start the dashboard:", startError);
-        }
-        set({ starting: false });
-      }
-      set({
-        online: false,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
+  load(afterStart = false) {
+    // The first load and the socket's "back online" both ask for one at
+    // startup. Two parallel loads could end with the slower, failed one
+    // marking the window offline while the socket is open, so a second call
+    // joins the one in flight. The retry after starting the services is part
+    // of that load and must not wait for itself.
+    if (afterStart) return loadOnce(true);
+    if (!inflight) inflight = loadOnce(false).finally(() => (inflight = null));
+    return inflight;
   },
 
   setView(view) {
@@ -180,3 +136,64 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ quickActions: stored });
   },
 }));
+
+let inflight: Promise<void> | null = null;
+
+async function loadOnce(afterStart: boolean): Promise<void> {
+  try {
+    // Quick actions are fetched separately because their endpoint returns
+    // the unmasked tile list this window is allowed to edit, while
+    // /api/settings deliberately scrubs commands and headers.
+    const [health, settings, schemas, themes, widgets, quickActions] =
+      await Promise.all([
+        api.health(),
+        api.settings(),
+        api.moduleSchemas(),
+        api.themes(),
+        api.widgets(),
+        api.quickActions().catch(() => null),
+      ]);
+    useStore.setState({
+      ready: true,
+      online: true,
+      error: null,
+      version: health.version,
+      settings,
+      schemas: schemas.modules,
+      themes: themes.themes,
+      themeMeta: themes.meta ?? {},
+      widgets: widgets.widgets,
+      widgetVariants: widgets.variants ?? {},
+      widgetOptions: widgets.options ?? {},
+      widgetMeta: widgets.meta ?? {},
+      quickActions,
+    });
+    // The window may have started before the backend did, in which case the
+    // first attempt at the dashboard's strings found nobody to ask.
+    void loadDashboardStrings(i18n.language);
+  } catch (err) {
+    // Nothing answered. Inside the app that most likely means the services
+    // are not running at all, which this window can fix rather than report:
+    // it is usually opened from the tray, and the tray's Quit stops them.
+    // Once only, so a backend that starts and then fails does not put us
+    // into a loop.
+    if (!afterStart && inApp()) {
+      useStore.setState({ starting: true, error: null });
+      try {
+        await startDashboard();
+        if (await waitForBackend()) {
+          useStore.setState({ starting: false });
+          await useStore.getState().load(true);
+          return;
+        }
+      } catch (startError) {
+        console.warn("could not start the dashboard:", startError);
+      }
+      useStore.setState({ starting: false });
+    }
+    useStore.setState({
+      online: false,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}

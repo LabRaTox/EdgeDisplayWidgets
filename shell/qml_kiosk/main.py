@@ -25,6 +25,7 @@ FONTS_DIR = HERE.parents[1] / "frontend" / "vendor" / "fonts"
 sys.path.insert(0, str(HERE))
 
 from bridge import Bridge  # noqa: E402
+from screens import pick_screen  # noqa: E402
 
 DEFAULT_WIDTH = 2560
 DEFAULT_HEIGHT = 720
@@ -46,21 +47,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
                         help="normal window on the primary screen, for development")
     parser.add_argument("--show-cursor", action="store_true")
     return parser.parse_args(argv)
-
-
-def pick_screen(app: QGuiApplication, name: str, width: int, height: int):
-    """The output to display on: by name first, then by resolution."""
-    screens = app.screens()
-    if name:
-        for screen in screens:
-            if screen.name() == name:
-                return screen
-        return None
-    for screen in screens:
-        geometry = screen.geometry()
-        if geometry.width() == width and geometry.height() == height:
-            return screen
-    return None
 
 
 def load_fonts() -> None:
@@ -111,27 +97,49 @@ def main(argv: list[str] | None = None) -> int:
         window.setHeight(args.height // 2)
         window.show()
     else:
-        screen = pick_screen(app, args.output, args.width, args.height)
-        if screen is None:
-            wanted = args.output or f"{args.width}x{args.height}"
-            log(f"no output matching '{wanted}' yet, using the primary screen")
-            screen = app.primaryScreen()
-        window.setScreen(screen)
-        window.setGeometry(screen.geometry())
-        window.showFullScreen()
-        bridge.set_output(screen.name())
-        log(f"placed on {screen.name()} {screen.geometry().width()}x{screen.geometry().height()}")
+        def place(screen) -> None:
+            window.setScreen(screen)
+            window.setGeometry(screen.geometry())
+            window.showFullScreen()
+            bridge.set_output(screen.name())
+            size = screen.geometry()
+            log(f"placed on {screen.name()} {size.width()}x{size.height()}")
 
-        def on_screen_added(added):
+        def wait_windowed() -> None:
+            """No matching display. With several connected, the primary one is
+            somebody's main monitor, and a fullscreen kiosk would cover it."""
+            wanted = args.output or f"{args.width}x{args.height}"
+            log(f"no output matching '{wanted}' yet; waiting in a window. "
+                "Set EDGE_OUTPUT to the output name to choose one.")
+            window.showNormal()
+            window.setWidth(args.width // 2)
+            window.setHeight(args.height // 2)
+
+        screen = pick_screen(app.screens(), args.output, args.width, args.height)
+        if screen is not None:
+            place(screen)
+        elif len(app.screens()) == 1 and not args.output:
+            # A machine that drives only this display: it is the one.
+            place(app.primaryScreen())
+        else:
+            wait_windowed()
+
+        def on_screen_added(added) -> None:
             """The Xeneon often initialises after we do on a cold boot."""
-            wanted = pick_screen(app, args.output, args.width, args.height)
-            if wanted is added and window.screen() is not added:
+            wanted = pick_screen(app.screens(), args.output, args.width, args.height)
+            if wanted is added:
                 log(f"target display appeared: {added.name()}")
-                window.setScreen(added)
-                window.setGeometry(added.geometry())
-                window.showFullScreen()
+                place(added)
+
+        def on_screen_removed(removed) -> None:
+            """Unplugged: Qt would move the fullscreen window to whatever is
+            left, which is the main monitor."""
+            if removed.name() == bridge.output():
+                log(f"target display gone: {removed.name()}, hiding until it is back")
+                window.hide()
 
         app.screenAdded.connect(on_screen_added)
+        app.screenRemoved.connect(on_screen_removed)
 
     log(f"running: {bridge.summary()}")
     return app.exec()

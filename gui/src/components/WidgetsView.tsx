@@ -1149,6 +1149,14 @@ function StoreAccount({
             return;
           }
           if (answer.status === "slow_down") interval += (answer.backoff ?? 5) * 1000;
+          else if (answer.status !== "pending") {
+            // Expired or denied: the code on screen is dead, asking again
+            // would go on forever.
+            stop();
+            setDevice(null);
+            setError(t("widgets.sign_in_failed"));
+            return;
+          }
           timer.current = window.setTimeout(() => void poll(), interval);
         } catch (exc) {
           if (mine !== round.current) return;

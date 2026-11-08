@@ -229,3 +229,43 @@ def test_saving_is_atomic_and_keeps_the_previous_version(app, tmp_path):
         assert backup.is_file(), "no backup of the replaced config"
         assert yaml.safe_load(backup.read_text())["default_theme"] == "cyberpunk"
         assert yaml.safe_load(local.read_text())["default_theme"] == "clean"
+
+
+def test_post_settings_never_overwrites_quick_actions_list(tmp_path, monkeypatch):
+    """The settings view scrubs actions; posting that view back must not wipe them."""
+    from backend.modules import quick_actions as qa_module
+
+    importlib.reload(qa_module)
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        """
+server: { host: "127.0.0.1", port: 8765 }
+modules:
+  quick_actions:
+    enabled: true
+    actions:
+      - { id: hello, label: Hello, kind: shell, command: ["echo", "hi"] }
+pages: []
+"""
+    )
+    from backend import main as main_mod
+    monkeypatch.setattr(main_mod, "LOCAL_CONFIG", tmp_path / "config.local.yaml")
+    app = main_mod.create_app(cfg)
+    with TestClient(app) as client:
+        block = client.get("/api/settings").json()["modules"]["quick_actions"]
+        assert "command" not in block["actions"][0]
+        block["timeout_seconds"] = 12
+        r = client.post("/api/settings", json={"modules": {"quick_actions": block}})
+        assert r.status_code == 200, r.text
+        full = client.get("/api/quick_actions/config").json()
+        assert full["actions"][0]["command"] == ["echo", "hi"]
+        assert full["timeout_seconds"] == 12
+
+
+def test_foreign_host_is_refused_while_on_loopback(app):
+    """DNS rebinding: a page whose name resolves to 127.0.0.1 must not read."""
+    with TestClient(app) as client:
+        assert client.get("/api/settings", headers={"host": "evil.example:8765"}).status_code == 421
+        assert client.get("/api/settings", headers={"host": "127.0.0.1:8765"}).status_code == 200
+        assert client.get("/api/settings", headers={"host": "localhost"}).status_code == 200
+        assert client.get("/api/settings", headers={"host": "[::1]:8765"}).status_code == 200

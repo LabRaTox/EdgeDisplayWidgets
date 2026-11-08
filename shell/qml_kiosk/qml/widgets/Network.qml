@@ -39,8 +39,12 @@ Item {
         var tx = data.network.tx_bytes_per_s
         var a = rxHistory.slice(); a.push(rx); if (a.length > 60) a.shift(); rxHistory = a
         var b = txHistory.slice(); b.push(tx); if (b.length > 60) b.shift(); txHistory = b
-        var peak = Math.max(rx, tx)
-        if (peak > ceiling * 0.9) ceiling = Math.max(peak * 1.5, ceiling)
+        // From what is on the chart, so one big download does not flatten
+        // it for the rest of the day once it has scrolled out.
+        var peak = 0
+        for (var i = 0; i < a.length; i++) if (a[i] > peak) peak = a[i]
+        for (var j = 0; j < b.length; j++) if (b[j] > peak) peak = b[j]
+        ceiling = Math.max(1048576, peak * 1.5)
     }
 
     ColumnLayout {

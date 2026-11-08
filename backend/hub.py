@@ -40,6 +40,9 @@ class Hub:
         self._last: dict[str, dict[str, Any]] = {}
         self._clients: set[WSLike] = set()
         self._lock = asyncio.Lock()
+        # Separate from `_lock`, which guards the client set: a reload awaits
+        # module setup, and broadcasts must not wait for that.
+        self._reload_lock = asyncio.Lock()
         self._running = False
 
     # ----------------------------------------------------------------- discovery
@@ -232,6 +235,12 @@ class Hub:
         they just don't receive frames during the transition. The cached
         last-values are cleared so a stale snapshot doesn't get replayed.
         """
+        # A second reload while the first is between teardown and setup would
+        # tear modules down twice and orphan the ones already set up.
+        async with self._reload_lock:
+            await self._reload(new_config)
+
+    async def _reload(self, new_config: AppConfig) -> None:
         if not self._running:
             self.config = new_config
             return

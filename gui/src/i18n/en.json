@@ -214,6 +214,7 @@
   "widgets.finding.dynamic": "Runtime code",
   "widgets.finding.filesystem": "File access",
   "widgets.sign_in": "Sign in to the store",
+  "widgets.sign_in_failed": "The sign-in expired or was declined. Please try again.",
   "widgets.sign_out": "Sign out",
   "widgets.open_github": "Open GitHub",
   "widgets.type.widget": "Widgets",

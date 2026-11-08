@@ -75,8 +75,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     // FastAPI puts the reason in `detail`; fall back to the raw body.
     let detail = `HTTP ${response.status}`;
     try {
-      const body = (await response.json()) as { detail?: string; error?: string };
-      detail = body.detail ?? body.error ?? detail;
+      const body = (await response.json()) as {
+        detail?: string | { msg?: string }[];
+        error?: string;
+      };
+      // A validation error from FastAPI is a list, not a sentence.
+      if (Array.isArray(body.detail)) {
+        detail = body.detail.map((d) => d.msg ?? "").filter(Boolean).join("; ") || detail;
+      } else {
+        detail = body.detail ?? body.error ?? detail;
+      }
     } catch {
       /* not JSON — keep the status line */
     }

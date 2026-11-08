@@ -32,6 +32,9 @@ PAIRING_TIMEOUT_S = 120
 PAIRING_POLL_S = 2.0
 
 
+#: Frames sent from sync code, held until they have gone out.
+_PENDING: set[asyncio.Task[None]] = set()
+
 @register_module
 class NotesModule(Module):
     name: ClassVar[str] = "notes"
@@ -85,7 +88,11 @@ class NotesModule(Module):
         """The routes call this after a write, so other tiles reload too."""
         self.revision += 1
         with contextlib.suppress(RuntimeError):
-            asyncio.get_running_loop().create_task(self.emit(self.payload()))
+            task = asyncio.get_running_loop().create_task(self.emit(self.payload()))
+            # The loop keeps only a weak reference to a task; without one of
+            # our own it can be collected before it has run.
+            _PENDING.add(task)
+            task.add_done_callback(_PENDING.discard)
 
     def payload(self) -> dict[str, Any]:
         return {"storage": self.storage, "state": self.state, "error": self.error,

@@ -118,7 +118,9 @@ export function LayoutView() {
       <div className="tabs">
         {draft.map((entry, index) => (
           <button
-            key={entry.id}
+            // The index, not the id: the id is edited right here and may
+            // be a duplicate for a moment.
+            key={index}
             type="button"
             className={index === pageIndex ? "active" : ""}
             onClick={() => {

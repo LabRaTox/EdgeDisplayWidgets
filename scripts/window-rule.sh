@@ -43,8 +43,13 @@ NO_FOCUS="${EDGE_KIOSK_NO_FOCUS:-0}"
 # --------------------------------------------------------------- KDE Plasma
 
 apply_kwin() {
-    if ! command -v kwriteconfig6 >/dev/null || ! command -v kreadconfig6 >/dev/null; then
-        warn "KDE session, but kwriteconfig6/kreadconfig6 are missing — skipping the window rule."
+    # Plasma 5 (Kubuntu 22.04 and 24.04, Debian 12) has only the 5 tools; the
+    # keys in kwinrulesrc are the same.
+    local kwrite kread
+    kwrite=$(command -v kwriteconfig6 || command -v kwriteconfig5 || true)
+    kread=$(command -v kreadconfig6 || command -v kreadconfig5 || true)
+    if [ -z "$kwrite" ] || [ -z "$kread" ]; then
+        warn "KDE session, but kwriteconfig/kreadconfig are missing, skipping the window rule."
         return 1
     fi
     local file="kwinrulesrc"
@@ -56,47 +61,50 @@ apply_kwin() {
     local key
     for key in fullscreen fullscreenrule output outputrule position positionrule \
                size sizerule types; do
-        kwriteconfig6 --file "$file" --group "$RULE_ID" --key "$key" --delete 2>/dev/null || true
+        "$kwrite" --file "$file" --group "$RULE_ID" --key "$key" --delete 2>/dev/null || true
     done
 
-    kwriteconfig6 --file "$file" --group "$RULE_ID" --key Description \
+    "$kwrite" --file "$file" --group "$RULE_ID" --key Description \
         "Edge Dashboard kiosk (managed by scripts/window-rule.sh)"
-    kwriteconfig6 --file "$file" --group "$RULE_ID" --key wmclass "$APP_ID"
-    kwriteconfig6 --file "$file" --group "$RULE_ID" --key wmclasscomplete --type bool false
+    "$kwrite" --file "$file" --group "$RULE_ID" --key wmclass "$APP_ID"
+    "$kwrite" --file "$file" --group "$RULE_ID" --key wmclasscomplete --type bool false
     # 1 = exact match on the class.
-    kwriteconfig6 --file "$file" --group "$RULE_ID" --key wmclassmatch 1
+    "$kwrite" --file "$file" --group "$RULE_ID" --key wmclassmatch 1
     # Rule type 2 = Force: the window cannot turn these back on, and unlike
     # "Apply initially" (4) the setting survives the compositor reconsidering.
     for key in skiptaskbar skipswitcher skippager; do
-        kwriteconfig6 --file "$file" --group "$RULE_ID" --key "$key" --type bool true
-        kwriteconfig6 --file "$file" --group "$RULE_ID" --key "${key}rule" 2
+        "$kwrite" --file "$file" --group "$RULE_ID" --key "$key" --type bool true
+        "$kwrite" --file "$file" --group "$RULE_ID" --key "${key}rule" 2
     done
 
     if [ "$NO_FOCUS" = "1" ]; then
-        kwriteconfig6 --file "$file" --group "$RULE_ID" --key acceptfocus --type bool false
-        kwriteconfig6 --file "$file" --group "$RULE_ID" --key acceptfocusrule 2
+        "$kwrite" --file "$file" --group "$RULE_ID" --key acceptfocus --type bool false
+        "$kwrite" --file "$file" --group "$RULE_ID" --key acceptfocusrule 2
         log "kiosk refuses the keyboard focus; text input on it will not work"
     else
-        kwriteconfig6 --file "$file" --group "$RULE_ID" --key acceptfocus --delete 2>/dev/null || true
-        kwriteconfig6 --file "$file" --group "$RULE_ID" --key acceptfocusrule --delete 2>/dev/null || true
+        "$kwrite" --file "$file" --group "$RULE_ID" --key acceptfocus --delete 2>/dev/null || true
+        "$kwrite" --file "$file" --group "$RULE_ID" --key acceptfocusrule --delete 2>/dev/null || true
     fi
 
     # Register the rule in the index, keeping any other rule already there.
     local current rules="" part count
-    current=$(kreadconfig6 --file "$file" --group General --key rules 2>/dev/null || true)
+    current=$("$kread" --file "$file" --group General --key rules 2>/dev/null || true)
     IFS=',' read -ra parts <<< "$current"
     for part in "${parts[@]}"; do
         [ -n "$part" ] && [ "$part" != "$RULE_ID" ] && rules="${rules:+$rules,}$part"
     done
     rules="${rules:+$rules,}$RULE_ID"
     count=$(awk -F',' '{print NF}' <<< "$rules")
-    kwriteconfig6 --file "$file" --group General --key rules "$rules"
-    kwriteconfig6 --file "$file" --group General --key count "$count"
+    "$kwrite" --file "$file" --group General --key rules "$rules"
+    "$kwrite" --file "$file" --group General --key count "$count"
 
     log "KWin rule written for app id '${APP_ID}' (${count} rule(s) total)"
-    if command -v qdbus6 >/dev/null; then
-        qdbus6 org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null 2>&1 &&
-            log "KWin reloaded" || warn "KWin did not reload, log out and back in"
+    # busctl comes with systemd; qdbus6 is qdbus-qt6 on Fedora and often
+    # missing on Debian and Ubuntu.
+    if busctl --user call org.kde.KWin /KWin org.kde.KWin reconfigure >/dev/null 2>&1; then
+        log "KWin reloaded"
+    else
+        warn "KWin did not reload, log out and back in"
     fi
 }
 
@@ -107,21 +115,32 @@ apply_hyprland() {
     local snippet="${dir}/edge-dashboard.conf"
     [ -d "$dir" ] || mkdir -p "$dir"
 
+    # Hyprland 0.53 replaced `windowrulev2 = effect, class:...` with
+    # `windowrule = effect on, match:class ...` and refuses the old form.
+    # Older releases do not know the new one, so the version decides.
+    local version modern=1
+    version=$(hyprctl version 2>/dev/null | sed -n 's/.*[Tt]ag: v\{0,1\}\([0-9]\{1,\}\.[0-9]\{1,\}\).*/\1/p' | head -1)
+    if [ -n "$version" ]; then
+        local major=${version%%.*} minor=${version#*.}
+        if [ "$major" -eq 0 ] && [ "$minor" -lt 53 ]; then modern=0; fi
+    fi
+
+    rule() {
+        if [ "$modern" = "1" ]; then
+            echo "windowrule = $1 on, match:class ^(${APP_ID})\$"
+        else
+            echo "windowrulev2 = ${1//_/}, class:^(${APP_ID})\$"
+        fi
+    }
+
     {
         echo "# Written by scripts/window-rule.sh. Source it from hyprland.conf:"
         echo "#     source = ~/.config/hypr/edge-dashboard.conf"
-        echo "windowrulev2 = nofocus, class:^(${APP_ID})$" 
-        echo "windowrulev2 = noinitialfocus, class:^(${APP_ID})$"
+        # Without no_focus the window behaves normally and only stays from
+        # taking the focus when it appears.
+        [ "$NO_FOCUS" = "1" ] && rule no_focus
+        rule no_initial_focus
     } > "$snippet"
-    if [ "$NO_FOCUS" != "1" ]; then
-        # Without the focus rules the window behaves normally; keep only the
-        # part that hides it from the special workspaces overview.
-        {
-            echo "# Written by scripts/window-rule.sh. Source it from hyprland.conf:"
-            echo "#     source = ~/.config/hypr/edge-dashboard.conf"
-            echo "windowrulev2 = noinitialfocus, class:^(${APP_ID})$"
-        } > "$snippet"
-    fi
     log "Hyprland snippet written: ${snippet}"
 
     if grep -qs "edge-dashboard.conf" "${dir}/hyprland.conf"; then
@@ -144,7 +163,7 @@ apply_sway() {
     # Sway has no skip-taskbar as such; bars read the window list from the
     # tree, and a scratchpad window is not in it. Keeping it simple: mark the
     # window so a bar's config can filter it, and note that in the log.
-    echo "for_window [app_id=\"${APP_ID}\"] mark edge-dashboard, floating enable" >> "$snippet"
+    echo "for_window [app_id=\"${APP_ID}\"] mark edge-dashboard" >> "$snippet"
     log "Sway snippet written: ${snippet}"
     warn "sway has no skip-taskbar flag; filter the mark 'edge-dashboard' in your bar if it lists windows"
     command -v swaymsg >/dev/null && swaymsg reload >/dev/null 2>&1 && log "sway reloaded"

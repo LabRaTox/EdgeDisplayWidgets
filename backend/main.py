@@ -110,11 +110,20 @@ def build_icon_index() -> dict[str, str]:
 
     home = Path.home()
     xdg_data_home = os.environ.get("XDG_DATA_HOME") or str(home / ".local/share")
-    roots = [
+    xdg_data_dirs = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+    # The data dirs first, so whatever the session adds counts; then the
+    # places Flatpak and Snap export icons to, which are not always in
+    # XDG_DATA_DIRS for a service. Most apps on Bazzite and Silverblue are
+    # Flatpaks, and Firefox on Ubuntu is a snap.
+    roots = list(dict.fromkeys([
         Path(xdg_data_home) / "icons",
+        *(Path(b) / "icons" for b in xdg_data_dirs.split(":") if b),
         Path("/usr/local/share/icons"),
         Path("/usr/share/icons"),
-    ]
+        Path(xdg_data_home) / "flatpak/exports/share/icons",
+        Path("/var/lib/flatpak/exports/share/icons"),
+        Path("/var/lib/snapd/desktop/icons"),
+    ]))
     best: dict[str, tuple[int, str]] = {}
 
     def consider(p: Path) -> None:
@@ -170,6 +179,7 @@ def scan_desktop_apps() -> list[dict[str, Any]]:
     dirs = [Path(b) / "applications" for b in bases if b]
     dirs.append(Path("/var/lib/flatpak/exports/share/applications"))
     dirs.append(Path(xdg_data_home) / "flatpak/exports/share/applications")
+    dirs.append(Path("/var/lib/snapd/desktop/applications"))
 
     seen_files: set[str] = set()
     apps: dict[str, dict[str, Any]] = {}
@@ -541,12 +551,24 @@ def _write_local_config(path: Path, data: dict[str, Any]) -> None:
     if path.is_file():
         # Copied, not renamed: a rename would briefly leave no config at all.
         with contextlib.suppress(OSError):
-            path.with_suffix(path.suffix + ".bak").write_text(
-                path.read_text(encoding="utf-8"), encoding="utf-8"
-            )
+            _write_private(path.with_suffix(path.suffix + ".bak"), path.read_text(encoding="utf-8"))
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
+    _write_private(tmp, text)
     os.replace(tmp, path)
+
+
+def _write_private(path: Path, text: str) -> None:
+    """Write a file only its owner can read.
+
+    The config holds API keys and the headers of HTTP actions. `write_text`
+    would create it with the umask, usually readable by everyone, and the
+    rename that follows would carry that over.
+    """
+    with contextlib.suppress(FileNotFoundError):
+        path.unlink()
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(text)
 
 
 def _quit_dashboard() -> None:
@@ -700,8 +722,33 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
                 return False
         return True
 
+    # DNS rebinding: a page on evil.example whose name is made to resolve to
+    # 127.0.0.1 is same-origin with us as far as the browser is concerned, so
+    # it could read GET answers, among them the quick actions' commands and
+    # headers and the notes. Its requests still carry its own name in Host.
+    # While bound to loopback, only loopback names are ours. Bound to the
+    # LAN, the names people use are unknown; EDGE_ALLOWED_HOSTS adds some.
+    _LOOPBACK_NAMES = {"127.0.0.1", "localhost", "::1", "tauri.localhost"} | {
+        h.strip().lower() for h in os.environ.get("EDGE_ALLOWED_HOSTS", "").split(",") if h.strip()
+    }
+
+    def _host_allowed(host_header: str | None) -> bool:
+        if not _LOOPBACK_ONLY:
+            return True
+        if not host_header:
+            return True  # HTTP/1.0 or a raw client, not a browser
+        name = host_header.strip().lower()
+        if name.startswith("["):
+            name = name[1:name.find("]")] if "]" in name else name
+        elif name.count(":") == 1:
+            name = name.split(":", 1)[0]
+        return name in _LOOPBACK_NAMES
+
     @app.middleware("http")
     async def origin_guard(request: Request, call_next):
+        if not _host_allowed(request.headers.get("host")):
+            logger.warning(f"rejected {request.method} {request.url.path} for host={request.headers.get('host')!r}")
+            return JSONResponse({"error": "unknown host"}, status_code=421, headers=_NO_STORE)
         if request.method in {"GET", "HEAD", "OPTIONS"}:
             return await call_next(request)
         origin = request.headers.get("origin")
@@ -782,7 +829,9 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
             try:
                 body = await request.json()
                 if isinstance(body, dict):
-                    kwargs = body
+                    # `name` is the action itself; a body key of that name
+                    # would collide with the parameter and end in a 500.
+                    kwargs = {k: v for k, v in body.items() if isinstance(k, str) and k != "name"}
             except Exception:
                 pass
         ok = await media.action(action, **kwargs)
@@ -1044,6 +1093,13 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
                 app_version=app_version(),
                 meta={"source": "local"},
             )
+        except plugins.PluginError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except OSError as exc:
+            # Nothing was installed: a full disk or a folder in the way.
+            logger.exception(f"local widget could not be installed: {exc}")
+            raise HTTPException(status_code=500, detail=f"could not be installed: {exc}") from exc
+        try:
             return plugin, plugins.load_module(plugin)
         except plugins.PluginError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -1070,7 +1126,9 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         """Install a widget from a folder on this machine, packed the way the
         store would get it. Meant for trying a widget before submitting it."""
         try:
-            data = store.pack(Path(payload.path))
+            # In a thread: a big folder takes a while, and the kiosk's socket
+            # would freeze for that long.
+            data = await asyncio.to_thread(store.pack, Path(payload.path))
         except store.StoreError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
         except OSError as exc:
@@ -1230,6 +1288,10 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
             raise _store_failed(exc) from exc
         except plugins.PluginError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except OSError as exc:
+            # A full disk or a folder in the way: nothing was installed.
+            logger.exception(f"widget '{slug}' could not be installed: {exc}")
+            raise HTTPException(status_code=500, detail=f"could not be installed: {exc}") from exc
         except Exception as exc:
             # The files are in place but the module would not import. Leave
             # them, so the author's error is in the log and a fixed version
@@ -1427,8 +1489,17 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         # Secret fields left at the mask sentinel mean "unchanged" — drop them
         # so the deep-merge keeps the stored secret instead of writing "***".
         _strip_unchanged_secrets(body)
+        # GET /api/settings scrubs the actions down to id/label/icon, so a
+        # client that posts its whole module block back would replace the real
+        # list with that stub and lose every command, URL and folder.
+        # /api/quick_actions/config owns the list; here it is never written.
+        qa = (body.get("modules") or {}).get("quick_actions") if isinstance(body.get("modules"), dict) else None
+        if isinstance(qa, dict):
+            qa.pop("actions", None)
         view = await apply_settings(body)
         return JSONResponse({"ok": True, "settings": view}, headers=_NO_STORE)
+
+    config_lock = asyncio.Lock()
 
     async def apply_settings(body: dict[str, Any]) -> dict[str, Any]:
         """Merge, validate, persist, reload, tell the kiosk. Returns the new view.
@@ -1436,24 +1507,28 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         Shared by the settings endpoint and the store, which switches on the
         modules of a widget it just installed.
         """
-        current_dict = current_cfg().model_dump()
-        merged = _deep_merge(current_dict, body)
-        try:
-            new_cfg = AppConfig.model_validate(merged)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail=f"validation failed: {_summarize_validation_error(exc)}") from exc
+        # One save at a time: read, merge, write and reload belong together.
+        # Two saves interleaving here would each merge into the same old
+        # config, and the second would undo the first.
+        async with config_lock:
+            current_dict = current_cfg().model_dump()
+            merged = _deep_merge(current_dict, body)
+            try:
+                new_cfg = AppConfig.model_validate(merged)
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"validation failed: {_summarize_validation_error(exc)}") from exc
 
-        # Persist to config.local.yaml so the change survives restarts.
-        target = LOCAL_CONFIG
-        try:
-            _write_local_config(target, merged)
-        except OSError as exc:
-            raise HTTPException(status_code=500, detail=f"failed to write {target}: {exc}") from exc
+            # Persist to config.local.yaml so the change survives restarts.
+            target = LOCAL_CONFIG
+            try:
+                _write_local_config(target, merged)
+            except OSError as exc:
+                raise HTTPException(status_code=500, detail=f"failed to write {target}: {exc}") from exc
 
-        # Hot-reload the hub so the change takes effect immediately.
-        await current_hub().reload(new_cfg)
-        app.state.config = new_cfg
-        app.state.config_path = target
+            # Hot-reload the hub so the change takes effect immediately.
+            await current_hub().reload(new_cfg)
+            app.state.config = new_cfg
+            app.state.config_path = target
         logger.info(f"settings updated; persisted to {target}")
         view = _settings_view(new_cfg)
         # The editor is its own window now, so the change has to travel to the
@@ -1472,7 +1547,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
         # backend is alive and to hear about settings saved elsewhere.
         origin = ws.headers.get("origin")
         host = ws.headers.get("host")
-        if not _origin_host_matches(origin, host):
+        if not _host_allowed(host) or not _origin_host_matches(origin, host):
             logger.warning(f"rejected ws connection from origin={origin!r}")
             await ws.close(code=1008)
             return
@@ -1617,24 +1692,7 @@ def create_app(config_path: str | Path | None = None) -> FastAPI:
                 except (TypeError, ValueError):
                     raise HTTPException(400, f"{key} must be an integer") from None
 
-        current_dict = current_cfg().model_dump()
-        merged = _deep_merge(current_dict, {"modules": {"quick_actions": patch}})
-        try:
-            new_cfg = AppConfig.model_validate(merged)
-        except Exception as exc:
-            raise HTTPException(400, f"validation failed: {_summarize_validation_error(exc)}") from exc
-
-        target = LOCAL_CONFIG
-        try:
-            _write_local_config(target, merged)
-        except OSError as exc:
-            raise HTTPException(500, f"failed to write {target}: {exc}") from exc
-
-        await current_hub().reload(new_cfg)
-        app.state.config = new_cfg
-        app.state.config_path = target
-        logger.info(f"quick_actions config updated; persisted to {target}")
-        await current_hub().publish("settings", settings=_settings_view(new_cfg))
+        await apply_settings({"modules": {"quick_actions": patch}})
         return JSONResponse({"ok": True, "count": len(validated_actions)}, headers=_NO_STORE)
 
     @app.post("/api/quick_actions/{action_id}/run")

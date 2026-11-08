@@ -462,7 +462,15 @@ Design 0, im anderen 12. Für etwas, das gern rund wäre, gibt es `Ui.pill(heigh
 **Eine Hauptaktion je Ansicht.** Sie bekommt den gefüllten Knopf oder den `Fab`,
 alles andere bleibt schlicht.
 
-Die Bausteine erledigen das alles schon. `import EdgeDash` liefert:
+**Außerhalb des Bildes ruhen.** Jede Änderung auf der Anzeige zeichnet das
+ganze Fenster neu, auch eine auf einer Seite, die gerade niemand sieht. Seiten
+außerhalb des Bildes sind ausgeblendet, und ein Widget sieht das an seinem
+eigenen `visible`. Ein wiederholender `Timer` sollte nur dann laufen:
+`running: visible && …`. Hält der Timer etwas aktuell, etwa eine Uhr, kommt
+`triggeredOnStart: true` dazu, damit es stimmt, sobald die Seite zurückkommt.
+Daten vom Backend kommen auch im verdeckten Zustand an.
+
+Farben, Ecken und Größen für Finger erledigen die Bausteine schon. `import EdgeDash` liefert:
 
 | Baustein | Wofür | Wichtigste Eigenschaften |
 |---|---|---|
@@ -889,4 +897,4 @@ ist die kleine Fassung für den Anfang:
 
 ---
 
-[Ein Theme schreiben](themes.de.md) · [Warum es so aussieht](entscheidungen.md) · [README](../README.de.md) · [English](widgets.md)
+[Ein Theme schreiben](themes.de.md) · [Einrichtung und Entwicklung](setup.de.md) · [README](../README.de.md) · [English](widgets.md)

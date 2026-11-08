@@ -167,7 +167,10 @@ class JoplinClient:
                 r = await client.post(f"http://127.0.0.1:{self.port}/auth")
             except httpx.HTTPError as exc:
                 raise JoplinError("offline", str(exc)) from exc
-        token = (r.json() or {}).get("auth_token") if r.status_code == 200 else None
+        try:
+            token = (r.json() or {}).get("auth_token") if r.status_code == 200 else None
+        except ValueError:
+            token = None
         if not token:
             raise JoplinError("refused", f"/auth {r.status_code}")
         return token
@@ -179,7 +182,13 @@ class JoplinClient:
                                      params={"auth_token": auth_token})
             except httpx.HTTPError as exc:
                 raise JoplinError("offline", str(exc)) from exc
-        return r.json() if r.status_code == 200 else {"status": "rejected"}
+        if r.status_code != 200:
+            return {"status": "rejected"}
+        try:
+            answer = r.json()
+        except ValueError:
+            return {"status": "rejected"}
+        return answer if isinstance(answer, dict) else {"status": "rejected"}
 
 
 class PinStore:

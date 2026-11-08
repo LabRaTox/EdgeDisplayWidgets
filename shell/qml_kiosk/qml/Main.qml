@@ -22,7 +22,9 @@ ApplicationWindow {
     Wallpaper {
         anchors.fill: parent
         sources: bridge.wallpapers
-        page: deck.item ? deck.item.currentIndex : 0
+        // While the pages are rebuilt there is no view, and falling back to 0
+        // would fade to the first page's picture and back on every save.
+        page: deck.item ? deck.item.currentIndex : deck.wanted
     }
 
     /*
@@ -86,6 +88,17 @@ ApplicationWindow {
                     required property var modelData
                     required property int index
                     readonly property var page: modelData
+
+                    /*
+                     * Only pages in view are drawn. A SwipeView keeps every
+                     * page visible, so each frame processed all of them and
+                     * a timer on a page nobody looked at still redrew the
+                     * window. Measured from the scroll position rather than
+                     * the current index, so both pages stay drawn while one
+                     * slides in, however the move was started. Widgets see
+                     * it in their own `visible` and can stop their timers.
+                     */
+                    visible: Math.abs(x - swipe.contentItem.contentX) < swipe.width
 
                     Item {
                         id: cells
@@ -155,9 +168,11 @@ ApplicationWindow {
                                     Connections {
                                         target: bridge
                                         enabled: loader.item !== null && typeof loader.item.receive === "function"
-                                        function onDataArrived(module, data) {
-                                            if (loader.item.moduleNames.indexOf(module) >= 0)
-                                                loader.item.receive(module, data);
+                                        function onModuleUpdated(module) {
+                                            // `|| []`: a store widget without the list
+                                            // would otherwise throw on every frame.
+                                            if ((loader.item.moduleNames || []).indexOf(module) >= 0)
+                                                loader.item.receive(module, bridge.cached(module));
                                         }
                                     }
 
@@ -218,8 +233,9 @@ ApplicationWindow {
                                             tile.widgetPadV = item.padV;
                                         // Whatever arrived before this tile existed.
                                         if (typeof item.receive === "function") {
-                                            for (var i = 0; i < item.moduleNames.length; i++) {
-                                                var m = item.moduleNames[i];
+                                            var names = item.moduleNames || [];
+                                            for (var i = 0; i < names.length; i++) {
+                                                var m = names[i];
                                                 var cached = bridge.cached(m);
                                                 if (cached)
                                                     item.receive(m, cached);
@@ -254,7 +270,8 @@ ApplicationWindow {
      * is close enough to painting them normally at the same alpha.
      */
     Repeater {
-        model: bridge.effects.scanline_color !== "" ? Math.ceil(win.height / bridge.effects.scanline_period) : 0
+        model: bridge.effects.scanline_color !== "" && bridge.effects.scanline_period >= 1
+               ? Math.ceil(win.height / bridge.effects.scanline_period) : 0
         Rectangle {
             required property int index
             z: 200

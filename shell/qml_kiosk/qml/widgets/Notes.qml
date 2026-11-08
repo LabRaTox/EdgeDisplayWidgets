@@ -432,6 +432,9 @@ Item {
     }
 
     Timer { id: saveTimer; interval: root.debounceMs; onTriggered: root.flush() }
+    // A page rebuild destroys the tile; what was typed in the last moment
+    // before it would otherwise never be sent.
+    Component.onDestruction: flush()
 
     // -- building blocks --------------------------------------------------------
 

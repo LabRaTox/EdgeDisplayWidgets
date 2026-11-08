@@ -60,7 +60,8 @@ def version_tuple(version: str) -> tuple[int, ...]:
     for piece in str(version or "").split("."):
         digits = ""
         for char in piece:
-            if not char.isdigit():
+            # Not isdigit(): "²" is a digit to it, and int() refuses it.
+            if char not in "0123456789":
                 break
             digits += char
         parts.append(int(digits) if digits else 0)

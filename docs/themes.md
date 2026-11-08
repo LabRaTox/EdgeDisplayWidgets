@@ -144,4 +144,4 @@ everything else in the stylesheet has no effect.
 
 ---
 
-[Writing a widget](widgets.md) · [Why it looks the way it does](decisions.md) · [README](../README.md) · [Deutsch](themes.de.md)
+[Writing a widget](widgets.md) · [Setup and development](setup.md) · [README](../README.md) · [Deutsch](themes.de.md)

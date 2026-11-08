@@ -32,7 +32,13 @@ DRM = Path("/sys/class/drm")
 
 #: The PCI id database, for a readable name of an AMD card. sysfs knows only
 #: the numbers.
-PCI_IDS = Path("/usr/share/hwdata/pci.ids")
+#: Arch and Fedora keep it in hwdata, Debian and Ubuntu under misc, openSUSE
+#: directly in /usr/share.
+PCI_IDS = next(
+    (p for p in (Path("/usr/share/hwdata/pci.ids"), Path("/usr/share/misc/pci.ids"),
+                 Path("/usr/share/pci.ids")) if p.is_file()),
+    Path("/usr/share/hwdata/pci.ids"),
+)
 
 AMD_VENDOR = "0x1002"
 

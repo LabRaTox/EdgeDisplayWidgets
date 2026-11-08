@@ -28,7 +28,10 @@ Item {
     Timer {
         // Fast when seconds show, otherwise twice a minute is plenty.
         interval: root.showSeconds ? 500 : 30000
-        running: true
+        // Only while the page is in view (Main.qml hides the others);
+        // the first tick on return brings it up to date.
+        running: root.visible
+        triggeredOnStart: true
         repeat: true
         onTriggered: root.tick()
     }

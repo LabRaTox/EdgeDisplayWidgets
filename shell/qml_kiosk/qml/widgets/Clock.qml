@@ -52,7 +52,10 @@ Item {
         // Fast enough that the second never lags visibly; the faces only
         // repaint when a shown number changes.
         interval: root.showSeconds || root.counting ? 250 : 1000
-        running: true
+        // Off-page it rests, except for a countdown: its gong comes from
+        // here. Coming back into view it shows the time at once.
+        running: root.visible || root.counting
+        triggeredOnStart: true
         repeat: true
         onTriggered: root.tick()
     }

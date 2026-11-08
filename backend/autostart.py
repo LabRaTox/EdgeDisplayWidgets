@@ -21,6 +21,8 @@ the backend only ever shows its waiting screen.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass
@@ -32,11 +34,24 @@ from . import host
 
 ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = ROOT / "systemd"
-UNIT_DIR = Path.home() / ".config" / "systemd" / "user"
+#: systemd reads user units from $XDG_CONFIG_HOME, which is not always ~/.config.
+UNIT_DIR = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd" / "user"
 #: Where the package puts its units. Installed that way, there is nothing to
 #: render: the switch only enables or disables what the package brought.
 PACKAGE_UNIT_DIR = Path("/usr/lib/systemd/user")
 IN_CHECKOUT = (ROOT / "pyproject.toml").is_file()
+
+#: A login entry for desktops whose session never reaches
+#: graphical-session.target (XFCE, Cinnamon, MATE, LXQt and others): there
+#: the enabled units would wait for a target that does not come. KDE and GNOME
+#: reach it, so the entry stays out of their way.
+LOGIN_ENTRY = (
+    Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    / "autostart" / "edge-dashboard-start.desktop"
+)
+#: What the units need from the session to find a screen. Such sessions do
+#: not hand it to the user manager themselves.
+SESSION_VARS = "DISPLAY WAYLAND_DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE"
 
 #: Order matters on enable: the backend before the window that talks to it.
 UNITS = ("edge-dashboard.service", "edge-kiosk.service")
@@ -89,7 +104,13 @@ def status() -> AutostartStatus:
     # Only "enabled" really means autostart — "linked", "static" and
     # "disabled" do not. Both units have to be on for the switch to be on:
     # a half-enabled pair would start a kiosk with no backend.
-    states = [_systemctl("is-enabled", unit).stdout.strip() for unit in UNITS]
+    try:
+        states = [_systemctl("is-enabled", unit).stdout.strip() for unit in UNITS]
+    except (OSError, subprocess.SubprocessError) as exc:
+        # A user manager that does not answer in time is no reason for a 500.
+        return AutostartStatus(
+            supported=False, enabled=False, units=installed, reason=f"systemctl: {exc}"
+        )
     return AutostartStatus(
         supported=True,
         enabled=all(state == "enabled" for state in states),
@@ -112,7 +133,11 @@ def set_enabled(enabled: bool) -> AutostartStatus:
                 _write_unit(unit)
         _systemctl("daemon-reload")
         result = _systemctl("enable", *UNITS)
+        if result.returncode == 0:
+            _write_login_entry()
     else:
+        with contextlib.suppress(OSError):
+            LOGIN_ENTRY.unlink(missing_ok=True)
         present = _installed()
         if not present:
             # Nothing to switch off — the goal is already reached.
@@ -154,6 +179,29 @@ def _unsupported_reason() -> str | None:
     if "bus" in (probe.stderr or "").lower():
         return "No systemd user session reachable."
     return None
+
+
+def _write_login_entry() -> None:
+    """The XDG autostart entry that starts the units at login. Not fatal:
+    on KDE and GNOME the units start without it."""
+    units = " ".join(UNITS)
+    text = (
+        "[Desktop Entry]\n"
+        "Type=Application\n"
+        "Name=Edge Dashboard\n"
+        "Comment=Starts the Edge Dashboard services where the session does not\n"
+        # Double quotes: the desktop entry spec knows no single ones.
+        f'Exec=sh -c "systemctl --user import-environment {SESSION_VARS} 2>/dev/null; '
+        f'exec systemctl --user start {units}"\n'
+        "NotShowIn=KDE;GNOME;\n"
+        "NoDisplay=true\n"
+        "X-GNOME-Autostart-enabled=true\n"
+    )
+    try:
+        LOGIN_ENTRY.parent.mkdir(parents=True, exist_ok=True)
+        LOGIN_ENTRY.write_text(text, encoding="utf-8")
+    except OSError as exc:
+        logger.warning(f"login entry not written: {exc}")
 
 
 def _write_unit(unit: str) -> Path:

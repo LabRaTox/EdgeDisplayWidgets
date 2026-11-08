@@ -70,9 +70,13 @@ Item {
         positionUs = pos
     }
 
+    // Once a second: the time label changes no faster, and every tick moves
+    // the bar, which redraws the whole window. Only while the page is in view;
+    // the position is computed from a timestamp, so it is right on return.
     Timer {
-        interval: 250
-        running: root.playing && !root.scrubbing
+        interval: 1000
+        running: root.playing && !root.scrubbing && root.visible
+        triggeredOnStart: true
         repeat: true
         onTriggered: root.advance()
     }

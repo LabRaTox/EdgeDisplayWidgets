@@ -35,7 +35,8 @@ main() {
     if ! command -v uv >/dev/null; then
         log "installing uv"
         curl -LsSf https://astral.sh/uv/install.sh | sh >/dev/null
-        export PATH="${HOME}/.local/bin:${PATH}"
+        # Where the uv installer puts it when XDG_BIN_HOME or UV_INSTALL_DIR is set.
+        export PATH="${UV_INSTALL_DIR:-${XDG_BIN_HOME:-${HOME}/.local/bin}}:${PATH}"
         command -v uv >/dev/null || fail "uv could not be installed"
     fi
 
@@ -51,20 +52,20 @@ main() {
     esac
     log "Edge Dash ${version} into ${target}"
 
-    local work
-    work=$(mktemp -d)
-    trap 'rm -rf "$work"' EXIT
-    curl -fsSL -o "${work}/source.tar.gz" "${REPOSITORY}/archive/refs/tags/v${version}.tar.gz"
-    tar -C "$work" -xzf "${work}/source.tar.gz" --strip-components=1
-    [ -f "${work}/scripts/install.sh" ] || fail "the release has no scripts/install.sh"
-    rm -f "${work}/source.tar.gz"
+    # Not local: the trap runs once main has long returned.
+    WORK=$(mktemp -d)
+    trap 'rm -rf "${WORK:-}"' EXIT
+    curl -fsSL -o "${WORK}/source.tar.gz" "${REPOSITORY}/archive/refs/tags/v${version}.tar.gz"
+    tar -C "$WORK" -xzf "${WORK}/source.tar.gz" --strip-components=1
+    [ -f "${WORK}/scripts/install.sh" ] || fail "the release has no scripts/install.sh"
+    rm -f "${WORK}/source.tar.gz"
 
     mkdir -p "$target"
     local dir
     for dir in "${CODE_DIRS[@]}"; do
         rm -rf "${target:?}/${dir}"
     done
-    cp -a "${work}/." "$target/"
+    cp -a "${WORK}/." "$target/"
 
     cd "$target"
     # Under `curl | bash` stdin is that pipe, not a terminal.

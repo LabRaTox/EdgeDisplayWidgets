@@ -27,6 +27,7 @@ from PySide6.QtCore import (
     Slot,
 )
 from PySide6.QtGui import QFontDatabase
+from PySide6.QtNetwork import QAbstractSocket
 from PySide6.QtWebSockets import QWebSocket
 from views import plugin_layout, view_path, view_version
 
@@ -44,12 +45,21 @@ THEMES_DIR = ROOT / "frontend" / "css" / "themes"
 LOCALES_DIR = ROOT / "frontend" / "locales"
 
 
+#: For `receivers()`, which wants the signal by its signature.
+SIGNAL_DATA_ARRIVED = "2dataArrived(QString,QVariant)"
+
+
 class Bridge(QObject):
     pagesChanged = Signal()
     themeChanged = Signal()
     onlineChanged = Signal()
-    #: module name, payload. QML routes it to the widgets that asked for it.
+    #: module name, payload. Kept for widgets that listen to it directly.
     dataArrived = Signal(str, "QVariant")
+    #: Only the module name. A payload in a signal is converted to a JS
+    #: object for every handler, before the handler can even look at the
+    #: name; with fifteen tiles that was fifteen conversions per frame. The
+    #: tiles fetch it with `cached()` once they know they want it.
+    moduleUpdated = Signal(str)
     #: The video window has closed; whatever was paused for it may resume.
     videoClosed = Signal()
 
@@ -77,11 +87,21 @@ class Bridge(QObject):
         self._socket.connected.connect(self._on_connected)
         self._socket.disconnected.connect(self._on_disconnected)
         self._socket.errorOccurred.connect(lambda _: self._on_disconnected())
+        # One timer for every retry. A refused connection reports itself twice,
+        # as an error and as a disconnect, and a timer per report doubled the
+        # attempts and left one behind that reopened a live connection.
+        self._retry = QTimer(self)
+        self._retry.setSingleShot(True)
+        self._retry.timeout.connect(self._connect)
+        self._connected_once = False
         self._connect()
 
     def set_output(self, name: str) -> None:
         """Which display the window ended up on; the video uses the same one."""
         self._output = name
+
+    def output(self) -> str:
+        return self._output
 
     # -- configuration -----------------------------------------------------
 
@@ -128,7 +148,10 @@ class Bridge(QObject):
     def _load_config(self) -> None:
         # The same file the backend writes: next to the code in a checkout,
         # in the user's config directory when installed as a package.
-        if (ROOT / "pyproject.toml").is_file():
+        # $EDGE_CONFIG first, as in the backend, so both read the same file.
+        if os.environ.get("EDGE_CONFIG"):
+            path = pathlib.Path(os.environ["EDGE_CONFIG"])
+        elif (ROOT / "pyproject.toml").is_file():
             path = ROOT / "config.local.yaml"
         else:
             config_home = os.environ.get("XDG_CONFIG_HOME") or str(pathlib.Path.home() / ".config")
@@ -168,11 +191,30 @@ class Bridge(QObject):
             })
         self._pages = pages
 
+    def _look(self) -> tuple:
+        return (self._theme, self._metrics, self._effects, self._wallpapers)
+
+    def _layout(self) -> tuple:
+        # The view versions belong to it: an updated store widget has to be
+        # rebuilt even when the layout itself stayed the same.
+        # So are the texts: `tr()` is read when a tile is built, so a new
+        # language only reaches the display through a rebuild.
+        ids = sorted({w["id"] for page in self._pages for w in page["widgets"]})
+        return (self._pages, [(i, view_version(i)) for i in ids], self._strings)
+
     def reload(self) -> None:
-        """Re-read the config after the settings window saved it."""
+        """Re-read the config after the settings window saved it.
+
+        Only what changed is announced. A new page layout rebuilds every tile,
+        which drops running countdowns and unsaved note edits, and most saves
+        (a module option, a quick action) do not touch the layout at all.
+        """
+        look, layout = self._look(), self._layout()
         self._load_config()
-        self.themeChanged.emit()
-        self.pagesChanged.emit()
+        if self._look() != look:
+            self.themeChanged.emit()
+        if self._layout() != layout:
+            self.pagesChanged.emit()
 
     @Property("QVariant", notify=pagesChanged)
     def pages(self):
@@ -336,18 +378,28 @@ class Bridge(QObject):
     # -- live data ---------------------------------------------------------
 
     def _connect(self) -> None:
+        if self._socket.state() != QAbstractSocket.SocketState.UnconnectedState:
+            return
         self._socket.open(QUrl(self._url))
 
     def _on_connected(self) -> None:
+        self._retry.stop()
         self._retry_ms = 500
         self._online = True
         self.onlineChanged.emit()
+        # Back after an outage: the config may have changed while the backend
+        # was away (an update, a restart), and no settings frame says so.
+        if self._connected_once:
+            self.reload()
+        self._connected_once = True
 
     def _on_disconnected(self) -> None:
         if self._online:
             self._online = False
             self.onlineChanged.emit()
-        QTimer.singleShot(self._retry_ms, self._connect)
+        if self._retry.isActive():
+            return
+        self._retry.start(self._retry_ms)
         self._retry_ms = min(self._retry_ms * 2, 5000)
 
     @Slot(str, result="QVariant")
@@ -368,7 +420,9 @@ class Bridge(QObject):
         if module:
             data = frame.get("data")
             self._cache[module] = data
-            self.dataArrived.emit(module, data)
+            self.moduleUpdated.emit(module)
+            if self.receivers(SIGNAL_DATA_ARRIVED) > 0:
+                self.dataArrived.emit(module, data)
 
     @Slot(result=str)
     def summary(self) -> str:

@@ -6,233 +6,115 @@
 
 ![Das Edge Dashboard auf dem Corsair Xeneon Edge: Netzwerk, Uhr, Wetter, CPU, GPU und RAM](docs/screenshots/kiosk-main.png)
 
-Dashboard für das **Corsair Xeneon Edge 14,5"** (2560x720), das zweite
-Touchdisplay unter dem Monitor. Läuft unter Linux, entwickelt und im
-Dauerbetrieb auf [CachyOS](https://cachyos.org/) (Arch Linux) mit KDE Plasma
-und NVIDIA- oder AMD-Grafik. Die Installation ist außerdem auf Ubuntu, Debian,
-Fedora und Bazzite geprüft. Es besteht aus drei Teilen: einem lokalen FastAPI-Server,
-einem Kioskfenster in QML, das die Anzeige füllt, und
-**EDGE//DASH**, einer eigenen Anwendung für die Einstellungen.
+Ein Dashboard für das **Corsair Xeneon Edge 14,5"** (2560x720), das
+Touchdisplay unter dem Monitor. Ein Kioskfenster füllt die Anzeige mit
+Widgets voller Livedaten, und **EDGE//DASH**, eine eigene Desktop-Anwendung,
+hält die Einstellungen.
 
-- **Widgets mit Livedaten**: CPU, RAM, GPU, Netzwerk, Temperatursensoren,
-  einzelne Sensoren als Kurve oder Ring, Datenträger, Prozessliste, Uhr,
-  Wetter (Open-Meteo), Mediensteuerung über MPRIS, YouTube-Kacheln, smarte
-  Lampen (Govee und Tuya), Quick Actions, Pomodoro und Notizen.
-- **Plugins aus dem Store**: weitere Widgets und Designs kommen mit einem
-  Klick aus dem Plugin-Store, darunter Desktop-Benachrichtigungen, Discord,
-  ein RSS-Reader, eine Diashow, eine Zeichenfläche und die Mondphase. Plugins
-  bringen ihre Abhängigkeiten selbst mit. Updates melden sich von selbst, und
-  eigene Widgets lassen sich im selben Fenster einreichen.
-- **Notizen, lokal oder in Joplin**: Ordner, Ordnerfarben, Suche, Anheften und
-  Checklisten zum Abhaken per Fingertipp. Gespeichert in einer Datei auf
-  diesem PC oder in der Joplin-Desktop-App; was am PC in Joplin geändert wird,
-  steht nach wenigen Sekunden auf dem Display.
-- **Seiten und Wischen**: Widgets werden in CSS-Grid-Layouts über mehrere
-  Seiten verteilt, auf dem Touchscreen wischt man waagerecht zwischen ihnen.
-- **Einstellungsfenster**: Design, Plugins und ihre Einstellungen, Wetter,
-  YouTube, das Quick-Action-Deck und das Seitenlayout werden in einer
-  Desktop-Anwendung
-  bearbeitet, nicht auf dem schmalen Display. Sie sitzt im Systemabschnitt der
-  Leiste und im Anwendungsmenü.
-- **Widget-Varianten**: ein Widget kann mehrere Darstellungen anbieten. Die
-  Messwert-Widgets kennen `compact` für kleine Kacheln, das nur die Zahl und
-  ihre Unterzeile zeigt.
-- **Designs**: cyberpunk, clean, steampunk, light, toxic, nightclub,
-  industrial. Weitere kommen aus dem Store oder aus einer eigenen CSS-Datei.
-- **Zwei Sprachen**: Deutsch und Englisch. Die Sprache der Anzeige steht in
-  der Konfiguration, das Fenster hat seine eigene unter `Sprache`.
-- **Ohne Neustart**: was das Einstellungsfenster speichert, landet in
-  `config.local.yaml` und wird über den WebSocket angekündigt. Die Anzeige
-  zieht nach, ohne dass etwas neu geladen wird.
+## Wo läuft es?
 
-Anleitungen zum Erweitern: [Ein Widget schreiben](docs/widgets.de.md) und
+**Unterstützt:** CachyOS, Arch Linux, Ubuntu 22.04 und 24.04, Debian 13,
+Fedora 43 und Bazzite, jeweils x86_64.
+
+- **Linux** mit systemd. Entwickelt und täglich im Einsatz auf
+  [CachyOS](https://cachyos.org/) mit KDE Plasma und NVIDIA- oder AMD-Grafik.
+  Andere Distributionen mit systemd sollten ebenso laufen.
+- **Wayland oder X11.** Der Kiosk findet das Xeneon selbst, auch skaliert oder
+  hochkant montiert. Andere Panels gehen ebenfalls, mit `--output`.
+- **Desktops:**
+
+| Sitzung | Kiosk nicht in der Fensterliste | Symbol in der Leiste | Start beim Anmelden |
+|---|---|---|---|
+| KDE Plasma 6 und 5 | ja | ja | ja |
+| GNOME | unter X11; Wayland bietet dafür nichts | mit der AppIndicator-Erweiterung | ja |
+| XFCE, Cinnamon, MATE, LXQt | unter X11 | ja | ja |
+| Hyprland, Sway, i3 | Hyprland ja, Sway teilweise | ja, etwa Waybar | eine Zeile in deren Konfiguration, der Installer nennt sie |
+
+Einzelheiten je Desktop stehen in [Einrichtung und Entwicklung](docs/setup.de.md#desktop-umgebungen).
+
+## Was kann es?
+
+- **Widgets mit Livedaten** für System, Schreibtisch und Tag, siehe die
+  Tabelle unten.
+- **Seiten zum Durchwischen**, jede ein Raster, das man im
+  Einstellungsfenster anordnet.
+- **Quick Actions**: ein Kachelraster wie beim Stream Deck, das Befehle
+  ausführt, Adressen aufruft oder Programme startet, mit Ordnern und
+  Live-Status.
+- **Notizen**, lokal oder in Joplin, mit Ordnern, Suche und Checklisten zum
+  Abhaken per Finger.
+- **Designs**: cyberpunk, clean, steampunk, light, toxic, nightclub und
+  industrial sind eingebaut, weitere kommen aus dem Store, auch mit
+  Hintergrundbildern.
+- **Ein Einstellungsfenster** in der Leiste und im Anwendungsmenü: Designs,
+  Plugins, Layout, Quick Actions, Wetter. Änderungen stehen sofort auf der
+  Anzeige, ohne Neustart.
+- **Deutsch und Englisch.**
+
+![Das Einstellungsfenster EDGE//DASH mit der Designauswahl](docs/screenshots/settings-theme.png)
+
+| Widget | Modul | Was es zeigt |
+|---|---|---|
+| `heartbeat` | `heartbeat` | Verbindung und Laufzeit |
+| `clock` | `timezones` | Ortszeit oder eine andere Zone, analog oder digital in 22 Zifferblättern, Countdown mit Gong |
+| `world_clock` | `timezones` | Bis zu sechs Zeitzonen nebeneinander |
+| `cpu` | `system`, `sensors` | Auslastung je Kern mit Kurve, dazu die Temperatur |
+| `ram` | `system`, `sensors` | Arbeitsspeicher mit Kurve, dazu die Temperatur |
+| `network` | `system` | Durchsatz hoch und runter mit zwei Kurven |
+| `gpu` | `gpu` | Auslastung, Speicher, Temperatur und Leistung einer NVIDIA- oder AMD-Karte |
+| `sensors` | `sensors` | Alle Temperaturen aus hwmon als Tabelle |
+| `sensor_focus` | `sensors` | Ein oder zwei gewählte Sensoren als Kurve oder Ring |
+| `disk_usage` | `disk_usage` | Belegung je eingehängtem Datenträger |
+| `top_processes` | `top_processes` | Die aufwendigsten Prozesse |
+| `weather` | `weather` | Aktuelles Wetter und Vorhersage (Open-Meteo) |
+| `media` | `media` | Steuerung und Cover des Players (MPRIS) |
+| `youtube` | `youtube` | Videokacheln, ein Tippen öffnet das Videofenster |
+| `quick_actions` | `quick_actions` | Das Kachelraster mit Befehlen, HTTP und Programmen, Ordnern und Status |
+| `smart_lights` | `smart_lights` | Lampen von Govee und Tuya |
+| `pomodoro` | keins | Pomodoro-Uhr und Stoppuhr |
+| `notes` | `notes` | Notizen mit Ordnern, Suche, Anheften und Checklisten, lokal oder in Joplin |
+
+## Plugins
+
+![Die Plugins-Seite im Einstellungsfenster: eingebaute und Store-Widgets nach Kategorien](docs/screenshots/settings-plugins.png)
+
+Weitere Widgets und Designs kommen aus dem
+[Plugin-Store](https://streamdeckstore.labratox.de), mit einem Klick unter
+**Plugins** im Einstellungsfenster.
+
+- Ein Plugin bringt mit, was es braucht. Python-Pakete installieren sich ohne
+  besondere Rechte, Systempakete fragen einmal nach dem Passwort.
+- Updates melden sich von selbst, **Alle aktualisieren** holt sie.
+- Archive werden gegen die SHA-256-Prüfsumme des Stores geprüft, bevor etwas
+  entpackt wird.
+- Ein eigenes Widget oder Design lässt sich aus einer ZIP-Datei oder einem
+  Ordner ausprobieren und im selben Fenster beim Store einreichen.
+
+Wie man eins baut: [Ein Widget schreiben](docs/widgets.de.md) und
 [Ein Theme schreiben](docs/themes.de.md).
 
-## Bedienung am Display
+## Wie wird es installiert?
 
-Das Display zeigt an, konfiguriert wird es nicht auf sich selbst. Auf dem
-Touchscreen bleibt, wofür ein Finger taugt:
-
-| Geste | Wirkung |
-|---|---|
-| Waagerecht wischen (oder klicken und ziehen) | Seite wechseln |
-| Auf einen Seitenpunkt unten tippen | direkt zu dieser Seite |
-| Auf eine Quick-Action-Kachel tippen | Aktion ausführen |
-| In eine Kachel tippen | was das Widget anbietet: eine Notiz öffnen, einen Checklistenpunkt abhaken, einem Discord-Kanal beitreten, zum nächsten Bild springen |
-
-Alles andere, also Designs, Plugins und ihre Einstellungen, das Deck und das Seitenlayout,
-steckt im Einstellungsfenster. Diese Trennung ist Absicht: eine Argumentliste
-oder ein Grid-Template mit dem Finger auf einem 2560x720-Streifen zu
-bearbeiten war der unangenehmste Teil des alten Aufbaus.
-
-## Aufbau
-
-Drei Prozesse, jeder mit einer Aufgabe:
-
-| Prozess | Was es ist | Läuft auf |
-|---|---|---|
-| `backend/` | FastAPI und der Modul-Hub, der einzige Schreiber der Konfiguration | virtuelle Umgebung des Projekts (`uv`) |
-| `shell/qml_kiosk` | das Kioskfenster auf dem Xeneon | PySide6 des Systems, sonst eine eigene Umgebung |
-| `gui/` | EDGE//DASH, das Einstellungsfenster | Tauri 2 und React |
-
-Kiosk und Einstellungsfenster sind beide gewöhnliche Clients des Backends
-über HTTP und einen WebSocket. Getrennt zu bleiben heißt: die Einstellungen
-öffnen auch dann, wenn der Kiosk nicht läuft, und ein abgestürzter Renderer
-reißt die Datensammlung nicht mit.
-
-Im Backend sitzt auch das Symbol im Systemabschnitt der Leiste
-(`backend/tray.py`, über D-Bus statt über ein GUI-Toolkit), und von dort wird
-das Einstellungsfenster gestartet. Es ist der einzige der drei Prozesse, der
-immer läuft, und damit der einzige sinnvolle Ort dafür.
-
-Der Code folgt einem **Registry-Muster**: ein Widget besteht aus einer Quelle
-im Backend (`backend/modules/<x>.py`, Unterklasse von `Module`, mit
-`@register_module` versehen), einer Anzeige im Kiosk
-(`shell/qml_kiosk/qml/widgets/<X>.qml`) und einem Manifest
-(`widgets/<x>.json`), das es dem Layout-Editor bekannt macht. Die Daten
-fließen vom Backend über den Hub und den WebSocket zu allen passenden
-Widgets. Ein neues Widget braucht keine Änderung am Gerüst.
-
-Widgets aus dem Store folgen demselben Muster, mit allen drei Teilen in einem
-Ordner unter `~/.local/share/edge-dashboard/plugins/<id>/`. Das Backend lädt
-ihre Module neben den eingebauten, der Kiosk findet ihre Anzeige dort.
-
-Ein Modul liefert seine Daten auf einem Takt (`interval`), von sich aus, wenn
-die Quelle sich meldet (`await self.emit(...)`, etwa bei MPRIS-Änderungen),
-oder auf beide Arten. Unveränderte Daten werden nicht erneut gesendet, außer
-das Modul setzt `dedupe = False`. Genau das tun die Module mit Messreihen,
-denn eine Sparkline braucht auch dann einen Frame, wenn der Wert gleich
-bleibt.
-
-## Voraussetzungen
-
-- **Linux mit systemd, x86_64.** Entwickelt auf Arch und CachyOS. Die
-  Installation ist auf Ubuntu 22.04 und 24.04, Debian 13, Fedora 43, Bazzite
-  und Arch geprüft. Andere Distributionen sollten ebenso laufen.
-- **Wayland oder X11.** Das Kioskfenster sucht sich seine Anzeige selbst.
-
-Um die meisten Bestandteile kümmert sich die Installation:
-
-| Bestandteil | Wofür | Woher |
-|---|---|---|
-| [uv](https://github.com/astral-sh/uv) | Umgebungen und Abhängigkeiten, auch die Python-Pakete von Plugins | der Einzeiler installiert es |
-| Python 3.13 | Laufzeit | `uv` holt es, falls es fehlt |
-| PySide6 ab 6.10 | das Kioskfenster (Qt Quick) und der Videoplayer (Qt-WebEngine) | vom System, sonst von PyPI, siehe [Installation](#installation) |
-| WebKitGTK 4.1 | das Einstellungsfenster | System, der Installer nennt das Paket |
-| systemd | die beiden Dienste | vorinstalliert |
-
-Node und Rust braucht nur, wer das Einstellungsfenster selbst baut. Fehlen sie,
-lädt der Installer das fertige Programm aus dem Release.
-
-### Je nach Modul
-
-| Modul | Braucht | Arch-Paket | Anmerkung |
-|---|---|---|---|
-| `gpu` | NVIDIA: Treiber mit nvml. AMD: der Kerneltreiber `amdgpu` | `nvidia-utils` für NVIDIA, für AMD nichts | Liest alle Karten beider Hersteller, auch integrierte Grafik. Ohne Karte meldet es das und stört nicht weiter. |
-| `sensors` | gefülltes `/sys/class/hwmon` | `lm_sensors` | Einmal `sudo sensors-detect` laufen lassen. AMD-CPUs brauchen ein geladenes `k10temp`. |
-| `media` | D-Bus-Sitzungsbus und ein MPRIS-Player | vorinstalliert | Funktioniert mit Spotify, MPV, VLC und Browsern mit MPRIS-Erweiterung. |
-| `weather` | Internet | | Nutzt die kostenlose Open-Meteo-API ohne Schlüssel. |
-| `youtube` | Internet | | Holt oEmbed-Daten, kein API-Schlüssel nötig. |
-| `smart_lights` | Govee- oder Tuya-Konto | | Die Schlüssel werden je Anbieter eingetragen. |
-| `quick_actions` | hängt von der Aktion ab | `libnotify` für `notify-send` und so weiter | Jede Aktion bringt ihren eigenen Befehl mit. |
-| `timezones` | die IANA-Zeitzonendatenbank | `tzdata` (vorinstalliert) | Gelesen aus `/usr/share/zoneinfo`, aktualisiert mit dem System. |
-| `notes` | lokal nichts; für Joplin die Desktop-App mit eingeschaltetem Web-Clipper-Dienst | `joplin-desktop` (AUR) oder das AppImage | Der Speicher wird in den Plugin-Einstellungen gewählt. Einmal über die Kachel verbinden und in Joplin bestätigen. |
-
-## Desktop-Umgebungen
-
-Entwickelt und benutzt unter KDE Plasma 6 auf Wayland. Was die anderen
-brauchen, wichtig vor allem für Ubuntu, Debian und Fedora, die standardmäßig
-GNOME mitbringen:
-
-| Sitzung | Kiosk aus der Fensterliste | Symbol in der Leiste |
-|---|---|---|
-| **X11**, beliebige Umgebung | automatisch | ja |
-| **KDE Plasma** (Wayland) | automatisch, per KWin-Regel | ja |
-| **Hyprland** | ein Schnipsel zum Einbinden, der Installer schreibt ihn | ja, etwa über Waybar |
-| **Sway / i3** | teilweise, siehe unten | ja, etwa über Waybar |
-| **GNOME** (Wayland) | nicht möglich | braucht eine Erweiterung |
-| **andere** (Wayland) | nicht automatisch | meistens ja |
-
-Zwei Dinge hängen an der Umgebung, beide kosmetisch. Das Dashboard selbst
-läuft überall.
-
-**Der Kiosk soll nicht in der Fensterliste stehen.** Unter X11 verlangt das
-Fenster das selbst, es setzt `_NET_WM_WINDOW_TYPE_UTILITY`, was jeder
-Fenstermanager versteht. Wayland kennt keine Fenstertypen, dort muss der
-Compositor es tun. Das erledigt `scripts/window-rule.sh`, und der Installer
-ruft es auf:
-
-```bash
-./scripts/window-rule.sh
-systemctl --user restart edge-kiosk    # gilt für danach geöffnete Fenster
-```
-
-Unter Plasma schreibt es eine KWin-Regel, unter Hyprland einen
-`windowrulev2`-Schnipsel, der aus `hyprland.conf` eingebunden werden muss (das
-Skript sagt, wie), unter Sway eine `for_window`-Zeile. Sway kennt kein
-skip-taskbar, dort wird das Fenster nur markiert, damit eine Leiste es
-herausfiltern kann. GNOME auf Wayland bietet dafür nichts.
-
-`EDGE_KIOSK_NO_FOCUS=1 ./scripts/window-rule.sh` lässt das Fenster zusätzlich
-den Tastaturfokus verweigern, damit eine Berührung des Dashboards die Tastatur
-nicht vom Hauptmonitor wegzieht. Standardmäßig aus, denn Wayland kann nicht
-Zeigereingaben annehmen und Tastatur ablehnen: ohne Fokus ist jedes Textfeld
-auf dem Kiosk nur noch lesbar, womit das Notiz-Widget sinnlos wird.
-
-**Das Symbol in der Leiste** nutzt StatusNotifierItem über D-Bus, was Plasma,
-Waybar, XFCE, Cinnamon und die meisten anderen umsetzen. GNOME braucht dafür
-die Erweiterung *AppIndicator and KStatusNotifierItem Support*. Ohne das läuft
-das Backend unverändert weiter, und das Einstellungsfenster öffnet man über
-das Anwendungsmenü.
-
-## Installation
-
-### Mit einem Befehl (alle Distributionen)
+**Jede Distribution**, mit einem Befehl. Er holt `uv`, falls es fehlt,
+installiert das neueste Release und nennt fehlende Systembibliotheken samt
+Befehl. Noch einmal ausgeführt aktualisiert er, die Einstellungen bleiben.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LabRaTox/EdgeDisplayWidgets/main/scripts/get.sh | bash
 ```
 
-Das holt `uv`, falls es fehlt, entpackt das neueste Release nach
-`~/.local/share/edge-dashboard/app` und startet den Installer. Der nennt
-fehlende Systembibliotheken samt Befehl. Danach denselben Befehl noch einmal
-ausführen. Auch ein Update läuft so, Einstellungen bleiben dabei erhalten.
-
-Auf Arch und CachyOS funktioniert das ebenso, dort ist aber das Paket der
-bessere Weg, weil Updates dann über pacman laufen.
-
-### Als Paket (Arch, CachyOS)
-
-Die Paketdateien liegen im Repository unter `packaging/aur/`, und an jedem
-Release auf GitHub hängt ein fertig gebautes Paket. Es legt die
-systemd-Units, den Menüeintrag und das Symbol dorthin, wo sie hingehören, und
-hält die Einstellungen in `~/.config/edge-dashboard/`.
-
-Selbst bauen:
-
-```bash
-git clone https://github.com/LabRaTox/EdgeDisplayWidgets.git
-cd EdgeDisplayWidgets/packaging/aur
-makepkg -si
-```
-
-Oder das Paket aus dem
-[neuesten Release](https://github.com/LabRaTox/EdgeDisplayWidgets/releases/latest)
-installieren:
+**Arch und CachyOS**: das Paket aus dem
+[neuesten Release](https://github.com/LabRaTox/EdgeDisplayWidgets/releases/latest),
+dann kommen Updates über pacman. Oder selbst bauen aus `packaging/aur` mit
+`makepkg -si`.
 
 ```bash
 sudo pacman -U edge-dashboard-*-x86_64.pkg.tar.zst
-```
-
-Danach starten, jetzt und bei jedem Anmelden, und den Kiosk aus der
-Fensterliste nehmen:
-
-```bash
 systemctl --user enable --now edge-dashboard.service edge-kiosk.service
 edge-dashboard-window-rule
 ```
 
-### Aus dem Repository (für die Entwicklung)
+**Aus dem Repository**, für die Entwicklung:
 
 ```bash
 git clone https://github.com/LabRaTox/EdgeDisplayWidgets.git
@@ -240,674 +122,20 @@ cd EdgeDisplayWidgets
 ./scripts/install.sh
 ```
 
-Das ist die ganze Installation. Danach steht das Dashboard auf dem Display,
-das Symbol ist in der Leiste, das Einstellungsfenster im Anwendungsmenü, und
-beim nächsten Anmelden kommt alles von selbst wieder.
-
-Der Installer der Reihe nach:
-
-1. Prüft, was vorhanden ist, und nennt zu allem Fehlenden das Paket: `uv`,
-   eine systemd-Benutzersitzung und eine Leiste, die ein
-   Symbol anzeigen kann.
-2. Legt mit `uv sync` die virtuelle Umgebung aus `uv.lock` an, mit Python 3.13
-   und ohne Entwicklungspakete, und richtet das PySide6 für den Kiosk ein.
-3. Baut das Einstellungsfenster, falls `npm` und `cargo` da sind. Sonst lädt
-   es das fertige Programm aus dem GitHub-Release. Klappt beides nicht,
-   funktioniert der Rest trotzdem, nur die Oberfläche fehlt.
-4. Installiert deren Symbol und Menüeintrag nach `~/.local/share` und
-   frischt den Menü-Zwischenspeicher auf.
-5. Sagt dem Compositor, dass das Kioskfenster nicht in die Fensterliste
-   gehört, auf die Art, die dieser Compositor versteht.
-6. Schreibt beide systemd-Units nach `~/.config/systemd/user/`, mit dem
-   Projektpfad, dem Pfad zu `uv` und dem Python des Kiosks eingesetzt.
-7. Aktiviert und startet sie und meldet, ob sie hochgekommen sind.
-
-Ein erneuter Lauf ändert nichts, was schon stimmt. Nach einem `git pull` mit
-neuen Python-Paketen muss er laufen, denn die Dienste aktualisieren die Umgebung
-nicht selbst. Schalter:
-
-```bash
-./scripts/install.sh --no-build      # Einstellungsfenster nicht bauen
-./scripts/install.sh --no-start      # einrichten, aber nichts starten
-./scripts/install.sh --no-autostart  # jetzt starten, aber nicht beim Anmelden
-```
-
-Für das Kioskfenster nimmt der Installer das PySide6 **der Distribution**,
-wenn es mindestens 6.10 ist und PyYAML im System-Python liegt. Diese Fassung
-spielt auch H.264 und AAC. Sonst legt er `.venv-kiosk` mit PySide6 von PyPI an
-(etwa 700 MB). Das ist unter anderem auf Ubuntu und Debian der Fall und
-funktioniert ohne Handgriff am Python, nur die Systembibliotheken nennt der
-Installer samt Befehl. YouTube läuft damit über VP9 und Opus; nur Videos, die
-es ausschließlich in H.264 gibt, spielt diese Fassung nicht ab. Unter Arch
-nennt der Installer stattdessen die Pakete für das System-PySide6.
-
-### Danach
-
-```bash
-systemctl --user status edge-dashboard edge-kiosk         # was läuft
-journalctl --user -u edge-dashboard -u edge-kiosk -f      # Protokoll mitlesen
-systemctl --user stop   edge-dashboard edge-kiosk         # beide anhalten
-```
-
-![Das Einstellungsfenster EDGE//DASH mit der Designauswahl](docs/screenshots/settings-theme.png)
-
-### Das Kioskfenster von Hand starten
-
-```bash
-PYTHONPATH=$PWD/shell /usr/bin/python3 -m qml_kiosk.main
-```
-
-Hat der Installer `.venv-kiosk` angelegt, tritt das Python daraus an die Stelle
-von `/usr/bin/python3`.
-
-Es sucht die Anzeige mit der Auflösung 2560x720 und füllt sie. Taucht das
-Display später auf als das Fenster, etwa nach einem Kaltstart, zieht das
-Fenster von selbst um. `--help` listet die Schalter.
-
-### Das Einstellungsfenster
-
-Der Installer baut es oder lädt es aus dem Release. Für Entwicklung oder nach
-Änderungen an der Oberfläche:
-
-```bash
-cd gui
-npm install
-npm run tauri dev                 # Entwicklungsserver auf http://localhost:5173
-npm run tauri build -- --no-bundle # nur das Programm, mehr wird nicht gebraucht
-npm run tauri build               # zusätzlich ein .deb
-```
-
-Aus dem Projektverzeichnis heraus braucht es kein Paket: das Programm unter
-`src-tauri/target/release/` ist das, worauf Leistensymbol und Menüeintrag
-zeigen. Deshalb übergibt der Installer `--no-bundle`. Der vollständige Bau
-erzeugt zusätzlich ein `.deb`; der AppImage-Schritt scheitert derzeit unter
-Arch in `linuxdeploy`.
-
-![Das Quick-Action-Deck im Einstellungsfenster](docs/screenshots/settings-actions.png)
-
-Zwei Wege hinein, der Installer richtet beide ein: das **Symbol in der
-Leiste** und der Eintrag **EDGE//DASH** im Anwendungsmenü. Ein Klick auf das
-Symbol öffnet das Fenster, ein Rechtsklick gibt ein kleines Menü. Das Fenster
-gibt es nur einmal, ein zweiter Aufruf holt das offene nach vorn. Findet es
-kein Backend, startet es die Dienste selbst, statt nur zu melden, dass nichts
-antwortet.
-
-Das Symbol wird von `backend/brand.py` gezeichnet, demselben Code, den auch
-die Leiste benutzt, damit beide nicht auseinanderlaufen. Nach einer Änderung
-daran:
-
-```bash
-uv run python scripts/make-icon.py    # zeichnet alle Symboldateien neu
-./scripts/install-desktop.sh          # kopiert sie ins Symbolthema
-```
-
-### Autostart
-
-**System** im Einstellungsfenster schaltet den Autostart für beide Dienste
-zusammen. Es schreibt dieselben Units wie der Installer und ruft
-`systemctl --user enable` oder `disable` auf, mit Absicht ohne `--now`: der
-Schalter regelt das nächste Anmelden und startet nicht das Backend neu, das
-gerade die Anfrage beantwortet.
-
-### Ohne Installer
-
-```bash
-uv sync                                # Umgebung anlegen
-uv run python -m backend.main          # API auf http://127.0.0.1:8765
-uv run pytest                          # rund 400 Tests, sollten alle grün sein
-```
-
-Für den Dienstbetrieb beide Units aus `systemd/` nach
-`~/.config/systemd/user/` kopieren, dabei `__PROJECT_DIR__` durch den
-absoluten Pfad des Projekts, `__UV__` durch `$(command -v uv)` und
-`__KIOSK_PYTHON__` durch `/usr/bin/python3` oder das Python in `.venv-kiosk`
-ersetzen, dann `systemctl --user daemon-reload` und aktivieren. Die
-Kiosk-Unit nutzt absichtlich nicht die virtuelle Umgebung des Backends.
-
-## Konfiguration
-
-Geladen wird in dieser Reihenfolge:
-
-1. die Umgebungsvariable `$EDGE_CONFIG`, ein ausdrücklicher Pfad, nützlich für
-   Tests
-2. `config.local.yaml` im Projektverzeichnis, falls vorhanden; das ist nach dem
-   Einzeiler `~/.local/share/edge-dashboard/app`. Beim Paket stattdessen
-   `~/.config/edge-dashboard/config.yaml`
-3. `config.yaml`, die mitgelieferte Vorlage
-
-**Bearbeitet wird im Einstellungsfenster, nicht in der Datei.** Was dort
-gespeichert wird, landet in `config.local.yaml`, die nicht in Git liegt. Die
-eingecheckte `config.yaml` bleibt eine saubere Vorlage. Geschrieben wird
-atomar, und die ersetzte Fassung bleibt als `config.local.yaml.bak` liegen.
-
-### Oberste Ebene
-
-```yaml
-server:
-  host: "127.0.0.1"    # Bindeadresse, localhost heißt nur diese Maschine
-  port: 8765
-
-logging:
-  level: "INFO"        # TRACE | DEBUG | INFO | WARNING | ERROR | CRITICAL
-  json: false          # true ergibt ein JSON-Objekt je Zeile, für journald
-
-default_theme: "cyberpunk"
-default_language: "auto"   # auto | en | de, gilt für die Anzeige
-
-modules: { ... }       # je Modul, siehe unten
-pages:   [ ... ]       # Seitenlayouts, siehe unten
-```
-
-### Module
-
-Jeder Schlüssel unter `modules:` entspricht dem `name` einer `Module`-Klasse.
-Gemeinsam haben alle `enabled` und `interval`, alles Weitere reicht das
-Backend an das Modul durch.
-
-> Im Einstellungsfenster schaltet unter **Plugins** der Schalter auf der
-> Karte eines Widgets dessen Module an und aus, und **Plugin-Einstellungen**
-> zeigt für jedes Feld, das diese Module deklarieren, eine Eingabe: das
-> Intervall und was das Modul selbst anbietet, etwa die API-Schlüssel der
-> Lampen, `min_size_gb` und Einhängepunkte der Datenträger, die Zeilenzahl der
-> Prozessliste, die Zeitgrenzen der Quick Actions oder den Speicherort der
-> Notizen. Geheimnisse werden maskiert und nur überschrieben, wenn ein neuer
-> Wert eingegeben wird. Das YAML unten erklärt,
-> was die Felder bedeuten, es ist kein Ort, an dem man normalerweise
-> schreibt.
-
-```yaml
-modules:
-  heartbeat:
-    enabled: true
-    interval: 1.0          # die Verbindungsanzeige oben am Dashboard
-
-  system:                  # CPU, RAM und Netzwerkzähler über psutil
-    enabled: true
-    interval: 1.0
-
-  gpu:                     # GPU-Werte, NVIDIA über nvml, AMD über amdgpu
-    enabled: true
-    interval: 1.0
-
-  sensors:                 # Temperaturen aus /sys/class/hwmon
-    enabled: true
-    interval: 2.0
-
-  media:                   # MPRIS-Steuerung für Spotify, Browser, MPV
-    enabled: true          # ohne Intervall: meldet sich bei Änderungen am Player
-
-  weather:
-    enabled: true
-    interval: 600          # Open-Meteo empfiehlt mindestens zehn Minuten
-    name: ""
-    lat: 0
-    lon: 0
-    timezone: "auto"
-    units: "metric"        # metric | imperial
-
-  youtube:
-    enabled: true
-    interval: 3600         # oEmbed-Daten ändern sich selten
-    entries:
-      - "https://www.youtube.com/watch?v=dQw4w9WgXcQ"   # Video-Adresse
-      - "fh-i7gw4Dwg"                                   # oder die reine ID
-      - "https://www.youtube.com/playlist?list=PL..."   # oder eine Playlist
-
-  disk_usage:
-    enabled: true
-    interval: 30
-    min_size_gb: 1.0       # blendet Winzlinge wie /boot/efi aus
-    # mounts: ["/", "/home"]    # optionale Auswahl, sonst alle echten Platten
-
-  top_processes:
-    enabled: true
-    interval: 3
-    limit: 6               # Anzahl der Zeilen
-
-  notes:
-    enabled: true
-    interval: 5            # wie oft nach Änderungen von außen gesehen wird
-    storage: local         # local | joplin
-    joplin_token: ""       # freiwillig; leer: "Mit Joplin verbinden" in der Kachel fragt danach
-    joplin_notebook: "Edge Dash"   # das Joplin-Notizbuch für Schnellnotizen
-    joplin_port: 0         # 0: Joplin auf den Ports 41184 bis 41194 suchen
-```
-
-**Notizen in Joplin.** Die Joplin-Desktop-App stellt eine lokale API bereit,
-sobald ihr Web-Clipper-Dienst eingeschaltet ist (Einstellungen → Web Clipper).
-Mit `storage: joplin` liegt alles dort: Notizbücher werden zu Ordnern,
-Unter-Notizbücher erscheinen als „Eltern › Kind“, Checklisten bleiben Markdown
-(`- [ ]`) und lassen sich auf dem Display abhaken, Schnellnotizen landen im
-Notizbuch aus `joplin_notebook`. Für die Verbindung braucht es einen Token,
-entweder in den Plugin-Einstellungen eingetragen oder über **Mit Joplin
-verbinden** in der Kachel angefordert und in Joplin bestätigt. Anheften kennt
-Joplin nicht, welche Notizen angeheftet sind, merkt sich Edge Dash auf diesem
-Rechner.
-
-### Quick Actions
-
-Ein **Kachelraster nach Art eines Stream Decks**. Jede Kachel führt einen
-lokalen Befehl aus, schickt eine HTTP-Anfrage, startet ein Programm oder
-öffnet einen Ordner mit weiteren Kacheln. Das Frontend kennt ausschließlich
-undurchsichtige Kennungen; die eigentlichen Befehle, Adressen und HTTP-Header
-bleiben in der Konfiguration des Backends und erreichen den Browser nie.
-Befehle laufen als Argumentliste, ohne Shell dazwischen, also ohne Globbing,
-ohne Einsetzen von Variablen, ohne Pipes.
-
-Das Deck verteilt die Kacheln auf ein festes Raster aus `columns` mal `rows`
-(voreingestellt 4 mal 3) und blättert, was nicht passt, auf weitere Seiten.
-Kacheln dürfen mehrere Zellen einnehmen, eigene Farben tragen, auf einer
-festen Zelle sitzen und einen Statuspunkt zeigen.
-
-**Bearbeitet** wird das unter `Aktionen` im Einstellungsfenster: das Deck wird
-als Raster gezeichnet, ein Klick wählt eine Kachel aus, rechts stehen Symbol,
-Beschriftung, Art, Befehl oder Adresse, HTTP-Header, Rückfrage, Farben, Größe,
-Position und die Statusabfrage. Kacheln lassen sich mit der Maus umsortieren,
-ein Doppelklick öffnet einen Ordner, und `Ausführen` löst die Aktion aus, um
-sie zu prüfen, ohne den Editor zu verlassen.
-
-![Das Quick-Action-Deck auf dem Display](docs/screenshots/kiosk-actions.png)
-
-#### YAML
-
-```yaml
-modules:
-  quick_actions:
-    enabled: true
-    interval: 60             # die Liste ist statisch, der Takt frischt den Status auf
-    timeout_seconds: 30      # Höchstlaufzeit je Aktion
-    status_timeout_seconds: 8   # Höchstlaufzeit je Statusabfrage
-    columns: 4               # Rasterbreite (1 bis 8)
-    rows: 3                  # Rasterhöhe (1 bis 8), Überzähliges blättert
-    actions:
-      # Befehl als Argumentliste, keine Shell, keine Platzhalter.
-      - id: lock
-        label: "Sperren"
-        icon: "🔒"            # Emoji, Text, oder "ti:<name>" für ein Tabler-Symbol
-        kind: shell
-        command: ["loginctl", "lock-session"]
-
-      # confirm: true fragt vorher nach.
-      - id: reboot
-        label: "Neustart"
-        icon: "🔄"
-        kind: shell
-        command: ["systemctl", "reboot"]
-        confirm: true
-
-      # Ein Programm starten. detach: true schickt es in eine eigene Sitzung
-      # und kehrt sofort zurück, damit die Zeitgrenze es nicht abwürgt.
-      - id: launch_firefox
-        label: "Firefox"
-        icon: "app:firefox"   # wird über /api/apps/icon/<name> aufgelöst
-        kind: shell
-        command: ["firefox"]
-        detach: true
-
-      # HTTP-Aktion, etwa an Home Assistant. Die Header bleiben im Backend.
-      - id: lights_off
-        label: "Licht aus"
-        icon: "💡"
-        kind: http
-        method: POST
-        url: "http://homeassistant.local:8123/api/services/light/turn_off"
-        headers:
-          Authorization: "Bearer DEIN_TOKEN"
-        json:
-          entity_id: "all"
-
-      # Eigene Farben, feste Zelle, zwei Spalten breit, mit Statusabfrage.
-      # `state` (on/off/unknown) steuert den Punkt auf der Kachel.
-      - id: vpn
-        label: "VPN"
-        icon: "ti:shield-lock"
-        kind: shell
-        command: ["nmcli", "connection", "up", "vpn"]
-        color: "#1e293b"       # Kachelhintergrund, hexadezimal
-        text_color: "#38bdf8"  # Symbol und Beschriftung
-        w: 2                   # zwei Zellen breit (1 bis 4)
-        h: 1                   # eine Zelle hoch (1 bis 4)
-        page: 0                # welche Deckseite
-        x: 0                   # Spalte, ab 0 gezählt
-        y: 1                   # Zeile, ab 0 gezählt
-        status:                # die Abfrage verlässt das Backend nie
-          kind: shell
-          command: ["nmcli", "-t", "-f", "NAME", "connection", "show", "--active"]
-          match: "^vpn$"       # trifft zu, also an; sonst aus; Fehler heißt unbekannt
-
-      # Ein Ordner mit eigenem Unterdeck.
-      - id: system
-        label: "System"
-        icon: "ti:settings"
-        kind: folder
-        tiles:
-          - id: suspend
-            label: "Bereitschaft"
-            icon: "ti:moon"
-            kind: shell
-            command: ["systemctl", "suspend"]
-```
-
-Zu den Feldern:
-
-- `icon`: Emoji oder Text, `ti:<name>` für ein mitgeliefertes
-  [Tabler-Symbol](https://tabler.io/icons), `app:<name>` für das Symbol eines
-  installierten Programms.
-- `color` und `text_color`: nur hexadezimal (`#rgb` oder `#rrggbb`), ohne
-  Angabe erbt die Kachel vom Design.
-- `w` und `h`: Ausdehnung in Zellen (1 bis 4). `page`, `x` und `y` nageln die
-  Kachel fest; ohne `x` und `y` rutscht sie in die nächste freie Zelle. Im
-  Editor werden Spalte und Zeile ab 1 angezeigt, in der Datei ab 0 gezählt.
-- `status`: eine freiwillige Abfrage (`shell` oder `http`). Mit `match` gilt
-  an, wenn die Ausgabe passt, sonst aus; ohne `match` zählt der Erfolg (Ende
-  mit 0, HTTP 2xx). Eine fehlgeschlagene Abfrage ergibt unbekannt. Zum
-  Frontend geht nur der abgeleitete Zustand.
-- `detach` (nur bei `shell`): startet und vergisst, in einer eigenen Sitzung.
-  Für alles, was länger läuft als die Zeitgrenze, also für Programme mit
-  Fenster.
-- `label_size` und `icon_size`: Schriftgröße (10 bis 48) und Symbolgröße
-  (16 bis 128) nur dieser Kachel, in Pixeln; ohne Angabe gilt die des Decks.
-
-### Smarte Lampen
-
-```yaml
-modules:
-  smart_lights:
-    enabled: true
-    interval: 30
-    govee:
-      # Schlüssel: Govee-Home-App, Profil, "Apply for API Key".
-      # Kostenlos rund 10 000 Anfragen am Tag, weit mehr als dieses Widget braucht.
-      api_key: "DEIN-GOVEE-SCHLUESSEL"
-    tuya:
-      # Deckt Smart Life, Tuya Smart, Antela und die meisten Tuya-Ableger ab.
-      # Einrichtung auf https://iot.tuya.com:
-      #   1. Anmelden und ein Cloud-Projekt anlegen, kostenlos
-      #   2. Reiter Devices, "Link Tuya App Account", QR-Code mit Smart Life scannen
-      #   3. Access ID und Access Secret aus "Authorization Key" kopieren
-      #   4. Die UID des verknüpften Kontos steht nach dem Scannen dort
-      client_id: "DEINE-TUYA-CLIENT-ID"
-      secret:    "DEIN-TUYA-SECRET"
-      uid:       "DEINE-TUYA-UID"
-      region:    "eu"       # eu | us | cn | in, je nach Konto
-```
-
-Einen der beiden Blöcke leer lassen (`api_key: ""`) schaltet diesen Anbieter
-ab. Das Widget zeigt dann einen Hinweis statt eines Fehlers.
-
-### Seiten und Platzierung
-
-Jede Seite ist ein CSS-Grid. `grid.columns` und `grid.rows` sind wörtliche
-Werte für `grid-template-columns` und `grid-template-rows`. Jedes Widget
-bekommt `col` und `row`, ab 1 gezählt, dazu wahlweise `colspan` und `rowspan`.
-
-`variant` wählt eine der Darstellungen, die ein Widget anbietet. Ein Widget
-deklariert sie in seinem Manifest (`variants` in `widgets/<id>.json`), das
-Backend liest sie beim Durchsehen des Verzeichnisses, und der Layout-Editor
-bietet genau diese zur Auswahl an. Ohne Angabe gilt die Standarddarstellung.
-
-Die Messwert-Widgets (cpu, gpu, ram, network, sensors, disk_usage) kennen
-`compact`: nur die Zahl und ihre Unterzeile. Gedacht für kleine Kacheln. Das
-Diagramm wird dabei gar nicht erst geladen, kostet also weder Zeichenzeit noch
-Speicher.
-
-```yaml
-pages:
-  - id: main
-    title: "Haupt"
-    grid:
-      # 1.66 / 1 / 1 / 1.66 entspricht etwa 800 / 480 / 480 / 800 auf 2560 Pixeln
-      columns: "minmax(0, 1.66fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.66fr)"
-      rows: "32px 1fr 1fr"
-    widgets:
-      - { id: heartbeat, col: 1, row: 1, colspan: 4, rowspan: 1 }
-      - { id: clock,     col: 1, row: 2 }
-      - { id: cpu,       col: 2, row: 2 }
-      - { id: gpu,       col: 3, row: 2 }
-      - { id: media,     col: 4, row: 2, rowspan: 2 }
-      - { id: weather,   col: 1, row: 3 }
-      - { id: ram,       col: 2, row: 3 }
-      - { id: network,   col: 3, row: 3 }
-
-  - id: detail
-    title: "Detail"
-    grid:
-      columns: "1fr 1fr"
-      rows: "1fr 1fr"
-    widgets:
-      - { id: cpu,     col: 1, row: 1, variant: compact }
-      - { id: gpu,     col: 2, row: 1, variant: compact }
-      - { id: network, col: 1, row: 2 }
-      - { id: sensors, col: 2, row: 2 }
-```
-
-Bequemer geht das unter `Layout` im Einstellungsfenster: Seiten als Reiter,
-eine Vorschau im Seitenverhältnis der Anzeige, und daneben Spalte, Zeile und
-Ausdehnung für jedes Widget.
-
-![Pomodoro, Datenträger und Sensoren auf der zweiten Seite](docs/screenshots/kiosk-tools.png)
-
-## Plugins und Store
-
-![Die Plugins-Seite im Einstellungsfenster: eingebaute und Store-Widgets nach Kategorien](docs/screenshots/settings-plugins.png)
-
-**Plugins** im Einstellungsfenster zeigt alle Widgets und Designs an einer
-Stelle: die eingebauten, die installierten und das Angebot des
-[Plugin-Stores](https://streamdeckstore.labratox.de).
-
-- **Installieren**: ein Klick auf **Installieren** lädt das Archiv, prüft die
-  SHA-256-Prüfsumme gegen den Store, entpackt es nach
-  `~/.local/share/edge-dashboard/plugins/<id>/` und schaltet seine Module ein.
-  Die Dienste laufen dabei weiter: das Backend startet nur seine Module neu,
-  die Kacheln sind also einen Moment ohne neue Daten, und der Kiosk liest die
-  Konfiguration neu ein. Auf dem Display erscheint das Widget, sobald es unter
-  **Layout** platziert ist.
-- **Suchen und sortieren**: über der Liste durchsucht ein Feld Name,
-  Beschreibung und Autor, sortiert wird nach Name in beiden Richtungen, nach den
-  neuesten oder den am besten bewerteten Plugins.
-- **Updates**: eine Leiste oben nennt, wofür es eine neue Version gibt,
-  **Alle aktualisieren** holt sie. **Nach neuen Plugins sehen** schaut auf der
-  Platte und im Store neu nach.
-- **Einstellungen**: der Schalter auf einer Karte schaltet die Module des
-  Widgets an und aus, **Plugin-Einstellungen** öffnet seine Optionen. Plugins
-  können dort eine eigene Seite mitbringen, in einem abgeschotteten Frame. Die
-  Detailseite zeigt Beschreibung, Screenshots, Versionen und Bewertung.
-- **Designs**: im Reiter **Designs**; ein installiertes Design wird danach
-  unter **Design** ausgewählt.
-- **Aus einer Datei installieren**: **Plugins installieren** nimmt ein
-  ZIP-Archiv oder einen Ordner mit `manifest.json`, etwa um ein eigenes
-  Widget vor dem Einreichen zu testen.
-- **Abhängigkeiten**: Was ein Plugin außer seinen eigenen Dateien braucht,
-  steht in seinen Details unter **Angaben** und wird mitinstalliert.
-  Python-Pakete landen ohne besondere Rechte in
-  `~/.local/share/edge-dashboard/plugins/.deps/<id>/`, Systempakete fragen
-  über `pkexec` nach dem Passwort, mit pacman, apt oder dnf. Auf Systemen mit
-  Image wie Bazzite nennt die Meldung den `rpm-ostree`-Befehl. Lässt sich etwas
-  nicht installieren, wird das Plugin nicht installiert, und die Meldung nennt
-  den Befehl für die Hand.
-  Danach einfach noch einmal installieren.
-- **Einreichen**: **Im Store anmelden** (über GitHub) und **Plugin
-  einreichen** laden ein Archiv hoch. Eingereichtes wird geprüft, bevor es im
-  Store steht; das Fenster zeigt deine Einreichungen und ihren Stand.
-
-Wie ein Store-Widget innen aussieht und wie man eins baut, steht in
-[Ein Widget für den Store](docs/widgets.de.md#ein-widget-für-den-store).
-
-## Die Widgets
-
-Eingebaut. Der Store bringt weitere, siehe [Plugins und Store](#plugins-und-store).
-
-| Widget | Modul | Was es zeigt |
-|---|---|---|
-| `heartbeat` | `heartbeat` | Verbindung und Laufzeit |
-| `clock` | `timezones` | Ortszeit oder eine andere Zone, analog oder digital in 22 Zifferblättern, Datum, Countdown mit Gong |
-| `world_clock` | `timezones` | Bis zu sechs Zeitzonen nebeneinander, mit Abstand zur Ortszeit |
-| `cpu` | `system`, `sensors` | Auslastung je Kern mit Kurve, dazu die Temperatur |
-| `ram` | `system`, `sensors` | Arbeitsspeicher mit Kurve, dazu die Temperatur |
-| `gpu` | `gpu` | Auslastung, Speicher, Temperatur, Leistungsaufnahme einer NVIDIA- oder AMD-Karte |
-| `network` | `system` | Durchsatz hoch und runter mit zwei Kurven |
-| `sensors` | `sensors` | Alle Temperaturen aus hwmon als Tabelle |
-| `sensor_focus` | `sensors` | Ein oder zwei gewählte Sensoren als Kurve oder Ring |
-| `disk_usage` | `disk_usage` | Belegung je eingehängtem Datenträger |
-| `top_processes` | `top_processes` | Die aufwendigsten Prozesse |
-| `weather` | `weather` | Aktuelles Wetter und Vorhersage |
-| `media` | `media` | Titel, Cover und Steuerung über MPRIS |
-| `youtube` | `youtube` | Kacheln, ein Tippen öffnet das Videofenster |
-| `smart_lights` | `smart_lights` | Lampen von Govee und Tuya schalten und dimmen |
-| `quick_actions` | `quick_actions` | Das Kachelraster mit Befehlen, HTTP und Programmen |
-| `pomodoro` | keins | Pomodoro-Uhr und Stoppuhr |
-| `notes` | `notes`, dazu REST | Notizen mit Ordnern, Ordnerfarben, Suche, Anheften und Checklisten, lokal oder in Joplin |
-
-## Die Anzeige einrichten
-
-Das Kioskfenster sucht sich seine Anzeige in dieser Reihenfolge:
-
-1. `--output` oder `$EDGE_OUTPUT`, ein Anschlussname wie `DP-4`
-2. der erste Bildschirm, dessen Auflösung zu `--width` mal `--height` passt,
-   voreingestellt 2560x720
-3. der Hauptbildschirm als Rückfalloption, und es zieht um, sobald die
-   richtige Anzeige auftaucht
-
-```bash
-edge-kiosk --output DP-4                 # Anschluss erzwingen
-edge-kiosk --width 1920 --height 1080    # anderes Panel
-edge-kiosk --url http://rechner:8765     # Backend woanders
-edge-kiosk --windowed                    # normales Fenster, für Entwicklung
-edge-kiosk --show-cursor                 # Mauszeiger sichtbar lassen
-```
-
-(`edge-kiosk` kommt mit dem Paket. Sonst steht es für den Aufruf aus
-[Das Kioskfenster von Hand starten](#das-kioskfenster-von-hand-starten).)
-
-Tastenkürzel hat das Kioskfenster keine, gestartet und beendet wird es über
-systemd. Im Videofenster schließt Esc das Video. Der Mauszeiger ist
-ausgeblendet, außer man gibt `--show-cursor` an.
-
-### Das Fenster auf dem Xeneon
-
-Qt setzt das Fenster direkt auf den ausgewählten Bildschirm. Findet der Kiosk
-beim Start keine Anzeige mit der gesuchten Auflösung, nimmt er den
-Hauptbildschirm und wechselt später, sobald der Xeneon auftaucht.
-
-Die Gruppe `[edge-dashboard-kiosk]` in `~/.config/kwinrulesrc` hält das
-Fenster aus der Fensterliste heraus. Sie enthält keine Geometrie und wird von
-`scripts/window-rule.sh` geschrieben.
-
-## Erweitern
-
-Wie man ein Widget baut, steht ausführlich in
-[Ein Widget schreiben](docs/widgets.de.md), wie man ein Design baut in
-[Ein Theme schreiben](docs/themes.de.md). Die Kurzfassung:
-
-Ein Widget besteht aus drei Teilen:
-
-* eine Quelle im Backend (`backend/modules/<name>.py`, Unterklasse von
-  `Module` mit `@register_module`, mindestens `poll()`). Entfällt bei Widgets
-  ohne eigene Daten, etwa beim Pomodoro.
-* eine Anzeige in `shell/qml_kiosk/qml/widgets/<Name>.qml`. Sie wird über
-  ihren Namen gefunden: `disk_usage` wird zu `DiskUsage.qml`.
-* ein Manifest `widgets/<name>.json`. Erst dadurch kennt der Layout-Editor
-  das Widget. Es nennt die Module, die es verbraucht, und kann Varianten und
-  einstellbare Optionen deklarieren.
-
-Danach das Modul in `config.yaml` eintragen und das Widget auf einer Seite
-platzieren.
-
-Ein Widget für den Store hat dieselben drei Teile in einem Ordner und wird
-installiert statt eingecheckt, siehe
-[Ein Widget für den Store](docs/widgets.de.md#ein-widget-für-den-store).
-
-Ein Design ist eine CSS-Datei in `frontend/css/themes/`. Sie taucht von selbst
-im Einstellungsfenster auf, weil das Backend das Verzeichnis ausliest.
-
-## Sprachen
-
-Die Texte liegen in `frontend/locales/<code>.json` und werden beim Start
-geladen. Die Sprache der Anzeige ist der Konfigurationswert
-`default_language` (`auto`, `en` oder `de`), einstellbar unter `Design`; bei
-`auto` entscheidet `LANG` aus der Umgebung. Es ist bewusst ein Konfigurationswert
-und keine Einstellung pro Gerät, denn das Einstellungsfenster ist eine eigene
-Anwendung und kann den Speicher der Anzeige nicht beschreiben.
-
-Das Fenster hat seine eigene Sprache unter `Sprache` und lädt dieselben
-Textdateien vom Backend, damit Modulbeschriftungen nicht zweimal übersetzt
-werden müssen.
-
-Eine Sprache ergänzen: eine neue JSON-Datei neben `en.json` und `de.json`
-legen und in `gui/src/i18n/index.ts` die Liste `SUPPORTED_LANGUAGES`
-erweitern. Der Kiosk lädt die Datei über den Konfigurationswert und braucht
-keine Liste.
-
-## Entwicklung
-
-```bash
-uv sync                              # Umgebung anlegen
-uv run python -m backend.main        # Server starten
-uv run pytest                        # rund 400 Tests
-uv run ruff check                    # Linter
-uv run ruff format                   # Formatierer
-```
-
-Aufbau des Projekts:
-
-```
-backend/
-  main.py             FastAPI, Lebenszyklus, Routen
-  hub.py              Modul-Takt, WebSocket-Verteilung, Neuladen im Betrieb
-  config.py           Pydantic-Schema, die einzige Wahrheit über die Struktur
-  notes.py            Die Notizdatei (Ordner, Anheften)
-  joplin.py           Joplin als Speicher der Notizen, über seine lokale API
-  plugins.py          Installiert, lädt und entfernt Store-Plugins
-  dependencies.py     Was Plugins mitbringen: Python- und Systempakete
-  host.py             Startet andere Programme, an einer Stelle
-  plugin_layout.py    Wo installierte Plugins liegen und was ihr Manifest sagt
-  store.py            Der Store-Client: Katalog, Anmeldung, Upload
-  tray.py             Symbol in der Leiste, über D-Bus
-  autostart.py        Der Autostart-Schalter, schreibt und aktiviert die Units
-  brand.py            Das App-Symbol, einmal gezeichnet für Leiste und Fenster
-  modules/            Je Datei ein Modul
-widgets/              Je Datei ein Widget-Manifest, das ist die Registrierung
-frontend/             Was Kiosk und Einstellungsfenster von der Platte lesen
-  player.html         Die Seite, die das Videofenster lädt
-  css/themes/         Je Datei ein Design
-  locales/            Je Datei eine Sprache
-  vendor/             Tabler-Symbole, Schriften, Emoji-Datensatz
-shell/
-  qml_kiosk/
-    qml/widgets/      Je Datei ein Widget, das ist die Anzeige
-    qml/EdgeDash/     Die Bausteine, die installierte Widgets importieren
-    views.py          Findet die QML-Datei zu einer Widget-id
-    theme.py          Liest die Designs aus den CSS-Dateien
-    bridge.py         WebSocket, Konfiguration, Texte, Symbole
-gui/
-  src/                EDGE//DASH, das Einstellungsfenster, React
-  src-tauri/          Dessen Rahmen, Tauri 2
-examples/plugins/     Zwei vollständige Store-Plugins: ein Widget und ein Design
-config.yaml           Eingecheckte Vorlage
-config.local.yaml     Nicht in Git, vom Einstellungsfenster geschrieben
-systemd/              Vorlagen für die beiden Benutzer-Units
-packaging/            Das Arch-Paket: PKGBUILD, Units und Startskripte für /usr
-.github/workflows/    Baut das Einstellungsfenster für jedes Release
-scripts/
-  get.sh              Der Einzeiler: Installation und Update aus dem Release
-  install.sh          Der Installer, erledigt alles Folgende mit
-  fetch-settings-window.sh  Lädt das fertige Einstellungsfenster
-  install-desktop.sh  Symbol und Menüeintrag des Einstellungsfensters
-  window-rule.sh      Hält den Kiosk aus der Fensterliste, je Compositor
-  make-icon.py        Zeichnet alle Symboldateien aus backend/brand.py
-docs/
-  widgets.de.md       Anleitung: ein Widget schreiben
-  themes.de.md        Anleitung: ein Theme schreiben
-tests/                pytest, asyncio im Automatikmodus
-```
-
-## Hilfe und Community
+Danach steht das Dashboard auf der Anzeige, das Symbol ist in der Leiste und
+das Einstellungsfenster im Anwendungsmenü. Logs:
+`journalctl --user -u edge-dashboard -u edge-kiosk -f`.
+
+## Mehr
+
+- [Einrichtung und Entwicklung](docs/setup.de.md): Aufbau, Voraussetzungen je
+  Modul, Desktops, der Installer im Einzelnen, die Anzeige, Entwicklung
+- [Konfiguration](docs/configuration.de.md): `config.yaml`, Module, Quick
+  Actions, smarte Lampen, Seiten
+- [Ein Widget schreiben](docs/widgets.de.md) und [Ein Theme schreiben](docs/themes.de.md)
 
 Fragen, Ideen und Layouts zum Herzeigen gehören auf den
-[Discord-Server](https://discord.gg/2ckNnCZ4wq). Fehler und Wünsche am besten
-als [GitHub-Issue](https://github.com/LabRaTox/EdgeDisplayWidgets/issues).
-Beides steht auch im Einstellungsfenster unter **Hilfe**.
-
-## Lizenz
+[Discord-Server](https://discord.gg/2ckNnCZ4wq), Fehler und Wünsche in die
+[GitHub-Issues](https://github.com/LabRaTox/EdgeDisplayWidgets/issues).
 
 MIT, siehe [LICENSE](LICENSE).

@@ -23,6 +23,8 @@ from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+from screens import pick_screen  # noqa: E402
+
 DEFAULT_WIDTH = 2560
 DEFAULT_HEIGHT = 720
 
@@ -37,20 +39,6 @@ QPushButton {
 }
 QPushButton:hover { background: rgba(0, 0, 0, 0.85); }
 """
-
-
-def pick_screen(app: QApplication, name: str, width: int, height: int):
-    """The output to play on: by name first, then by resolution."""
-    if name:
-        for screen in app.screens():
-            if screen.name() == name:
-                return screen
-        return None
-    for screen in app.screens():
-        geometry = screen.geometry()
-        if geometry.width() == width and geometry.height() == height:
-            return screen
-    return None
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -91,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
 
     window.resizeEvent = lambda _event: relayout()
 
-    screen = pick_screen(app, args.output, args.width, args.height)
+    screen = pick_screen(app.screens(), args.output, args.width, args.height)
     if screen is not None:
         window.setScreen(screen)
         window.setGeometry(screen.geometry())

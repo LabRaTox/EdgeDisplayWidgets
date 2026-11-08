@@ -136,26 +136,33 @@ Item {
      * assumed: a 14 pixel font does not occupy 14 pixels of line, and the sum
      * of the guessed numbers was off by several pixels.
      */
+    /*
+     * Summed from the texts themselves rather than read off a hidden layout:
+     * Qt does not lay out an invisible layout again, so its height stayed at
+     * what it was first measured with, and the rain line that came later was
+     * cut off. A text keeps its implicit size current even while hidden.
+     */
     Item {
         id: sizer
         visible: false
-        ColumnLayout {
-            id: sizerCol
-            spacing: 2
-            Text { text: "00"; font.pixelSize: 14
-                   font.family: root.theme ? root.theme["font-mono"] : "monospace" }
-            Text { text: "☀\uFE0F"; font.pixelSize: 24; Layout.preferredHeight: 24 }
-            Text { text: "00°C"; font.pixelSize: 16
-                   font.family: root.theme ? root.theme["font-mono"] : "monospace" }
-            Text { visible: root.anyRain; text: "00%"; font.pixelSize: 13
-                   font.family: root.theme ? root.theme["font-mono"] : "monospace" }
-        }
+        Text { id: sizeHour; text: "00"; font.pixelSize: 14
+               font.family: root.theme ? root.theme["font-mono"] : "monospace" }
+        Text { id: sizeTemp; text: "00°C"; font.pixelSize: 16
+               font.family: root.theme ? root.theme["font-mono"] : "monospace" }
+        Text { id: sizeRain; text: "00%"; font.pixelSize: 13
+               font.family: root.theme ? root.theme["font-mono"] : "monospace" }
     }
-    readonly property int rowHeight: sizerCol.implicitHeight + 12   // padding 6px top/bottom
+    // hour, icon row (24), temperature, the rain line when any hour has one,
+    // 2 pixels between them and 6 above and below.
+    readonly property int rowHeight: Math.ceil(sizeHour.implicitHeight + 2 + 24 + 2 + sizeTemp.implicitHeight
+                                               + (anyRain ? 2 + sizeRain.implicitHeight : 0)) + 12
 
     Timer {
         interval: 30000
-        running: true
+        // Only while the page is in view (Main.qml hides the others);
+        // the first tick on return brings the age up to date.
+        running: root.visible
+        triggeredOnStart: true
         repeat: true
         onTriggered: root.refreshAge()
     }

@@ -28,13 +28,27 @@ Item {
         return theme ? theme["accent"] : "#00e0ff"
     }
 
+
+    /*
+     * Patched in place: set() leaves a row whose values did not change alone,
+     * while clear() and append() destroyed and rebuilt every delegate on
+     * every poll.
+     */
+    function patchRows(entries) {
+        while (rows.count > entries.length) rows.remove(rows.count - 1)
+        for (var i = 0; i < entries.length; i++) {
+            if (i < rows.count) rows.set(i, entries[i])
+            else rows.append(entries[i])
+        }
+    }
+
     function receive(module, data) {
         payload = data
-        rows.clear()
         var disks = (data && data.disks) || []
+        var entries = []
         for (var i = 0; i < disks.length; i++) {
             var d = disks[i]
-            rows.append({
+            entries.push({
                 "mount": String(d.mountpoint),
                 "value": d.percent.toFixed(0) + "%",
                 "percent": Math.min(100, d.percent),
@@ -42,6 +56,7 @@ Item {
                 "meta": bytes(d.used) + " / " + bytes(d.total) + " • " + d.fstype
             })
         }
+        patchRows(entries)
     }
 
     ListModel { id: rows }

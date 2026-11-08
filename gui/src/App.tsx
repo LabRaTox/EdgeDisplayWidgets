@@ -11,7 +11,6 @@ import { TopBar } from "./components/TopBar";
 import { WeatherView } from "./components/WeatherView";
 import { WidgetsView } from "./components/WidgetsView";
 import { YouTubeView } from "./components/YouTubeView";
-import i18n, { loadDashboardStrings } from "./i18n";
 import { useStore } from "./store";
 
 export default function App() {
@@ -20,7 +19,6 @@ export default function App() {
 
   useEffect(() => {
     void useStore.getState().load();
-    void loadDashboardStrings(i18n.language);
 
     // The socket is both the liveness signal and the way we hear about
     // settings written elsewhere — the kiosk saving a layout, a second

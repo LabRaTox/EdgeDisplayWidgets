@@ -451,7 +451,14 @@ and the display is used with a finger, not a mouse.
 **One main action per view.** It gets the filled button or the `Fab`,
 everything else stays plain.
 
-The building blocks do all of this already. `import EdgeDash` provides:
+**Rest while out of view.** Every change on the display redraws the whole
+window, even one on a page nobody looks at. Pages out of view are hidden, and
+a widget sees that in its own `visible`. A repeating `Timer` should run only
+then: `running: visible && …`. Add `triggeredOnStart: true` when the timer
+keeps something up to date, like a clock, so it is right the moment the page
+comes back. Data from the backend still arrives while hidden.
+
+The building blocks already take care of colours, corners and sizes for fingers. `import EdgeDash` provides:
 
 | Block | For | Main properties |
 |---|---|---|
@@ -866,4 +873,4 @@ is the small version to start from:
 
 ---
 
-[Writing a theme](themes.md) · [Why it looks the way it does](decisions.md) · [README](../README.md) · [Deutsch](widgets.de.md)
+[Writing a theme](themes.md) · [Setup and development](setup.md) · [README](../README.md) · [Deutsch](widgets.de.md)
